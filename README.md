@@ -1,4 +1,4 @@
-# Claude Vibecoding System
+# Claude Atlas System
 
 **An autonomous multi-agent system for building complete software projects from idea to deployment.**
 
