@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p ~/.claude/agents)",
+      "Bash(cp /c/ProyectosClaude/ClaudeAtlas/claude-vibecoding/agents/*.md ~/.claude/agents/)",
+      "Bash(node *)",
+      "Bash(mkdir -p ~/.claude/hooks)",
+      "Bash(cp /c/ProyectosClaude/ClaudeAtlas/claude-vibecoding/hooks/*.js ~/.claude/hooks/)",
+      "Bash(ls /c/ProyectosClaude/ClaudeAtlas/claude-vibecoding/hooks/*.js)",
+      "Bash(xargs -I{} basename {})",
+      "Skill(update-config)",
+      "Bash(echo \"Exit: $?\")"
+    ]
+  }
+}
