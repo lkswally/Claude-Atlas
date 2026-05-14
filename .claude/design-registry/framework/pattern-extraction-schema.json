@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "description": "Universal schema for extracting design + conversion patterns from ANY ranked website",
+  "pattern_extraction": {
+    "hero_section": {
+      "emotional_appeal": "string: primary emotion (empathy, authority, curiosity, urgency)",
+      "emotional_ratio": "number 0-10: warm (emotional) vs clinical/technical (data-forward)",
+      "cta_segmentation": "string: single_path | pre_qualify | two_step | multi_path",
+      "barrier_removal_priority": "array: [barrier1, barrier2, barrier3] ordered by what converts",
+      "conversion_signal": "string: what CTA text + color + placement converts",
+      "headline_structure": "string: describe headline construction (question, statement, permission, etc.)"
+    },
+    "tone_and_language": {
+      "warmth": "number 0-10: empathy, friendliness, humanity",
+      "authority": "number 0-10: expertise, credibility, command",
+      "urgency": "number 0-10: pressure, scarcity, time-sensitivity",
+      "formality": "number 0-10: casual vs professional",
+      "data_forward": "number 0-10: metrics-driven vs story-driven",
+      "distribution": "string: e.g., '60% warm, 30% authority, 10% humor'",
+      "key_phrases": "array: phrases that appear on all winners"
+    },
+    "social_proof": {
+      "types_used": "array: [testimonials, logos, stats, case_studies, reviews, credentials, outcomes]",
+      "effectiveness_ranking": "array: what type converts most to least for this vertical",
+      "specificity_level": "string: generic | specific | highly_specific",
+      "diversity_signals": "string: what diversity is shown (demographics, use cases, industries)",
+      "outcome_quantification": "string: how outcomes are stated (percentage, absolute, relative)"
+    },
+    "visual_hierarchy": {
+      "whitespace_ratio": "number 0-100: percentage of empty space",
+      "section_order": "array: [section1_purpose, section2_purpose, ...] what order converts",
+      "density_profile": "string: sparse | moderate | dense",
+      "color_temperature": "number 0-10: warm (reds/oranges/yellows) vs cool (blues/greens)",
+      "primary_colors": "array: [color1, color2, ...] hex or names",
+      "psychology_notes": "string: why these colors work for this vertical"
+    },
+    "conversion_mechanics": {
+      "cta_points": "array: locations where CTAs appear",
+      "cta_texts": "array: actual button/link text that converts",
+      "friction_removal_techniques": "array: how they make the ask easy",
+      "what_fails_if_removed": "array: core elements that kill conversion if absent",
+      "conversion_funnel_length": "string: e.g., 'single_click | 2_step_form | long_questionnaire'"
+    },
+    "stage_indicators": {
+      "trust_buildup_sequence": "string: in what order do they establish trust (early, middle, late)",
+      "proof_points_by_stage": "object: {early: [], mid: [], late: []} what proves what when",
+      "typical_conversion_timeline": "string: e.g., '2_min_scan | 5_min_decision | 15_min_questionnaire'"
+    },
+    "vertical_specific_patterns": {
+      "description": "any patterns unique to this vertical (e.g., credentialing for therapy, ROI for B2B)"
+    }
+  },
+  "source_metadata": {
+    "site_url": "string: which site was analyzed",
+    "ranking_signal": "string: why it ranks (top for 'keyword', trending, etc.)",
+    "analysis_date": "string: ISO date",
+    "patterns_extracted_from": "array: which sections (hero, about, pricing, social_proof, etc.)"
+  }
+}

@@ -1,0 +1,15 @@
+# Contexto Maestro del Proyecto: REYESOFT OS
+
+¡Hola Claude! Soy Lucas (Chief of Staff). Estás trabajando en el repositorio de **REYESOFT OS**, un sistema operativo interno diseñado para gestionar un equipo de 23 personas. 
+
+El sistema está construido bajo la filosofía de "Brutalismo Operativo": priorizamos interfaces sobrias, velocidad de carga, utilitarismo puro y degradación honesta de los datos. No queremos gráficos decorativos ni lógicas complejas en el frontend.
+
+## 1. Stack Tecnológico Principal
+- **Lenguaje:** Python (Entorno virtual `venv313`).
+- **Base de Datos:** SQLite (Almacenamiento local en la carpeta `data/`).
+- **LLM / IA:** Groq (Llama 3) para auditorías, integrado por API.
+- **Integraciones:** Telegram Bot API (Alertas y comandos CEO), Google Sheets API (Módulo de Tesorería).
+- **Control de versiones:** Git (Repositorio subido a GitHub, rama `codex/actualizacion-os`).
+
+## 2. Módulos Actuales (Arquitectura Aislada)
+El sistema tiene módulos independientes. **Regla de oro: No cruzar dependencias 

@@ -1,0 +1,387 @@
+"""
+Reyesoft OS — Dashboard Server
+HTTP server with REST JSON API + static HTML serving.
+"""
+from __future__ import annotations
+
+import io
+import json
+import logging
+import os
+import re
+import sys
+import threading
+from email import message_from_bytes
+from email.policy import HTTP
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from urllib.parse import urlparse, parse_qs
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from dotenv import load_dotenv
+load_dotenv(ROOT / ".env")
+
+HTML_FILE = Path(__file__).parent / "index.html"
+log = logging.getLogger("dashboard")
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DATA HELPERS
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _safe(fn, fallback=None):
+    try:
+        return fn()
+    except Exception as e:
+        log.warning("dashboard api error: %s", e)
+        return fallback if fallback is not None else {"error": str(e)}
+
+
+def _api_people_summary():
+    from tools.people_analytics import get_team_summary
+    return get_team_summary()
+
+
+def _api_people_vacaciones():
+    from tools.people_analytics import get_vacation_status_all
+    return get_vacation_status_all()
+
+
+def _api_people_cumpleanos(days: int = 30):
+    from tools.people_analytics import get_birthdays_next_days
+    return get_birthdays_next_days(days=days)
+
+
+def _api_people_licencias():
+    from tools.people_analytics import get_licenses_summary
+    return get_licenses_summary()
+
+
+def _api_onboarding(nombre: str = ""):
+    from tools.people_analytics import get_onboarding_checklist
+    return get_onboarding_checklist(nombre)
+
+
+def _api_tasks():
+    from tools.task_manager import generar_informe_tareas, listar_pendientes, listar_vencidas, listar_todas
+    pendientes = listar_pendientes()
+    vencidas = listar_vencidas()
+    todas = listar_todas()
+    completadas = [r for r in todas if r[4] == "completada"]
+
+    # Build by-responsable stats
+    stats: dict = {}
+    for r in todas:
+        resp = r[2] or "Sin asignar"
+        if resp not in stats:
+            stats[resp] = {"pendientes": 0, "completadas": 0, "vencidas": 0}
+        if r[4] == "completada":
+            stats[resp]["completadas"] += 1
+        else:
+            stats[resp]["pendientes"] += 1
+    for r in vencidas:
+        resp = r[2] or "Sin asignar"
+        if resp in stats:
+            stats[resp]["vencidas"] += 1
+
+    return {
+        "total": len(todas),
+        "pendientes": len(pendientes),
+        "vencidas": len(vencidas),
+        "completadas": len(completadas),
+        "por_responsable": [{"nombre": k, **v} for k, v in stats.items()],
+        "lista_pendientes": [
+            {"id": r[0], "titulo": r[1], "responsable": r[2], "fecha": r[3]}
+            for r in pendientes
+        ],
+        "lista_vencidas": [
+            {"id": r[0], "titulo": r[1], "responsable": r[2], "fecha": r[3]}
+            for r in vencidas
+        ],
+        "lista_completadas": [
+            {"id": r[0], "titulo": r[1], "responsable": r[2], "completado": r[6]}
+            for r in completadas[:10]
+        ],
+    }
+
+
+def _api_finance_summary(period: str | None = None):
+    from datetime import date as _date
+    if not period:
+        period = _date.today().strftime("%Y-%m")
+
+    # Try Finance MVP SQLite first
+    try:
+        from finance_mvp.db import resolve_db_path
+        from finance_mvp.api import list_records, list_period_pending_items
+
+        db_path = resolve_db_path(None)
+        if not Path(db_path).exists():
+            return {
+                "ok": False,
+                "period": period,
+                "message": "Base de datos Finance MVP no inicializada. Ejecutá bootstrap_finance_mvp.py primero.",
+                "total_egresos": None,
+                "total_ingresos": None,
+                "balance": None,
+            }
+
+        egresos_res = list_records("egreso", {"period": period}, db_path=db_path)
+        ingresos_res = list_records("ingreso", {"period": period}, db_path=db_path)
+        pendientes_res = list_period_pending_items(period, db_path=db_path)
+
+        egresos_list = []
+        ingresos_list = []
+
+        eg_data = egresos_res.get("data") if isinstance(egresos_res, dict) else {}
+        if isinstance(eg_data, dict):
+            egresos_list = eg_data.get("records") or eg_data.get("items") or []
+        elif isinstance(eg_data, list):
+            egresos_list = eg_data
+
+        ing_data = ingresos_res.get("data") if isinstance(ingresos_res, dict) else {}
+        if isinstance(ing_data, dict):
+            ingresos_list = ing_data.get("records") or ing_data.get("items") or []
+        elif isinstance(ing_data, list):
+            ingresos_list = ing_data
+
+        total_egresos = sum(
+            float(r.get("monto") or 0) for r in egresos_list if isinstance(r, dict)
+        )
+        total_ingresos = sum(
+            float(r.get("monto") or 0) for r in ingresos_list if isinstance(r, dict)
+        )
+
+        pend_data = pendientes_res.get("data") if isinstance(pendientes_res, dict) else {}
+        borradores = []
+        if isinstance(pend_data, dict):
+            borradores = pend_data.get("borradores") or pend_data.get("pendientes") or []
+
+        top_egresos = sorted(egresos_list, key=lambda x: float(x.get("monto") or 0), reverse=True)[:5]
+
+        return {
+            "ok": True,
+            "period": period,
+            "total_egresos": total_egresos,
+            "total_ingresos": total_ingresos,
+            "balance": total_ingresos - total_egresos,
+            "count_egresos": len(egresos_list),
+            "count_ingresos": len(ingresos_list),
+            "borradores_pendientes": len(borradores),
+            "top_egresos": [
+                {
+                    "proveedor": r.get("proveedor_nombre") or r.get("detalle", "—"),
+                    "monto": float(r.get("monto") or 0),
+                    "categoria": r.get("categoria_financiera_code") or "—",
+                }
+                for r in top_egresos if isinstance(r, dict)
+            ],
+        }
+
+    except ImportError:
+        # Fallback: orchestrator CFO (Google Sheets)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            from agents.orchestrator import _run_cfo
+            data = loop.run_until_complete(_run_cfo("gastos del mes"))
+        except Exception as e:
+            data = {"ok": False, "error": str(e)}
+        finally:
+            loop.close()
+        return {"ok": data.get("ok", False), "period": period, "source": "google_sheets", **data}
+
+
+def _api_cx_metrics():
+    try:
+        from cx_auditor.db import resolve_db_path
+        from cx_auditor.api import get_summary, get_quality, get_team, get_filters
+        db = resolve_db_path(None)
+        if not Path(db).exists():
+            return {"ok": False, "message": "Sin datos. Importá un CSV primero.", "summary": {}, "quality": {}, "team": {}}
+        summary = get_summary(db_path=db) or {}
+        quality = get_quality(db_path=db) or {}
+        team = get_team(db_path=db) or {}
+        filters = get_filters(db_path=db) or {}
+        return {"ok": True, "summary": summary, "quality": quality, "team": team, "filters": filters}
+    except Exception as e:
+        return {"ok": False, "message": str(e), "summary": {}, "quality": {}, "team": {}}
+
+
+def _api_cx_upload(file_bytes: bytes, filename: str) -> dict:
+    import hashlib
+    dest_dir = ROOT / "data" / "cx_auditor"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(filename).name
+    dest = dest_dir / safe_name
+    dest.write_bytes(file_bytes)
+    try:
+        from cx_auditor.pipeline.parser import process_csv
+        result = process_csv(dest, init_schema=True)
+        return {
+            "ok": True,
+            "filename": safe_name,
+            "saved_to": str(dest),
+            "import_job_id": result.get("import_job_id"),
+            "total_rows": result.get("total_rows_detected"),
+            "valid_rows": result.get("valid_rows"),
+            "excluded": result.get("excluded_rows"),
+            "duplicated": result.get("duplicated_rows"),
+            "missing_fields": result.get("missing_required_fields", []),
+        }
+    except Exception as e:
+        return {"ok": False, "filename": safe_name, "error": str(e)}
+
+
+def _api_knowledge(query: str) -> dict:
+    if not query.strip():
+        return {"query": "", "results": []}
+    try:
+        from tools.knowledge_rag import retrieve, extract_best_paragraph
+        docs = retrieve(query, top_k=4)
+        results = []
+        for d in docs:
+            snippet = extract_best_paragraph(d, query)
+            results.append({"name": d.name, "path": d.rel_path, "snippet": snippet})
+        return {"query": query, "results": results}
+    except Exception as e:
+        return {"query": query, "results": [], "error": str(e)}
+
+
+def _parse_multipart_file(body: bytes, content_type: str):
+    """Parse multipart/form-data body; returns (file_bytes, filename) or (None, None)."""
+    boundary_match = re.search(r"boundary=([^\s;]+)", content_type)
+    if not boundary_match:
+        return None, None
+    boundary = boundary_match.group(1).strip('"')
+    # Build a fake email message to leverage email parser
+    msg_bytes = f"Content-Type: {content_type}\r\n\r\n".encode() + body
+    try:
+        msg = message_from_bytes(msg_bytes, policy=HTTP)
+    except Exception:
+        msg = message_from_bytes(msg_bytes)
+    for part in msg.get_payload():
+        if not hasattr(part, "get_param"):
+            continue
+        disp = part.get("Content-Disposition", "")
+        name = re.search(r'name="([^"]+)"', disp)
+        if name and name.group(1) == "file":
+            fname_match = re.search(r'filename="([^"]*)"', disp)
+            filename = fname_match.group(1) if fname_match else "upload.csv"
+            payload = part.get_payload(decode=True)
+            return payload, filename or "upload.csv"
+    return None, None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# HTTP HANDLER
+# ──────────────────────────────────────────────────────────────────────────────
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _json(self, data, status=200):
+        body = json.dumps(data, ensure_ascii=False, default=str).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _html(self, body: bytes, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self):
+        p = urlparse(self.path)
+        path = p.path.rstrip("/") or "/"
+        qs = parse_qs(p.query)
+        g = lambda k, d="": qs.get(k, [d])[0]
+
+        if path in ("/", "/index.html"):
+            try:
+                self._html(HTML_FILE.read_bytes())
+            except FileNotFoundError:
+                self._html(b"<h1>index.html not found</h1>", 404)
+            return
+
+        routes = {
+            "/api/people/summary":    lambda: _safe(_api_people_summary),
+            "/api/people/vacaciones": lambda: _safe(_api_people_vacaciones),
+            "/api/people/cumpleanos": lambda: _safe(lambda: _api_people_cumpleanos(int(g("days", "30")))),
+            "/api/people/licencias":  lambda: _safe(_api_people_licencias),
+            "/api/onboarding":        lambda: _safe(lambda: _api_onboarding(g("nombre"))),
+            "/api/tasks":             lambda: _safe(_api_tasks),
+            "/api/finance":           lambda: _safe(lambda: _api_finance_summary(g("period") or None)),
+            "/api/cx":                lambda: _safe(_api_cx_metrics),
+            "/api/knowledge":         lambda: _safe(lambda: _api_knowledge(g("q"))),
+        }
+
+        handler = routes.get(path)
+        if handler:
+            self._json(handler())
+        else:
+            self._json({"error": "not found"}, 404)
+
+    def do_POST(self):
+        p = urlparse(self.path)
+        path = p.path
+
+        if path == "/api/cx/upload":
+            ct = self.headers.get("Content-Type", "")
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                file_bytes, filename = _parse_multipart_file(body, ct)
+                if file_bytes is None:
+                    self._json({"ok": False, "error": "No se encontró el campo 'file'"}, 400)
+                else:
+                    result = _safe(lambda: _api_cx_upload(file_bytes, filename))
+                    self._json(result)
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 500)
+        else:
+            self._json({"error": "not found"}, 404)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SERVER BOOTSTRAP
+# ──────────────────────────────────────────────────────────────────────────────
+
+def build_server(host="0.0.0.0", port=8700):
+    return HTTPServer((host, port), Handler)
+
+
+def main():
+    host = os.getenv("REYESOFT_DASHBOARD_HOST", "0.0.0.0")
+    port = int(os.getenv("REYESOFT_DASHBOARD_PORT", "8700"))
+    srv = build_server(host, port)
+    print(f"Reyesoft OS  ·  Dashboard 360°")
+    print(f"Local:  http://localhost:{port}")
+    print(f"Red:    http://0.0.0.0:{port}")
+    print("Ctrl+C para apagar\n")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("Apagando…")
+    finally:
+        srv.server_close()
+
+
+if __name__ == "__main__":
+    main()

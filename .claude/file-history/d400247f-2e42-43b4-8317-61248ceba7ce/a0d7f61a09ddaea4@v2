@@ -1,0 +1,236 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(ROOT, ".env"))
+
+HTML_PATH = os.path.join(os.path.dirname(__file__), "index.html")
+
+
+def _json_response(data):
+    return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _api_people_summary():
+    try:
+        from tools.people_analytics import get_team_summary
+        return get_team_summary()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_people_vacaciones():
+    try:
+        from tools.people_analytics import get_vacation_status_all
+        return get_vacation_status_all()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_people_cumpleanos(days=30):
+    try:
+        from tools.people_analytics import get_birthdays_next_days
+        return get_birthdays_next_days(days=days)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_people_burnout():
+    try:
+        from tools.people_analytics import get_burnout_risks
+        return get_burnout_risks()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_people_deudores():
+    try:
+        from tools.people_analytics import get_vacation_debtors
+        return get_vacation_debtors()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_people_licencias():
+    try:
+        from tools.people_analytics import get_licenses_summary
+        return get_licenses_summary()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_onboarding_checklist(nombre="Nuevo Colaborador"):
+    try:
+        from tools.people_analytics import get_onboarding_checklist
+        return get_onboarding_checklist(nombre)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_tasks():
+    try:
+        from tools.task_manager import generar_informe_tareas, listar_pendientes, listar_vencidas
+        pendientes_raw = listar_pendientes()
+        vencidas_raw = listar_vencidas()
+        return {
+            "informe": generar_informe_tareas(dias=30),
+            "pendientes": [
+                {"id": r[0], "titulo": r[1], "responsable": r[2], "fecha": r[3]}
+                for r in pendientes_raw
+            ],
+            "vencidas": [
+                {"id": r[0], "titulo": r[1], "responsable": r[2], "fecha": r[3]}
+                for r in vencidas_raw
+            ],
+            "total_pendientes": len(pendientes_raw),
+            "total_vencidas": len(vencidas_raw),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _api_cx_metrics():
+    try:
+        from cx_auditor.db import resolve_db_path
+        from cx_auditor.api import get_summary, get_quality
+        db_path = resolve_db_path(None)
+        summary = get_summary(db_path=db_path)
+        quality = get_quality(db_path=db_path)
+        return {
+            "summary": summary,
+            "quality": quality,
+            "db_path": db_path,
+        }
+    except Exception as e:
+        return {"error": str(e), "summary": {}, "quality": {}}
+
+
+def _api_knowledge_query(query: str):
+    try:
+        from tools.knowledge_rag import retrieve, extract_best_paragraph
+        docs = retrieve(query, top_k=3)
+        results = []
+        for d in docs:
+            snippet = extract_best_paragraph(d, query)
+            results.append({
+                "nombre": d.name,
+                "ruta": d.rel_path,
+                "snippet": snippet,
+            })
+        return {"query": query, "resultados": results}
+    except Exception as e:
+        return {"query": query, "resultados": [], "error": str(e)}
+
+
+def _api_cfo_summary():
+    try:
+        import asyncio
+        from agents.orchestrator import _run_cfo
+        loop = asyncio.new_event_loop()
+        data = loop.run_until_complete(_run_cfo("gastos del mes"))
+        loop.close()
+        return data
+    except Exception as e:
+        return {"error": str(e), "ok": False}
+
+
+class DashboardHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass  # silence default access log
+
+    def _send_json(self, data, status=200):
+        body = _json_response(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_html(self, content: bytes, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+        qs = parse_qs(parsed.query)
+
+        if path == "/" or path == "/index.html":
+            try:
+                with open(HTML_PATH, "rb") as f:
+                    self._send_html(f.read())
+            except FileNotFoundError:
+                self._send_html(b"<h1>Dashboard HTML not found</h1>", 404)
+            return
+
+        if path == "/api/people/summary":
+            self._send_json(_api_people_summary())
+        elif path == "/api/people/vacaciones":
+            self._send_json(_api_people_vacaciones())
+        elif path == "/api/people/cumpleanos":
+            days = int(qs.get("days", ["30"])[0])
+            self._send_json(_api_people_cumpleanos(days))
+        elif path == "/api/people/burnout":
+            self._send_json(_api_people_burnout())
+        elif path == "/api/people/deudores":
+            self._send_json(_api_people_deudores())
+        elif path == "/api/people/licencias":
+            self._send_json(_api_people_licencias())
+        elif path == "/api/onboarding":
+            nombre = qs.get("nombre", ["Nuevo Colaborador"])[0]
+            self._send_json(_api_onboarding_checklist(nombre))
+        elif path == "/api/tasks":
+            self._send_json(_api_tasks())
+        elif path == "/api/cx":
+            self._send_json(_api_cx_metrics())
+        elif path == "/api/knowledge":
+            query = qs.get("q", [""])[0]
+            self._send_json(_api_knowledge_query(query))
+        elif path == "/api/cfo":
+            self._send_json(_api_cfo_summary())
+        else:
+            self._send_json({"error": "endpoint no encontrado"}, 404)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.end_headers()
+
+
+def build_server(host="0.0.0.0", port=8700):
+    return HTTPServer((host, port), DashboardHandler)
+
+
+def main():
+    host = os.getenv("REYESOFT_DASHBOARD_HOST", "0.0.0.0")
+    port = int(os.getenv("REYESOFT_DASHBOARD_PORT", "8700"))
+    server = build_server(host, port)
+    print(f"Reyesoft OS Dashboard")
+    print(f"URL: http://localhost:{port}")
+    print(f"LAN: http://0.0.0.0:{port}")
+    print("Ctrl+C para apagar")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nApagando dashboard...")
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()

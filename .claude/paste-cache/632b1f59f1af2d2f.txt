@@ -1,0 +1,12 @@
+                    Verificando disponibilidad de herramientas:
+  - Engram MCP: no detectado en este entorno → operando en modo degradado (fallback a disco: .pipeline/)                                                                                                                                                                         - Playwright MCP: no detectado → QA en modo code-only hasta confirmar disponibilidad
+  - Agentes: 37 archivos en ~/.claude/agents/ ✓
+
+  Read 1 file (ctrl+o to expand)
+
+● Sin trigger de compactación pendiente. ✓
+
+  ---
+  Orquestador activo.
+                                                                                                                                                                                                                                                                                 Sin Engram disponible, el DAG State se persiste en disco ({project_dir}/.pipeline/). El pipeline completo funciona — solo la memoria cross-sesión es limitada.
+                 

@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "description": "Universal stage-gate logic: how to apply gates differently based on vertical + project stage",
+  "gate_logic": {
+    "philosophy": "Gates are context-aware. Missing assets ≠ bad design. Stage determines strictness.",
+    "stages": ["early_stage", "mid_stage", "late_stage"],
+    "severity_levels": {
+      "HIGH": {
+        "meaning": "core trust signal or critical conversion mechanic",
+        "action": "FAIL late-stage | WARN mid-stage | INFO early-stage",
+        "blocking": "true for late-stage, false for early"
+      },
+      "MEDIUM": {
+        "meaning": "pattern deviation or missing improvement",
+        "action": "WARN always",
+        "blocking": false
+      },
+      "LOW": {
+        "meaning": "optimization or nice-to-have",
+        "action": "INFO/SUGGEST",
+        "blocking": false
+      }
+    },
+    "decision_matrix": {
+      "if_element_is_missing": {
+        "core_trust_signal": {
+          "early_stage": "WARN (HIGH severity)",
+          "mid_stage": "WARN (HIGH severity)",
+          "late_stage": "FAIL (blocking)"
+        },
+        "proof_asset": {
+          "early_stage": "INFO - mark MISSING",
+          "mid_stage": "WARN - mark MISSING",
+          "late_stage": "WARN or FAIL depending on vertical"
+        },
+        "nice_to_have": {
+          "all_stages": "SUGGEST"
+        }
+      },
+      "if_element_is_present_but_poor": {
+        "design_pattern_violated": {
+          "early_stage": "WARN (MEDIUM severity)",
+          "mid_stage": "WARN (MEDIUM severity)",
+          "late_stage": "FAIL if HIGH severity"
+        },
+        "anti_pattern_detected": {
+          "early_stage": "WARN",
+          "mid_stage": "WARN or FAIL",
+          "late_stage": "FAIL"
+        }
+      }
+    },
+    "asset_classification": {
+      "missing_asset": {
+        "definition": "Something that should exist by this stage but doesn't yet",
+        "action": "Mark MISSING, provide actionable suggestion",
+        "blocking": false,
+        "examples": ["We need 3 customer testimonials", "Add ROI calculation", "Collect client logos"]
+      },
+      "design_issue": {
+        "definition": "Something present but violates winning patterns",
+        "action": "Mark as improvement needed",
+        "blocking": "depends on severity + stage",
+        "examples": ["CTA text is vague (should be action-oriented)", "Too much white text on light background", "Tone is too clinical"]
+      }
+    },
+    "output_format": {
+      "gate_result": {
+        "status": "PASS | WARN | FAIL",
+        "severity": "INFO | LOW | MEDIUM | HIGH",
+        "type": "DESIGN_ISSUE | MISSING_ASSET | ANTI_PATTERN",
+        "message": "string: what's the finding",
+        "blocking": "boolean: does this block progression",
+        "actionable_next": "string: what to do about it"
+      }
+    }
+  },
+  "stage_definitions": {
+    "early_stage": {
+      "indicators": ["MVP", "concept", "prototype", "pre-launch"],
+      "asset_status": "may not have customers, testimonials, logos, or case studies yet",
+      "gate_philosophy": "permissive - establish patterns, guide direction, don't block",
+      "goal": "validate core messaging and tone fit for vertical"
+    },
+    "mid_stage": {
+      "indicators": ["beta", "soft-launch", "early customers", "some traction"],
+      "asset_status": "have some real data, early testimonials, may lack logos/metrics",
+      "gate_philosophy": "balanced - flag missing assets, enforce patterns, guide improvements",
+      "goal": "ensure patterns are being applied correctly as real users come in"
+    },
+    "late_stage": {
+      "indicators": ["production", "ready to scale", "full go-to-market", "funding/major milestone"],
+      "asset_status": "should have all critical assets (testimonials, metrics, logos, proof)",
+      "gate_philosophy": "strict - must have core trust signals, patterns enforced",
+      "goal": "ensure production-ready design that converts"
+    }
+  }
+}

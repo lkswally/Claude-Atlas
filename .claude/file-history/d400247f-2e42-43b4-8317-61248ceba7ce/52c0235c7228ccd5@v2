@@ -1,0 +1,246 @@
+﻿import sys
+import os
+import io
+from colorama import init, Fore
+from dotenv import load_dotenv
+from core.router import ejecutar_agente
+from core.bootstrap import inicializar_sistema
+from core.llm_provider import get_llm_client
+import atexit
+import json
+from datetime import datetime
+from utils.redactor import redactar_pii, should_redact
+from tools.pixel_bridge import log_turn
+from tools.pixel_bridge import simulate_activity
+from tools.memory_log import mem_save_local, mem_session_summary_local
+
+init(autoreset=True)
+load_dotenv()
+client = get_llm_client()
+
+# Forzar salida UTF-8 en consola para evitar caracteres corruptos
+try:
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+except Exception:
+    pass
+
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, f"interacciones_{datetime.now().strftime('%Y%m%d')}.jsonl")
+
+
+def limpiar_estado_nda():
+    """Elimina el archivo temporal del NDA al salir"""
+    nda_path = os.path.join("data", "temp_nda.json")
+    if os.path.exists(nda_path):
+        try:
+            os.remove(nda_path)
+            print(Fore.YELLOW + "\nLimpiando NDA pendiente...")
+        except Exception:
+            pass
+
+
+def registrar_interaccion(pregunta, respuesta, agente=None):
+    """Guarda cada interaccion en un archivo de log"""
+    try:
+        if should_redact():
+            pregunta = redactar_pii(pregunta)
+            respuesta = redactar_pii(respuesta)
+        registro = {
+            "timestamp": datetime.now().isoformat(),
+            "pregunta": pregunta,
+            "respuesta": respuesta,
+            "agente": agente,
+        }
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(registro, ensure_ascii=False) + "\n")
+
+        mem_save_local(
+            title="Interaccion usuario",
+            mem_type="learning",
+            content=(
+                f"**What**: {pregunta}\n"
+                f"**Why**: Consulta del usuario\n"
+                f"**Where**: CLI\n"
+                f"**Learned**: {str(respuesta)[:200]}"
+            ),
+            topic_key="reyesoft-os/interacciones",
+        )
+        # Pixel Bridge (visualizacion)
+        log_turn(pregunta, respuesta)
+    except Exception:
+        pass
+
+
+atexit.register(limpiar_estado_nda)
+
+
+def _banner(db_stats):
+    print(Fore.CYAN + "=" * 70)
+    print(Fore.WHITE + " REYESOFT OS v18.2 | Asistente Empresarial | Modo Seguro")
+    print(Fore.WHITE + f" Legajos detectados: {db_stats['stats']['total']}")
+    print(Fore.CYAN + "=" * 70 + "\n")
+    print(Fore.WHITE + "Comandos rapidos: escribi el numero o el comando.")
+    print(Fore.WHITE + "Areas: Legal | People | Ops | Estrategia | Conocimiento")
+    print(Fore.WHITE + "Modo seguro: no escribe en Obsidian sin confirmacion.\n")
+
+
+def _menu():
+    print(Fore.CYAN + "\nMENU PRINCIPAL")
+    print(Fore.WHITE + "1) Resumen Ejecutivo")
+    print(Fore.WHITE + "2) People")
+    print(Fore.WHITE + "3) Finanzas")
+    print(Fore.WHITE + "4) Ops")
+    print(Fore.WHITE + "5) Legal")
+    print(Fore.WHITE + "6) Sistema")
+    print(Fore.WHITE + "0) Salir\n")
+
+
+def _people_menu():
+    print(Fore.CYAN + "\nSUBMENU PEOPLE")
+    print(Fore.WHITE + "1) Dashboard People")
+    print(Fore.WHITE + "2) Sincronizar Altas (Tally)")
+    print(Fore.WHITE + "0) Volver\n")
+
+
+def _fin_menu():
+    print(Fore.CYAN + "\nSUBMENU FINANZAS")
+    print(Fore.WHITE + "1) Dashboard CFO")
+    print(Fore.WHITE + "0) Volver\n")
+
+
+def _ops_menu():
+    print(Fore.CYAN + "\nSUBMENU OPS")
+    print(Fore.WHITE + "1) Procesos operativos")
+    print(Fore.WHITE + "2) Informe de tareas")
+    print(Fore.WHITE + "3) Tareas vencidas")
+    print(Fore.WHITE + "4) Tareas completadas")
+    print(Fore.WHITE + "0) Volver\n")
+
+
+def _legal_menu():
+    print(Fore.CYAN + "\nSUBMENU LEGAL")
+    print(Fore.WHITE + "1) Catálogo empresa (políticas)")
+    print(Fore.WHITE + "0) Volver\n")
+
+
+def _sys_menu():
+    print(Fore.CYAN + "\nSUBMENU SISTEMA")
+    print(Fore.WHITE + "1) Diagnóstico técnico")
+    print(Fore.WHITE + "2) Auditoría docs")
+    print(Fore.WHITE + "0) Volver\n")
+
+
+def _pause():
+    try:
+        input(Fore.CYAN + "\n[Enter] para volver al menu...")
+    except Exception:
+        pass
+
+
+def main():
+    db_stats = inicializar_sistema()
+    os.system("cls" if os.name == "nt" else "clear")
+    _banner(db_stats)
+    _menu()
+
+    interacciones = 0
+    tarea = ""
+    while True:
+        try:
+            tarea = input(Fore.GREEN + "Lucas" + Fore.WHITE + " > ")
+            if tarea.lower() in ["menu", "opciones"]:
+                _menu()
+                continue
+            if tarea.lower() in ["salir", "exit", "0"]:
+                break
+            if not tarea.strip():
+                continue
+
+            if tarea.strip() == "1":
+                tarea = "dashboard empresa"
+            elif tarea.strip() == "2":
+                _people_menu()
+                sub = input(Fore.GREEN + "People" + Fore.WHITE + " > ").strip()
+                if sub == "1":
+                    tarea = "dashboard people"
+                elif sub == "2":
+                    tarea = "sincronizar altas"
+                else:
+                    _menu()
+                    continue
+            elif tarea.strip() == "3":
+                _fin_menu()
+                sub = input(Fore.GREEN + "Finanzas" + Fore.WHITE + " > ").strip()
+                if sub == "1":
+                    tarea = "dashboard cfo"
+                else:
+                    _menu()
+                    continue
+            elif tarea.strip() == "4":
+                _ops_menu()
+                sub = input(Fore.GREEN + "Ops" + Fore.WHITE + " > ").strip()
+                if sub == "1":
+                    tarea = "listado de procesos"
+                elif sub == "2":
+                    tarea = "informe tareas"
+                elif sub == "3":
+                    tarea = "tareas vencidas"
+                elif sub == "4":
+                    tarea = "tareas completadas"
+                else:
+                    _menu()
+                    continue
+            elif tarea.strip() == "5":
+                _legal_menu()
+                sub = input(Fore.GREEN + "Legal" + Fore.WHITE + " > ").strip()
+                if sub == "1":
+                    tarea = "catalogo empresa"
+                else:
+                    _menu()
+                    continue
+            elif tarea.strip() == "6":
+                _sys_menu()
+                sub = input(Fore.GREEN + "Sistema" + Fore.WHITE + " > ").strip()
+                if sub == "1":
+                    tarea = "diagnostico tecnico"
+                elif sub == "2":
+                    tarea = "auditoria docs"
+                else:
+                    _menu()
+                    continue
+
+            if tarea == "simular pixel":
+                msg = simulate_activity("people")
+                print(Fore.CYAN + msg)
+                registrar_interaccion(tarea, msg)
+                _pause()
+                _menu()
+                continue
+
+            respuesta = ejecutar_agente(tarea, {"nombre": "Lucas", "can_color": True}, client)
+            registrar_interaccion(tarea, respuesta)
+            interacciones += 1
+            _pause()
+            _menu()
+
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            error_msg = f"Error critico: {e}"
+            print(Fore.RED + error_msg)
+            registrar_interaccion(tarea, error_msg)
+
+
+if __name__ == "__main__":
+    main()
+    mem_session_summary_local(
+        goal="Sesion CLI de Reyesoft OS",
+        accomplished=["Interacciones registradas en logs y memoria local"],
+        next_steps=["Revisar logs si hubo errores"],
+        discoveries=[],
+        instructions=None,
+        files=["logs/interacciones_YYYYMMDD.jsonl", "memory/engram.jsonl"],
+    )
+    print(Fore.YELLOW + "\nSesion finalizada. Estado limpiado.")

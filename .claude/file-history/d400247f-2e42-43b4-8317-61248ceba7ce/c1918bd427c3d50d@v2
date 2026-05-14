@@ -1,0 +1,29 @@
+---
+name: Reyesoft OS — arquitectura y estado
+description: Stack, módulos, entrypoints y estado de cada módulo del proyecto
+type: project
+originSessionId: d400247f-2e42-43b4-8317-61248ceba7ce
+---
+Sistema operativo interno para gestionar empresa de 23 personas. Filosofía "Brutalismo Operativo".
+
+**Stack:** Python 3.13 (venv313), SQLite, Groq/Llama3, Telegram Bot API, Google Sheets API.
+
+**Módulos:**
+- `cx_auditor/` — Code Freeze estricto. Pipeline batch CSV → IA → SQLite. API HTTP puerto 8090. UI puerto 8601.
+- `finance_mvp/` — Tesorería operativa. Google Sheets con caché + timeouts.
+- `agents/` — Orquestador, People, CFO, Ops, Knowledge, Legal, Telegram Bot.
+- `tools/task_manager.py` — Gestión de tareas en SQLite (`data/reyesoft_tasks.db`). Schema: titulo, responsable, fecha_vencimiento, estado, area, agente, completado_en.
+- `indexers/` — TF-IDF (router CLI) y BM25 (orquestador) para RAG sobre carpetas MAYÚSCULAS.
+
+**Entrypoints:**
+- CLI: `python agente.py`
+- CX Auditor LAN: `python scripts/run_cx_auditor_lan.py`
+- Pipeline batch: `python -m cx_auditor.pipeline.runner --csv-path <archivo>`
+
+**Base de conocimiento Obsidian:**
+- `02_CONOCIMIENTO/` — 56 docs: políticas, valores, cultura, CX, productos
+- `03_AREAS/` — People/legajos (YAML), Legal, Finanzas, Operaciones
+
+**Why:** Lucas quiere que al consultar sobre protocolos/políticas el sistema responda desde Obsidian, al pedir tareas las delegue a agentes, y al pedir informes muestre métricas de tareas.
+
+**How to apply:** Al agregar features, respetar separación de módulos. No tocar cx_auditor. Consultas → RAG. Tareas → ops_agent + task_manager. Reportes → generar_informe_tareas().

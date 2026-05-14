@@ -1,0 +1,69 @@
+import sqlite3
+import os
+from datetime import datetime
+
+# Definimos la ruta absoluta para evitar problemas de carpetas (subimos un nivel desde tools/)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(ROOT, "data")
+DB_PATH = os.path.join(DATA_DIR, "reyesoft_tasks.db")
+
+def inicializar_bd():
+    """Crea la carpeta data y la tabla de tareas si no existen."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Creamos la estructura de la tabla
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tareas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titulo TEXT NOT NULL,
+            responsable TEXT NOT NULL,
+            fecha_vencimiento DATE,
+            estado TEXT DEFAULT 'pendiente',
+            proceso_relacionado TEXT,
+            creado_en DATETIME
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print(f"✅ Base de datos inicializada correctamente en: {DB_PATH}")
+
+def crear_tarea(titulo, responsable, fecha_vencimiento, proceso_relacionado=None):
+    """Inserta una nueva tarea en SQLite."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    cursor.execute('''
+        INSERT INTO tareas (titulo, responsable, fecha_vencimiento, estado, proceso_relacionado, creado_en)
+        VALUES (?, ?, ?, 'pendiente', ?, ?)
+    ''', (titulo, responsable, fecha_vencimiento, proceso_relacionado, ahora))
+    
+    tarea_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return f"✅ Tarea creada: '{titulo}' asignada a {responsable} para el {fecha_vencimiento} (ID: {tarea_id})"
+
+def listar_pendientes():
+    """Devuelve todas las tareas que no están completadas."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, titulo, responsable, fecha_vencimiento FROM tareas WHERE estado = 'pendiente'")
+    pendientes = cursor.fetchall()
+    conn.close()
+    return pendientes
+
+def completar_tarea(tarea_id):
+    """Marca una tarea como completada."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE tareas SET estado = 'completada' WHERE id = ?", (tarea_id,))
+    conn.commit()
+    conn.close()
+    return f"✅ Tarea {tarea_id} marcada como completada."
+
+# Bloque de ejecución directa de prueba
+if __name__ == "__main__":
+    print("Iniciando configuración de Base de Datos de Tareas...")
+    inicializar_bd()

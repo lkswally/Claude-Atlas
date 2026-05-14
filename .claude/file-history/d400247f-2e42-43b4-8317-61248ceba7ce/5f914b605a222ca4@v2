@@ -1,0 +1,235 @@
+import sqlite3
+import os
+from datetime import datetime, timedelta
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(ROOT, "data")
+DB_PATH = os.path.join(DATA_DIR, "reyesoft_tasks.db")
+
+
+def _get_conn() -> sqlite3.Connection:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _migrate_schema():
+    conn = _get_conn()
+    cursor = conn.cursor()
+    for ddl in [
+        "ALTER TABLE tareas ADD COLUMN completado_en DATETIME",
+        "ALTER TABLE tareas ADD COLUMN area TEXT",
+        "ALTER TABLE tareas ADD COLUMN agente TEXT",
+        "ALTER TABLE tareas ADD COLUMN descripcion TEXT",
+    ]:
+        try:
+            cursor.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+    conn.commit()
+    conn.close()
+
+
+def inicializar_bd():
+    conn = _get_conn()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tareas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titulo TEXT NOT NULL,
+            responsable TEXT NOT NULL,
+            fecha_vencimiento DATE,
+            estado TEXT DEFAULT 'pendiente',
+            proceso_relacionado TEXT,
+            creado_en DATETIME,
+            completado_en DATETIME,
+            area TEXT,
+            agente TEXT,
+            descripcion TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    _migrate_schema()
+    print(f"Base de datos lista: {DB_PATH}")
+
+
+def crear_tarea(titulo, responsable, fecha_vencimiento, proceso_relacionado=None, area=None, agente=None, descripcion=None):
+    inicializar_bd()
+    conn = _get_conn()
+    cursor = conn.cursor()
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute(
+        """
+        INSERT INTO tareas
+            (titulo, responsable, fecha_vencimiento, estado, proceso_relacionado, creado_en, area, agente, descripcion)
+        VALUES (?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)
+        """,
+        (titulo, responsable, fecha_vencimiento, proceso_relacionado, ahora, area, agente, descripcion),
+    )
+    tarea_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return f"Tarea creada: '{titulo}' asignada a {responsable} para el {fecha_vencimiento} (ID: {tarea_id})"
+
+
+def completar_tarea(tarea_id):
+    inicializar_bd()
+    conn = _get_conn()
+    cursor = conn.cursor()
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute(
+        "UPDATE tareas SET estado = 'completada', completado_en = ? WHERE id = ?",
+        (ahora, tarea_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    if affected == 0:
+        return f"No encontré la tarea con ID {tarea_id}."
+    return f"Tarea {tarea_id} marcada como completada ({ahora[:10]})."
+
+
+def listar_pendientes():
+    inicializar_bd()
+    conn = _get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, titulo, responsable, fecha_vencimiento FROM tareas WHERE estado = 'pendiente'")
+    rows = cursor.fetchall()
+    conn.close()
+    return [tuple(r) for r in rows]
+
+
+def listar_todas() -> list:
+    inicializar_bd()
+    conn = _get_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, titulo, responsable, fecha_vencimiento, estado, area, completado_en FROM tareas ORDER BY creado_en DESC"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [tuple(r) for r in rows]
+
+
+def listar_vencidas() -> list:
+    inicializar_bd()
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    conn = _get_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, titulo, responsable, fecha_vencimiento
+        FROM tareas
+        WHERE estado = 'pendiente' AND fecha_vencimiento < ?
+        ORDER BY fecha_vencimiento ASC
+        """,
+        (hoy,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [tuple(r) for r in rows]
+
+
+def generar_informe_tareas(dias: int = 30) -> str:
+    inicializar_bd()
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    desde = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
+
+    conn = _get_conn()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM tareas")
+    total = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM tareas WHERE estado = 'pendiente'")
+    pendientes = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM tareas WHERE estado = 'completada'")
+    completadas = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM tareas WHERE estado = 'pendiente' AND fecha_vencimiento < ?",
+        (hoy,),
+    )
+    vencidas = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM tareas WHERE estado = 'completada' AND completado_en >= ?",
+        (desde,),
+    )
+    completadas_periodo = cursor.fetchone()[0]
+
+    cursor.execute(
+        """
+        SELECT responsable,
+               SUM(CASE WHEN estado='pendiente' THEN 1 ELSE 0 END) AS pend,
+               SUM(CASE WHEN estado='completada' THEN 1 ELSE 0 END) AS comp
+        FROM tareas
+        GROUP BY responsable
+        ORDER BY pend DESC
+        """
+    )
+    por_responsable = cursor.fetchall()
+
+    cursor.execute(
+        """
+        SELECT titulo, responsable, completado_en
+        FROM tareas WHERE estado='completada'
+        ORDER BY completado_en DESC LIMIT 5
+        """
+    )
+    recientes_completadas = cursor.fetchall()
+
+    cursor.execute(
+        """
+        SELECT id, titulo, responsable, fecha_vencimiento
+        FROM tareas WHERE estado='pendiente'
+        ORDER BY fecha_vencimiento ASC LIMIT 5
+        """
+    )
+    proximas_pendientes = cursor.fetchall()
+
+    conn.close()
+
+    pct_completadas = f"{(completadas / total * 100):.0f}%" if total else "0%"
+
+    lines = [
+        "INFORME DE TAREAS",
+        "=" * 50,
+        f"Periodo: ultimos {dias} dias  |  Corte: {hoy}",
+        f"Total registradas: {total}  |  Completadas: {pct_completadas}",
+        f"Pendientes: {pendientes}  |  Completadas: {completadas}  |  Vencidas: {vencidas}",
+        f"Completadas en el periodo: {completadas_periodo}",
+        "",
+    ]
+
+    if por_responsable:
+        lines.append("POR RESPONSABLE:")
+        for row in por_responsable:
+            resp, pend, comp = row[0], row[1], row[2]
+            lines.append(f"  {resp}: {pend} pendiente(s), {comp} completada(s)")
+        lines.append("")
+
+    if recientes_completadas:
+        lines.append("ULTIMAS COMPLETADAS:")
+        for row in recientes_completadas:
+            titulo, resp, fecha = row[0], row[1], row[2]
+            fecha_str = (fecha or "")[:10] or "Sin fecha"
+            lines.append(f"  [OK] {titulo} | {resp} | {fecha_str}")
+        lines.append("")
+
+    if proximas_pendientes:
+        lines.append("PROXIMAS A VENCER:")
+        for row in proximas_pendientes:
+            tid, titulo, resp, fecha = row[0], row[1], row[2], row[3]
+            vencida = "[VENCIDA]" if fecha and fecha < hoy else "[Pendiente]"
+            lines.append(f"  {vencida} ID:{tid} {titulo} | {resp} | {fecha or 'Sin fecha'}")
+
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    inicializar_bd()
+    print(generar_informe_tareas())

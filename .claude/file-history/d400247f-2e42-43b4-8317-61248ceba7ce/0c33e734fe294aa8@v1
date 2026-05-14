@@ -1,0 +1,452 @@
+import sys
+import os
+from colorama import Fore
+from core.bootstrap import get_knowledge_indexer
+from agents.analytics_agent import analizar_logs
+from utils.formatting import strip_ansi
+
+# Legacy controlado: router CLI amplio preservado por compatibilidad, no como surface ejecutiva canónica.
+
+
+def _safe_console_print(text):
+    clean_text = strip_ansi(str(text or ""))
+    try:
+        print(clean_text)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        safe_text = clean_text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+        print(safe_text)
+
+
+def detectar_intencion(texto):
+    """
+    Determina si el usuario quiere CONSULTAR o ACTUAR
+    """
+    texto_lower = texto.lower()
+    
+    # Palabras que indican ACCIÓN (crear, generar, hacer, dame, quiero)
+    acciones = [
+        "crear", "generar", "hacer", "redactar", "armar", "nuevo",
+        "dame", "necesito", "quiero", "preparar", "elaborar", "redactame",
+        "elaborame", "confeccionar"
+    ]
+    for accion in acciones:
+        if accion in texto_lower:
+            return "accion"
+    
+    # Palabras que indican CONSULTA (qué es, cómo, protocolo, ley)
+    consultas = [
+        "qué es", "cómo", "protocolo", "ley", "explicar",
+        "decime", "contame", "cual es", "que es", "info", "información",
+        "dónde", "cuándo", "por qué", "para qué"
+    ]
+    for consulta in consultas:
+        if consulta in texto_lower:
+            return "consulta"
+    
+    # Por defecto, asumimos consulta
+    return "consulta"
+
+def es_tema_legal(texto):
+    """
+    Detecta si la pregunta es sobre un tema legal
+    """
+    texto_lower = texto.lower()
+    
+    # Lista ampliada de términos legales
+    terminos_legales = [
+        # Términos específicos de COPREC / Defensa del Consumidor
+        "coprec", "defensa del consumidor", "defensa consumidor", 
+        "denuncia defensa", "consumidor", "reclamo consumidor",
+        
+        # Términos legales generales
+        "legal", "ley", "protocolo", "oficio judicial", 
+        "contrato", "confidencialidad", "nda",
+        "delitos", "estafas", "terminos y condiciones",
+        
+        # Variantes de documentos
+        "procedimiento reclamos", "protocolo denuncia"
+    ]
+    
+    for termino in terminos_legales:
+        if termino in texto_lower:
+            return True
+    
+    return False
+
+def ejecutar_agente(tarea, usuario_actual, client):
+    """
+    Función principal que rutea las tareas al agente correspondiente
+    """
+    t_norm = tarea.lower()
+
+    # AYUDA / HELP
+    if t_norm.strip() in ["ayuda", "help", "?"]:
+        return (
+            "AYUDA | COMANDOS PRINCIPALES\n"
+            "DASHBOARDS\n"
+            " - dashboard empresa | dashboard tecnico | dashboard cfo\n"
+            "PEOPLE\n"
+            " - dashboard people | vacaciones de Nombre Apellido | revisar legajo Nombre\n"
+            "PROCESOS Y DOCS\n"
+            " - procesos operativos | listado de procesos | catalogo empresa | catalogo conocimiento\n"
+            "GESTION Y QA\n"
+            " - diagnostico tecnico | auditoria docs\n"
+            "ONBOARDING\n"
+            " - sincronizar altas\n"
+        )
+
+    if t_norm.strip() in ["dev tools", "herramientas", "herramientas de desarrollador", "5"]:
+        return (
+            "HERRAMIENTAS DE DESARROLLADOR\n"
+            "- dashboard tecnico\n"
+            "- diagnostico tecnico\n"
+            "- auditoria docs\n"
+            "- procesos operativos\n"
+            "- catalogo empresa / catalogo conocimiento\n"
+        )
+
+    # COMMANDS: CFO dashboard (avoid fallback to empresa)
+    if t_norm.strip() in ["dashboard people", "people dashboard", "rrhh", "people ops", "4"]:
+        try:
+            from agents.people import obtener_metricas_people
+            from presentation.people_view import imprimir_dashboard_people
+            data = obtener_metricas_people()
+            respuesta = imprimir_dashboard_people(data)
+        except Exception:
+            respuesta = "👥 DASHBOARD PEOPLE: No disponible temporalmente."
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    if t_norm.strip() in ["sincronizar altas", "onboarding tally", "sync altas", "5"]:
+        try:
+            from tools.onboarding_tally import procesar_onboarding_tally
+            res = procesar_onboarding_tally()
+            creados = len(res.get("creados", []))
+            omitidos = len(res.get("omitidos", []))
+            errores = len(res.get("errores", []))
+            respuesta = f"🟢 Creados: {creados} | 🟡 Omitidos: {omitidos} | 🔴 Errores: {errores}"
+        except Exception as e:
+            respuesta = f"🔴 Error al sincronizar altas: {e}"
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    if t_norm.strip() in ["dashboard cfo", "cfo", "3"]:
+        try:
+            from tools.cfo_dashboard import generar_dashboard_cfo
+            if isinstance(usuario_actual, dict) and usuario_actual.get("can_color"):
+                from presentation.cfo_view import imprimir_dashboard_cfo
+                from agents.cfo import procesar_cfo
+                from datetime import datetime
+                hoy = datetime.now()
+                meses = {
+                    "January": "Enero", "February": "Febrero", "March": "Marzo", "April": "Abril",
+                    "May": "Mayo", "June": "Junio", "July": "Julio", "August": "Agosto",
+                    "September": "Septiembre", "October": "Octubre", "November": "Noviembre", "December": "Diciembre",
+                }
+                mes = meses.get(hoy.strftime("%B"), hoy.strftime("%B"))
+                data = procesar_cfo(f"{mes} {str(hoy.year)[-2:]}", client)
+                respuesta = imprimir_dashboard_cfo(data, f"📊 DASHBOARD FINANCIERO (CFO) - {mes} {str(hoy.year)[-2:]}")
+            else:
+                respuesta = generar_dashboard_cfo(include_options=True)
+        except Exception:
+            respuesta = "🧾 DASHBOARD CFO: Archivo de finanzas no disponible temporalmente."
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    # COMMANDS: Procesos / Catalogos / QA (intercept before RAG)
+    if t_norm.strip() in ["procesos operativos", "procesos", "4"]:
+        from tools.processes_dashboard import generar_dashboard_procesos
+        respuesta = generar_dashboard_procesos()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.strip() in ["listado de procesos", "4"]:
+        from tools.processes import list_processes
+        respuesta = list_processes()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.startswith("ver proceso "):
+        try:
+            idx = int(t_norm.replace("ver proceso", "").strip())
+        except Exception:
+            idx = None
+        from tools.processes import get_process_detail
+        respuesta = get_process_detail(idx or -1)
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.strip() in ["catalogo empresa", "catálogo empresa", "5"]:
+        from tools.company_catalog import list_company_docs
+        respuesta = list_company_docs()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.startswith("ver documento "):
+        try:
+            idx = int(t_norm.replace("ver documento", "").strip())
+        except Exception:
+            idx = None
+        from tools.company_catalog import get_company_doc_detail
+        respuesta = get_company_doc_detail(idx or -1)
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.strip() in ["catalogo conocimiento", "catálogo conocimiento", "mapa conocimiento", "6"]:
+        from tools.knowledge_catalog import list_conocimiento
+        respuesta = list_conocimiento()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.startswith("conocer area "):
+        try:
+            idx = int(t_norm.replace("conocer area", "").strip())
+        except Exception:
+            idx = None
+        from tools.knowledge_catalog import list_conocimiento_area
+        respuesta = list_conocimiento_area(idx or -1)
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.startswith("ver conocimiento "):
+        try:
+            idx = int(t_norm.replace("ver conocimiento", "").strip())
+        except Exception:
+            idx = None
+        from tools.knowledge_catalog import get_conocimiento_detail
+        respuesta = get_conocimiento_detail(idx or -1)
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.strip() in ["diagnostico tecnico", "diagnóstico técnico", "qa system", "qa tecnico", "qa", "diagnostico sistema", "diagnostico de sistema", "7"]:
+        from agents.qa_system import procesar_qa_system
+        respuesta = procesar_qa_system()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if t_norm.strip() in ["auditoria docs", "auditoría docs", "qa docs", "auditoria documental", "8"]:
+        from agents.qa_docs import procesar_qa_docs
+        respuesta = procesar_qa_docs()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    # DASHBOARDS (resumen ejecutivo / tecnico)
+    if any(x in t_norm for x in ["dashboard tecnico", "dashboard técnico"]):
+        from tools.dashboard_tecnico import generar_dashboard_tecnico
+        respuesta = generar_dashboard_tecnico()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    if any(x in t_norm for x in ["dashboard empresa", "dashboard ejecutivo", "dashboard"]):
+        from tools.company_dashboard import generar_dashboard_empresa
+        respuesta = generar_dashboard_empresa()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    
+    # CASO ESPECIAL 1: Análisis de logs
+    if any(x in t_norm for x in ["analizar logs", "reporte", "estadísticas", "analisis", "métricas", "estadisticas"]):
+        from agents.analytics_agent import analizar_logs
+        respuesta = analizar_logs()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    
+    # CASO ESPECIAL 2: Supervisor (corregir archivos) - MODO INTERACTIVO
+    if any(x in t_norm for x in ["supervisar todo", "corregir formato", "revisar archivos", "formatear", "supervisar archivos", "auditar documentos"]):
+        from agents.supervisor import ejecutar_supervision
+        respuesta = ejecutar_supervision(modo_interactivo=True)
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    
+    # CASO ESPECIAL 3: Supervisor modo automático (sin preguntar)
+    if any(x in t_norm for x in ["supervisar auto", "aplicar todo", "forzar formato"]):
+        from agents.supervisor import ejecutar_supervision
+        respuesta = ejecutar_supervision(modo_interactivo=False)
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    
+    # CASO ESPECIAL 4: Analizar MOCs (solo recomendaciones, sin modificar)
+    if any(x in t_norm for x in ["analizar moc", "revisar moc", "estructura moc", "recomendar moc", "analizar estructura", "diagnostico moc"]):
+        from agents.moc_analyzer import ejecutar_analisis_moc
+        respuesta = ejecutar_analisis_moc()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    
+    # Verificar si hay NDA pendiente
+    hay_nda_pend = os.path.exists(os.path.join("data", "temp_nda.json"))
+    
+    # SI HAY NDA PENDIENTE, SOLO PROCESAR COMANDOS DEL NDA
+    if hay_nda_pend:
+        if t_norm in ["cancelar", "salir"]:
+            # Cancelar NDA
+            try:
+                os.remove(os.path.join("data", "temp_nda.json"))
+                _safe_console_print(f"\n{Fore.GREEN}✅ NDA cancelado. Podés seguir preguntando.{Fore.RESET}\n")
+            except:
+                _safe_console_print(f"\n{Fore.GREEN}✅ NDA cancelado.{Fore.RESET}\n")
+            return "NDA cancelado"
+        else:
+            # Derivar a legal_agent para continuar con el NDA
+            from agents.legal_agent import procesar_legal
+            respuesta = procesar_legal(tarea, client, "Eres un asistente legal corporativo.")
+            if respuesta:
+                _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+            return respuesta
+    
+    # Palabras gatillo técnicas (Bypass de IA)
+    es_supervisor = any(x in t_norm for x in [
+        "estandarizar", "supervisar", "corregir legajos", 
+        "auditar", "actualizar informacion", "revisar todo",
+        "supervisor"
+    ])
+
+    es_ops = any(x in t_norm for x in [
+        "tarea", "tareas", "operaciones", "ops", "pendientes",
+        "asignar", "crear tarea", "nueva tarea"
+    ])
+
+    es_estrategia = any(x in t_norm for x in [
+        "estrategia", "brainstorm", "roadmap", "producto",
+        "competencia", "investiga", "internet", "scrapear"
+    ])
+
+    es_secretario = any(x in t_norm for x in [
+        "onboarding", "alta colaborador", "alta empleado",
+        "nuevo colaborador", "secretario"
+    ])
+
+    es_auto = any(x in t_norm for x in [
+        "auto run", "automaciones", "auditar sistema", "revisar todo automatico"
+    ])
+    
+    es_people = any(x in t_norm for x in [
+        "quien es", "cumple", "trabaja", "puesto", 
+        "legajo", "persona", "empleado", "antigüedad", 
+        "edad", "cumpleaños", "rrhh", "vacaciones"
+    ])
+    
+    # CASO 1: Supervisor (técnico)
+    if es_supervisor:
+        from agents.supervisor import procesar_supervisor
+        respuesta = procesar_supervisor(tarea, client)
+        _safe_console_print(f"\n{Fore.GREEN}{respuesta}\n")
+        return respuesta
+    
+    # CASO 2: Automaciones
+    elif es_auto:
+        from agents.auto_runner import ejecutar_automaciones
+        respuesta = ejecutar_automaciones()
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    # CASO 3: Secretario (onboarding)
+    elif es_secretario:
+        from agents.secretario import procesar_secretario
+        respuesta = procesar_secretario(tarea)
+        if respuesta:
+            _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    # CASO 4: Operaciones
+    elif es_ops:
+        from agents.ops_agent import procesar_operaciones
+        respuesta = procesar_operaciones(tarea, client, "Eres un agente de Operaciones.")
+        if respuesta:
+            _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    # CASO 5: Estrategia
+    elif es_estrategia:
+        from agents.strategy_agent import procesar_estrategia
+        respuesta = procesar_estrategia(tarea, client)
+        if respuesta:
+            _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+
+    # CASO 6: People (RRHH)
+    elif es_people:
+        from agents.people import procesar_people
+        respuesta = procesar_people(tarea, client)
+        if respuesta:
+            _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta
+    
+    # CASO 5: Detectar si es tema legal
+    elif es_tema_legal(tarea):
+        
+        intencion = detectar_intencion(tarea)
+        
+        # Si quiere CREAR algo (ACCIÓN) → legal_agent
+        if intencion == "accion":
+            from agents.legal_agent import procesar_legal
+            respuesta = procesar_legal(tarea, client, "Eres un asistente legal corporativo.")
+            if respuesta:
+                _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+            return respuesta
+        
+        # Si quiere CONSULTAR → knowledge_indexer
+        else:
+            # Buscar con confidence score
+            knowledge_indexer = get_knowledge_indexer()
+            contexto, confianza = knowledge_indexer.obtener_contexto(tarea)
+            
+            if contexto and confianza >= 0.15:  # Umbral ajustable
+                prompt = f"""Usando EXCLUSIVAMENTE la información de los documentos a continuación.
+NO inventes información. NO agregues datos que no estén en los documentos.
+Si la respuesta no está en los documentos, decí EXACTAMENTE:
+"No encontré información sobre [tema] en mi base de conocimiento."
+
+DOCUMENTOS:
+{contexto}
+
+PREGUNTA: {tarea}
+
+RESPUESTA (solo con información de los documentos):"""
+                
+                try:
+                    res = client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    respuesta = res.choices[0].message.content
+                except Exception as e:
+                    respuesta = f"Error al consultar la IA: {e}"
+                
+                # Mostrar confianza (opcional)
+                _safe_console_print(f"\n{Fore.YELLOW}🔍 Confianza: {confianza:.2f}{Fore.RESET}")
+                
+            else:
+                # No hay documentos con suficiente confianza
+                respuesta = f"No encontré información sobre '{tarea}' en mi base de conocimiento."
+            
+            _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+            return respuesta
+    
+    # CASO 4: Búsqueda en conocimiento general
+    else:
+        # Buscar con confidence score
+        knowledge_indexer = get_knowledge_indexer()
+        contexto, confianza = knowledge_indexer.obtener_contexto(tarea)
+        
+        if contexto and confianza >= 0.15:  # Umbral ajustable
+            prompt = f"""Usando EXCLUSIVAMENTE la información de los documentos a continuación.
+NO inventes información. NO agregues datos que no estén en los documentos.
+Si la respuesta no está en los documentos, decí EXACTAMENTE:
+"No encontré información sobre [tema] en mi base de conocimiento."
+
+DOCUMENTOS:
+{contexto}
+
+PREGUNTA: {tarea}
+
+RESPUESTA (solo con información de los documentos):"""
+            
+            try:
+                res = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                respuesta = res.choices[0].message.content
+            except Exception as e:
+                respuesta = f"Error al consultar la IA: {e}"
+            
+            # Mostrar confianza (opcional)
+            _safe_console_print(f"\n{Fore.YELLOW}🔍 Confianza: {confianza:.2f}{Fore.RESET}")
+            
+        else:
+            # No hay documentos con suficiente confianza
+            respuesta = f"No encontré información sobre '{tarea}' en mi base de conocimiento."
+        
+        # Mostrar respuesta
+        _safe_console_print(f"\n{Fore.CYAN}{'='*60}\n{Fore.WHITE}{respuesta}\n{Fore.CYAN}{'='*60}\n")
+        return respuesta

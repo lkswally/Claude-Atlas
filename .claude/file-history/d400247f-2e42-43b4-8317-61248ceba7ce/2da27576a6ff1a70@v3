@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Reyesoft OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:         #080812;
+  --surface:    #0f0f1e;
+  --card:       #13132a;
+  --card-hover: #18183a;
+  --border:     #1e1e42;
+  --border-hi:  #2a2a5a;
+  --accent:     #6366f1;
+  --accent-dim: rgba(99,102,241,.15);
+  --accent2:    #8b5cf6;
+  --green:      #10b981;
+  --green-dim:  rgba(16,185,129,.15);
+  --yellow:     #f59e0b;
+  --yellow-dim: rgba(245,158,11,.15);
+  --red:        #ef4444;
+  --red-dim:    rgba(239,68,68,.15);
+  --blue:       #3b82f6;
+  --blue-dim:   rgba(59,130,246,.15);
+  --t1:         #f1f5f9;
+  --t2:         #94a3b8;
+  --t3:         #475569;
+  --radius:     12px;
+  --radius-sm:  8px;
+  --shadow:     0 4px 24px rgba(0,0,0,.4);
+  --trans:      .2s cubic-bezier(.4,0,.2,1);
+}
+html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+input,select,textarea{font-family:inherit;color:var(--t1);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;outline:none;transition:border-color var(--trans)}
+input:focus,select:focus{border-color:var(--accent)}
+input::placeholder{color:var(--t3)}
+
+/* ── LAYOUT ── */
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:220px;flex-shrink:0;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  padding:0;overflow:hidden;
+  transition:width var(--trans);
+}
+.sidebar-header{
+  padding:20px 16px 12px;
+  border-bottom:1px solid var(--border);
+}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.logo-icon{
+  width:32px;height:32px;border-radius:8px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;
+}
+.logo-text{font-weight:700;font-size:13px;letter-spacing:.5px}
+.logo-sub{font-size:11px;color:var(--t3)}
+.sidebar-date{font-size:11px;color:var(--t3);margin-top:8px}
+
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px 8px}
+.nav-section{margin-bottom:4px}
+.nav-label{
+  font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;
+  color:var(--t3);padding:12px 8px 4px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 10px;border-radius:var(--radius-sm);
+  cursor:pointer;transition:all var(--trans);
+  color:var(--t2);font-size:13px;font-weight:500;
+  position:relative;
+  margin-bottom:1px;
+}
+.nav-item:hover{background:var(--accent-dim);color:var(--t1)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent)}
+.nav-item.active::before{
+  content:'';position:absolute;left:0;top:6px;bottom:6px;
+  width:3px;background:var(--accent);border-radius:2px;
+}
+.nav-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{
+  margin-left:auto;background:var(--red);color:#fff;
+  font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;
+  min-width:18px;text-align:center;
+}
+.nav-badge.yellow{background:var(--yellow)}
+
+.sidebar-footer{
+  padding:12px 16px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--t3);
+}
+.sys-status{display:flex;flex-direction:column;gap:5px}
+.sys-row{display:flex;justify-content:space-between;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px}
+.dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot-yellow{background:var(--yellow);box-shadow:0 0 6px var(--yellow)}
+.dot-red{background:var(--red);box-shadow:0 0 6px var(--red)}
+.dot-gray{background:var(--t3)}
+.dot.pulse{animation:pulse-dot 2s infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+.topbar{
+  height:52px;flex-shrink:0;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;
+  gap:16px;
+}
+.topbar-title{font-size:15px;font-weight:600}
+.topbar-sub{font-size:12px;color:var(--t3);flex:1}
+.topbar-actions{display:flex;gap:8px}
+
+.content{flex:1;overflow-y:auto;padding:24px}
+
+/* ── VIEWS ── */
+.view{display:none;animation:fadeIn .25s ease}
+.view.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── PAGE HEADER ── */
+.page-header{margin-bottom:24px}
+.page-title{font-size:22px;font-weight:700;margin-bottom:2px}
+.page-sub{font-size:13px;color:var(--t2)}
+
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;gap:12px;margin-bottom:20px}
+.kpi-grid-4{grid-template-columns:repeat(4,1fr)}
+.kpi-grid-3{grid-template-columns:repeat(3,1fr)}
+.kpi-grid-2{grid-template-columns:repeat(2,1fr)}
+.kpi{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px 18px;position:relative;overflow:hidden;
+  transition:transform var(--trans),border-color var(--trans);
+}
+.kpi:hover{transform:translateY(-2px);border-color:var(--border-hi)}
+.kpi::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,transparent 60%,rgba(255,255,255,.02));
+  pointer-events:none;
+}
+.kpi-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px}
+.kpi-value{font-size:28px;font-weight:700;line-height:1;margin-bottom:4px}
+.kpi-value.green{color:var(--green)}
+.kpi-value.red{color:var(--red)}
+.kpi-value.yellow{color:var(--yellow)}
+.kpi-value.blue{color:var(--blue)}
+.kpi-meta{font-size:11px;color:var(--t3)}
+.kpi-icon{position:absolute;right:14px;top:14px;font-size:22px;opacity:.3}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:13px;font-weight:600}
+.card-sub{font-size:11px;color:var(--t3);margin-top:1px}
+.card-action{font-size:12px;color:var(--accent);cursor:pointer;font-weight:500}
+.card-action:hover{opacity:.8}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;border-radius:var(--radius-sm)}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
+   color:var(--t3);padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--t1)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.td-mono{font-family:monospace;font-size:12px}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-green{background:var(--green-dim);color:var(--green)}
+.badge-red{background:var(--red-dim);color:var(--red)}
+.badge-yellow{background:var(--yellow-dim);color:var(--yellow)}
+.badge-blue{background:var(--blue-dim);color:var(--blue)}
+.badge-gray{background:rgba(255,255,255,.06);color:var(--t2)}
+
+/* ── ALERTS ── */
+.alert{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:12px 14px;border-radius:var(--radius-sm);
+  margin-bottom:8px;font-size:13px;
+  animation:fadeIn .2s ease;
+}
+.alert:last-child{margin-bottom:0}
+.alert-danger{background:var(--red-dim);border:1px solid rgba(239,68,68,.25)}
+.alert-warning{background:var(--yellow-dim);border:1px solid rgba(245,158,11,.25)}
+.alert-info{background:var(--blue-dim);border:1px solid rgba(59,130,246,.25)}
+.alert-success{background:var(--green-dim);border:1px solid rgba(16,185,129,.25)}
+.alert-icon{flex-shrink:0;font-size:14px;margin-top:1px}
+
+/* ── BUTTONS ── */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:var(--radius-sm);
+  font-size:13px;font-weight:500;
+  transition:all var(--trans);cursor:pointer;
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#5558e3}
+.btn-ghost{background:transparent;color:var(--t2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--card);color:var(--t1)}
+.btn-sm{padding:5px 11px;font-size:12px}
+.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+
+/* ── PROGRESS ── */
+.progress{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;border-radius:3px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+
+/* ── CHECKLIST ── */
+.checklist-group{margin-bottom:16px}
+.checklist-cat{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--accent);margin-bottom:10px;padding-bottom:6px;
+  border-bottom:1px solid var(--accent-dim);
+}
+.checklist-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);
+  transition:background var(--trans);
+}
+.checklist-item:last-child{border-bottom:none}
+.checklist-item label{font-size:13px;cursor:pointer;flex:1;color:var(--t2);transition:color var(--trans)}
+.checklist-item input:checked+label{color:var(--t3);text-decoration:line-through}
+input[type=checkbox]{
+  width:16px;height:16px;flex-shrink:0;margin-top:2px;
+  accent-color:var(--accent);cursor:pointer;
+}
+
+/* ── UPLOAD ZONE ── */
+.upload-zone{
+  border:2px dashed var(--border);border-radius:var(--radius);
+  padding:40px 20px;text-align:center;
+  transition:all var(--trans);cursor:pointer;
+  background:var(--card);
+}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:var(--accent-dim)}
+.upload-zone-icon{font-size:36px;margin-bottom:12px;opacity:.6}
+.upload-zone-text{font-size:14px;font-weight:500;margin-bottom:4px}
+.upload-zone-sub{font-size:12px;color:var(--t3)}
+
+/* ── KNOWLEDGE RESULT ── */
+.kb-result{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:14px 16px;margin-bottom:10px;
+  transition:border-color var(--trans);
+  animation:fadeIn .2s ease;
+}
+.kb-result:hover{border-color:var(--border-hi)}
+.kb-result-name{font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px}
+.kb-result-text{font-size:13px;color:var(--t2);line-height:1.7;margin-bottom:6px}
+.kb-result-path{font-size:11px;color:var(--t3)}
+
+/* ── TOAST ── */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:12px 16px;font-size:13px;
+  display:flex;align-items:center;gap:10px;min-width:260px;
+  animation:slideIn .25s ease;box-shadow:var(--shadow);
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.toast.toast-out{animation:slideOut .2s ease forwards}
+@keyframes slideOut{to{opacity:0;transform:translateX(20px)}}
+.toast-success{border-color:rgba(16,185,129,.4)}
+.toast-error{border-color:rgba(239,68,68,.4)}
+.toast-info{border-color:rgba(99,102,241,.4)}
+
+/* ── SKELETON ── */
+.skel{
+  background:linear-gradient(90deg,var(--card) 25%,var(--card-hover) 50%,var(--card) 75%);
+  background-size:200% 100%;animation:shimmer 1.4s infinite;
+  border-radius:4px;height:14px;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:16px;width:fit-content}
+.tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;color:var(--t2);cursor:pointer;transition:all var(--trans)}
+.tab.active{background:var(--card);color:var(--t1)}
+.tab:hover:not(.active){color:var(--t1)}
+
+/* ── SEARCH ── */
+.search-wrap{position:relative;display:flex;gap:8px;margin-bottom:16px}
+.search-input{flex:1;padding-left:36px;background:var(--surface);border-color:var(--border)}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:15px;pointer-events:none}
+
+/* ── AVATAR ── */
+.avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;flex-shrink:0;
+}
+
+/* ── FINANCE SPECIFIC ── */
+.finance-amount{font-size:24px;font-weight:700;font-family:monospace;letter-spacing:-1px}
+.finance-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.finance-row:last-child{border-bottom:none}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:40px 20px;color:var(--t3)}
+.empty-icon{font-size:36px;margin-bottom:12px;opacity:.4}
+.empty-text{font-size:14px}
+.empty-sub{font-size:12px;margin-top:4px}
+
+/* ── LOADING OVERLAY ── */
+#splash{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:9998;transition:opacity .4s;
+}
+.spinner{
+  width:36px;height:36px;border:3px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .7s linear infinite;margin-bottom:16px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .sidebar{width:60px}
+  .logo-text,.logo-sub,.nav-label,.nav-item span:not(.nav-icon){display:none}
+  .kpi-grid-4{grid-template-columns:repeat(2,1fr)}
+  .grid-2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="spinner"></div>
+  <div style="color:var(--t2);font-size:13px">Cargando Reyesoft OS…</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toasts"></div>
+
+<!-- APP -->
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <div class="logo-text">REYESOFT OS</div>
+          <div class="logo-sub">v5.0 · Sistema Interno</div>
+        </div>
+      </div>
+      <div class="sidebar-date" id="sb-date"></div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">General</div>
+        <div class="nav-item active" data-view="overview">
+          <span class="nav-icon">🏠</span><span>Inicio</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">People & RRHH</div>
+        <div class="nav-item" data-view="people">
+          <span class="nav-icon">👥</span><span>Equipo</span>
+          <span class="nav-badge yellow" id="nb-burnout" style="display:none"></span>
+        </div>
+        <div class="nav-item" data-view="cumpleanos">
+          <span class="nav-icon">🎂</span><span>Cumpleaños</span>
+          <span class="nav-badge" id="nb-cumple" style="display:none"></span>
+        </div>
+        <div class="nav-item" data-view="licencias">
+          <span class="nav-icon">📋</span><span>Licencias</span>
+        </div>
+        <div class="nav-item" data-view="onboarding">
+          <span class="nav-icon">🚀</span><span>Onboarding</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">Operaciones</div>
+        <div class="nav-item" data-view="tasks">
+          <span class="nav-icon">✅</span><span>Tareas</span>
+          <span class="nav-badge" id="nb-tasks" style="display:none"></span>
+        </div>
+        <div class="nav-item" data-view="finance">
+          <span class="nav-icon">💰</span><span>Tesorería</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">CX Factory</div>
+        <div class="nav-item" data-view="cx-audit">
+          <span class="nav-icon">📊</span><span>Auditoría QA</span>
+        </div>
+        <div class="nav-item" data-view="cx-upload">
+          <span class="nav-icon">⬆️</span><span>Importar CSV</span>
+        </div>
+        <div class="nav-item" data-view="knowledge">
+          <span class="nav-icon">🔍</span><span>Conocimiento</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sys-status" id="sys-status">
+        <div class="sys-row"><span><span class="dot dot-gray" id="dot-people"></span>People</span><span id="st-people" style="color:var(--t3)">—</span></div>
+        <div class="sys-row"><span><span class="dot dot-gray" id="dot-finance"></span>Tesorería</span><span id="st-finance" style="color:var(--t3)">—</span></div>
+        <div class="sys-row"><span><span class="dot dot-gray" id="dot-cx"></span>CX</span><span id="st-cx" style="color:var(--t3)">—</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <div id="tb-title" class="topbar-title">Dashboard</div>
+      <div class="topbar-sub" id="tb-sub"></div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost btn-sm" onclick="refreshCurrent()">↺ Actualizar</button>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+
+      <!-- ════════════════════════════════ OVERVIEW ═══════════════════════════ -->
+      <div class="view active" id="v-overview">
+        <div class="page-header">
+          <div class="page-title">Estado General</div>
+          <div class="page-sub" id="ov-period">—</div>
+        </div>
+
+        <div class="kpi-grid kpi-grid-4" id="ov-kpis">
+          <div class="kpi"><div class="kpi-label">Colaboradores</div><div class="kpi-value" id="ov-k1">—</div><div class="kpi-meta">activos</div><div class="kpi-icon">👥</div></div>
+          <div class="kpi"><div class="kpi-label">Riesgo burnout</div><div class="kpi-value yellow" id="ov-k2">—</div><div class="kpi-meta">vac. acumuladas</div><div class="kpi-icon">⚠️</div></div>
+          <div class="kpi"><div class="kpi-label">Deuda vacaciones</div><div class="kpi-value red" id="ov-k3">—</div><div class="kpi-meta">colaboradores</div><div class="kpi-icon">🔴</div></div>
+          <div class="kpi"><div class="kpi-label">Tareas vencidas</div><div class="kpi-value red" id="ov-k4">—</div><div class="kpi-meta">sin completar</div><div class="kpi-icon">⏰</div></div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Alertas activas</div></div><div id="ov-alert-count" class="badge badge-red">—</div></div>
+            <div id="ov-alerts"><div class="skel" style="margin-bottom:8px"></div><div class="skel" style="margin-bottom:8px;width:80%"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Tesorería del período</div><div class="card-action" onclick="goView('finance')">Ver detalle →</div></div>
+            <div id="ov-finance">
+              <div class="skel" style="margin-bottom:8px;height:28px"></div>
+              <div class="skel" style="width:60%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><div class="card-title">🎂 Próximos cumpleaños</div><div class="card-action" onclick="goView('cumpleanos')">Ver todos →</div></div>
+            <div id="ov-birthdays"><div class="skel"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">✅ Tareas pendientes</div><div class="card-action" onclick="goView('tasks')">Ver todas →</div></div>
+            <div id="ov-tasks-list"><div class="skel"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ PEOPLE ═══════════════════════════ -->
+      <div class="view" id="v-people">
+        <div class="page-header">
+          <div class="page-title">Equipo & Vacaciones</div>
+          <div class="page-sub">Estado de vacaciones de cada colaborador</div>
+        </div>
+
+        <div class="kpi-grid kpi-grid-4" style="margin-bottom:20px">
+          <div class="kpi"><div class="kpi-label">Total equipo</div><div class="kpi-value" id="pe-total">—</div></div>
+          <div class="kpi"><div class="kpi-label">Saldo normal</div><div class="kpi-value green" id="pe-normal">—</div></div>
+          <div class="kpi"><div class="kpi-label">Riesgo burnout</div><div class="kpi-value yellow" id="pe-burnout">—</div></div>
+          <div class="kpi"><div class="kpi-label">Deuda vacaciones</div><div class="kpi-value red" id="pe-deuda">—</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Colaboradores</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div class="search-wrap" style="margin:0">
+                <span class="search-icon">🔍</span>
+                <input class="search-input" id="pe-search" placeholder="Buscar…" oninput="filterPeople()" style="width:160px"/>
+              </div>
+              <select id="pe-filter" class="btn btn-ghost btn-sm" style="padding:5px 10px" onchange="filterPeople()">
+                <option value="">Todos</option>
+                <option value="normal">Normal</option>
+                <option value="deuda">Deuda</option>
+                <option value="burnout_riesgo">Burnout</option>
+                <option value="acumuladas_altas">Acum. altas</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Colaborador</th><th>Área</th><th style="text-align:right">Saldo</th>
+                <th style="text-align:right">Tomadas</th><th style="text-align:right">Ley</th><th>Estado</th>
+              </tr></thead>
+              <tbody id="pe-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ CUMPLEAÑOS ═══════════════════════ -->
+      <div class="view" id="v-cumpleanos">
+        <div class="page-header">
+          <div class="page-title">Cumpleaños</div>
+          <div class="page-sub">Próximos 30 días</div>
+        </div>
+        <div class="grid-3" id="cumple-grid" style="gap:12px"></div>
+      </div>
+
+      <!-- ════════════════════════════════ LICENCIAS ═══════════════════════ -->
+      <div class="view" id="v-licencias">
+        <div class="page-header">
+          <div class="page-title">Licencias & Ausentismo</div>
+          <div class="page-sub">Registro de ausencias del equipo</div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Colaborador</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th>Motivo</th><th>Estado</th>
+              </tr></thead>
+              <tbody id="lic-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ ONBOARDING ═══════════════════════ -->
+      <div class="view" id="v-onboarding">
+        <div class="page-header">
+          <div class="page-title">Alta de Nuevo Talento</div>
+          <div class="page-sub">Checklist completo para el proceso de onboarding</div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;gap:10px;align-items:center">
+            <input id="ob-nombre" placeholder="Nombre del nuevo colaborador" style="flex:1;max-width:320px"/>
+            <button class="btn btn-primary" onclick="loadOnboarding()">Generar checklist</button>
+          </div>
+        </div>
+        <div id="ob-progress-wrap" style="display:none;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--t2);margin-bottom:6px">
+            <span id="ob-prog-label">0 de 0 completados</span>
+            <span id="ob-prog-pct" style="font-weight:600;color:var(--accent)">0%</span>
+          </div>
+          <div class="progress"><div id="ob-prog-fill" class="progress-fill" style="background:var(--accent);width:0%"></div></div>
+        </div>
+        <div id="ob-sections"></div>
+      </div>
+
+      <!-- ════════════════════════════════ TASKS ══════════════════════════ -->
+      <div class="view" id="v-tasks">
+        <div class="page-header">
+          <div class="page-title">Centro de Tareas</div>
+          <div class="page-sub">Gestión de tareas operativas</div>
+        </div>
+        <div class="kpi-grid kpi-grid-4" style="margin-bottom:20px">
+          <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value" id="tk-total">—</div></div>
+          <div class="kpi"><div class="kpi-label">Pendientes</div><div class="kpi-value yellow" id="tk-pend">—</div></div>
+          <div class="kpi"><div class="kpi-label">Vencidas</div><div class="kpi-value red" id="tk-venc">—</div></div>
+          <div class="kpi"><div class="kpi-label">Completadas</div><div class="kpi-value green" id="tk-comp">—</div></div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active" data-tab="tk-pendientes">Pendientes</div>
+          <div class="tab" data-tab="tk-vencidas">Vencidas</div>
+          <div class="tab" data-tab="tk-completadas">Completadas</div>
+          <div class="tab" data-tab="tk-equipo">Por equipo</div>
+        </div>
+
+        <div class="card" id="tk-pendientes-panel">
+          <div id="tk-pend-list"></div>
+        </div>
+        <div class="card" id="tk-vencidas-panel" style="display:none">
+          <div id="tk-venc-list"></div>
+        </div>
+        <div class="card" id="tk-completadas-panel" style="display:none">
+          <div id="tk-comp-list"></div>
+        </div>
+        <div class="card" id="tk-equipo-panel" style="display:none">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Responsable</th><th style="text-align:right">Pendientes</th><th style="text-align:right">Vencidas</th><th style="text-align:right">Completadas</th></tr></thead>
+            <tbody id="tk-equipo-tbody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ FINANCE ══════════════════════════ -->
+      <div class="view" id="v-finance">
+        <div class="page-header">
+          <div class="page-title">Tesorería</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            <div class="page-sub">Finance MVP — período</div>
+            <select id="fin-period" class="btn btn-ghost btn-sm" onchange="loadFinance()" style="padding:4px 8px"></select>
+          </div>
+        </div>
+
+        <div class="kpi-grid kpi-grid-3" style="margin-bottom:20px">
+          <div class="kpi">
+            <div class="kpi-label">Egresos del período</div>
+            <div class="finance-amount red" id="fin-egresos">—</div>
+            <div class="kpi-meta" id="fin-count-eg">— movimientos</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Ingresos del período</div>
+            <div class="finance-amount green" id="fin-ingresos">—</div>
+            <div class="kpi-meta" id="fin-count-ing">— movimientos</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Balance neto</div>
+            <div class="finance-amount" id="fin-balance">—</div>
+            <div class="kpi-meta" id="fin-borradores">— borradores pendientes</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Top egresos del período</div></div>
+            <div id="fin-top-egresos"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Estado del módulo</div></div>
+            <div id="fin-status"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ CX AUDIT ══════════════════════════ -->
+      <div class="view" id="v-cx-audit">
+        <div class="page-header">
+          <div class="page-title">Auditoría CX / QA</div>
+          <div class="page-sub">Métricas de calidad de atención al cliente</div>
+        </div>
+
+        <div id="cx-no-data" style="display:none">
+          <div class="card" style="text-align:center;padding:40px">
+            <div style="font-size:36px;margin-bottom:12px">📊</div>
+            <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin datos de auditoría</div>
+            <div style="font-size:13px;color:var(--t2);margin-bottom:16px">Importá un CSV con tickets para comenzar el análisis</div>
+            <button class="btn btn-primary" onclick="goView('cx-upload')">⬆️ Importar CSV</button>
+          </div>
+        </div>
+
+        <div id="cx-data-wrap">
+          <div class="kpi-grid kpi-grid-4" id="cx-kpis" style="margin-bottom:20px"></div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header"><div class="card-title">Calidad por dimensión</div></div>
+              <div id="cx-quality-list"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><div class="card-title">Performance por operador</div></div>
+              <div class="table-wrap"><table>
+                <thead><tr><th>Operador</th><th style="text-align:right">Tickets</th><th style="text-align:right">Score</th></tr></thead>
+                <tbody id="cx-team-tbody"></tbody>
+              </table></div>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            <a href="http://localhost:8601" target="_blank" class="btn btn-ghost">
+              🔗 Abrir interfaz completa CX Auditor →
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ CX UPLOAD ═══════════════════════ -->
+      <div class="view" id="v-cx-upload">
+        <div class="page-header">
+          <div class="page-title">Importar CSV de Tickets</div>
+          <div class="page-sub">Procesá un nuevo lote de tickets para auditoría QA</div>
+        </div>
+
+        <div class="card" style="max-width:600px">
+          <div
+            class="upload-zone" id="drop-zone"
+            onclick="document.getElementById('csv-input').click()"
+            ondragover="event.preventDefault();this.classList.add('drag')"
+            ondragleave="this.classList.remove('drag')"
+            ondrop="handleDrop(event)"
+          >
+            <div class="upload-zone-icon">📂</div>
+            <div class="upload-zone-text">Arrastrá el CSV aquí o hacé click para seleccionar</div>
+            <div class="upload-zone-sub">Formato: CSV con columnas de tickets (fecha, mensaje, respuesta, operador)</div>
+          </div>
+          <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleFileSelect(event)"/>
+
+          <div id="upload-status" style="margin-top:16px;display:none">
+            <div class="progress"><div id="upload-prog" class="progress-fill" style="background:var(--accent);width:0%;transition:width .3s"></div></div>
+            <div id="upload-msg" style="font-size:12px;color:var(--t2);margin-top:6px"></div>
+          </div>
+
+          <div id="upload-result" style="margin-top:16px;display:none"></div>
+        </div>
+
+        <div class="card" style="max-width:600px;margin-top:16px">
+          <div class="card-header"><div class="card-title">Formato esperado del CSV</div></div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.8">
+            <div>El sistema detecta automáticamente los nombres de columnas. Los campos requeridos son:</div>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+              <span class="badge badge-blue">fecha</span>
+              <span class="badge badge-blue">mensaje</span>
+              <span class="badge badge-blue">respuesta</span>
+              <span class="badge badge-blue">operador</span>
+              <span class="badge badge-gray">response_time (opcional)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════ KNOWLEDGE ═══════════════════════ -->
+      <div class="view" id="v-knowledge">
+        <div class="page-header">
+          <div class="page-title">Base de Conocimiento</div>
+          <div class="page-sub">Consultá protocolos, políticas y procesos de la empresa — para operadores y líderes</div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;gap:8px">
+            <div class="search-wrap" style="flex:1;margin:0">
+              <span class="search-icon">🔍</span>
+              <input class="search-input" id="kb-q" placeholder="¿Cómo responder un reclamo? ¿Protocolo COPREC? ¿Beneficios?" onkeydown="if(event.key==='Enter')searchKB()"/>
+            </div>
+            <button class="btn btn-primary" onclick="searchKB()">Consultar</button>
+          </div>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+            <span style="font-size:11px;color:var(--t3)">Sugerencias:</span>
+            <span class="badge badge-gray" style="cursor:pointer" onclick="quickKB('protocolo COPREC denuncias')">Protocolo COPREC</span>
+            <span class="badge badge-gray" style="cursor:pointer" onclick="quickKB('beneficios colaboradores')">Beneficios</span>
+            <span class="badge badge-gray" style="cursor:pointer" onclick="quickKB('como responder reclamo consumidor')">Reclamos</span>
+            <span class="badge badge-gray" style="cursor:pointer" onclick="quickKB('vacaciones días ley')">Vacaciones</span>
+            <span class="badge badge-gray" style="cursor:pointer" onclick="quickKB('cultura valores empresa')">Cultura</span>
+            <span class="badge badge-gray" style="cursor:pointer" onclick="quickKB('política de capacitación')">Capacitaciones</span>
+          </div>
+        </div>
+
+        <div id="kb-results"></div>
+        <div id="kb-empty" style="display:none">
+          <div class="empty">
+            <div class="empty-icon">📖</div>
+            <div class="empty-text">No encontré información sobre eso</div>
+            <div class="empty-sub">Intentá con otras palabras clave</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
+const S = {
+  peopleData: [],
+  currentView: 'overview',
+  currentTaskTab: 'tk-pendientes',
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════════════════════
+function toast(msg, type='info') {
+  const icons = {success:'✅',error:'❌',info:'ℹ️',warning:'⚠️'};
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => {
+    el.classList.add('toast-out');
+    setTimeout(() => el.remove(), 250);
+  }, 3500);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+const viewTitles = {
+  overview:'Dashboard',people:'Equipo',cumpleanos:'Cumpleaños',
+  licencias:'Licencias','cx-audit':'Auditoría CX','cx-upload':'Importar CSV',
+  knowledge:'Conocimiento',tasks:'Tareas',finance:'Tesorería',onboarding:'Onboarding'
+};
+
+function goView(name) {
+  // deactivate all
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  // activate
+  const view = document.getElementById('v-'+name);
+  if (view) view.classList.add('active');
+  const navItem = document.querySelector(`[data-view="${name}"]`);
+  if (navItem) navItem.classList.add('active');
+  S.currentView = name;
+  document.getElementById('tb-title').textContent = viewTitles[name] || name;
+  document.getElementById('tb-sub').textContent = '';
+}
+
+document.querySelectorAll('.nav-item[data-view]').forEach(el => {
+  el.addEventListener('click', () => {
+    goView(el.dataset.view);
+    const loaders = {
+      overview:loadOverview, people:loadPeople, cumpleanos:loadCumpleanos,
+      licencias:loadLicencias, tasks:loadTasks, finance:loadFinance,
+      'cx-audit':loadCX, knowledge:()=>{},onboarding:()=>{},
+      'cx-upload':()=>{}
+    };
+    if (loaders[el.dataset.view]) loaders[el.dataset.view]();
+  });
+});
+
+// Task tabs
+document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    ['tk-pendientes','tk-vencidas','tk-completadas','tk-equipo'].forEach(id => {
+      document.getElementById(id+'-panel').style.display = 'none';
+    });
+    document.getElementById(tab.dataset.tab+'-panel').style.display = 'block';
+  });
+});
+
+function refreshCurrent() {
+  const loaders = {
+    overview:loadOverview, people:loadPeople, cumpleanos:loadCumpleanos,
+    licencias:loadLicencias, tasks:loadTasks, finance:loadFinance, 'cx-audit':loadCX
+  };
+  if (loaders[S.currentView]) { loaders[S.currentView](); toast('Datos actualizados','success'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// API
+// ══════════════════════════════════════════════════════════════════════════════
+async function api(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const fmt = (n,d=0) => n != null ? parseFloat(n).toFixed(d) : '—';
+const fmtARS = n => n != null ? '$'+parseFloat(n).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—';
+const initials = name => (name||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+const alertBadge = alerta => {
+  const m = {
+    deuda:`<span class="badge badge-red">Deuda</span>`,
+    burnout_riesgo:`<span class="badge badge-yellow">Burnout</span>`,
+    acumuladas_altas:`<span class="badge badge-yellow">Acum. altas</span>`,
+    normal:`<span class="badge badge-green">Normal</span>`,
+  };
+  return m[alerta]||`<span class="badge badge-gray">${alerta||'—'}</span>`;
+};
+
+function setDot(id, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = `dot dot-${type} ${type==='green'?'pulse':''}`;
+}
+
+// Count-up animation
+function countUp(el, target, suffix='') {
+  const start = performance.now();
+  const dur = 600;
+  const from = 0;
+  const run = ts => {
+    const pct = Math.min((ts-start)/dur, 1);
+    const ease = 1-Math.pow(1-pct,3);
+    el.textContent = Math.round(from + (target-from)*ease) + suffix;
+    if (pct < 1) requestAnimationFrame(run);
+  };
+  requestAnimationFrame(run);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OVERVIEW
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadOverview() {
+  try {
+    const [ps, tasks, cumples, fin] = await Promise.all([
+      api('/api/people/summary'),
+      api('/api/tasks'),
+      api('/api/people/cumpleanos?days=7'),
+      api('/api/finance'),
+    ]);
+
+    // KPIs
+    countUp($('ov-k1'), ps.total_colaboradores||0);
+    countUp($('ov-k2'), ps.riesgo_burnout||0);
+    countUp($('ov-k3'), ps.deudores_vacaciones||0);
+    countUp($('ov-k4'), tasks.vencidas||0);
+
+    // Badges
+    const nb = $('nb-burnout');
+    if (ps.riesgo_burnout > 0) { nb.textContent = ps.riesgo_burnout; nb.style.display=''; }
+    const nbt = $('nb-tasks');
+    if (tasks.vencidas > 0) { nbt.textContent = tasks.vencidas; nbt.style.display=''; }
+
+    // Status dots
+    setDot('dot-people', ps.deudores_vacaciones > 0 ? 'yellow' : 'green');
+    setDot('dot-finance', fin.ok ? 'green' : 'yellow');
+    $('st-people').textContent = ps.total_colaboradores + ' activos';
+    $('st-finance').textContent = fin.ok ? 'Conectado' : 'Sin datos';
+
+    $('ov-period').textContent = `Equipo de ${ps.total_colaboradores||0} colaboradores · ${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}`;
+
+    // Alertas
+    const alerts = ps.alertas || [];
+    $('ov-alert-count').textContent = alerts.length;
+    $('ov-alert-count').className = alerts.length > 0 ? 'badge badge-red' : 'badge badge-green';
+    if (!alerts.length) {
+      $('ov-alerts').innerHTML = `<div class="alert alert-success"><span class="alert-icon">✅</span><span>Sin alertas críticas activas</span></div>`;
+    } else {
+      $('ov-alerts').innerHTML = alerts.slice(0,5).map(a => {
+        const cls = a.tipo==='danger'?'alert-danger':a.tipo==='warning'?'alert-warning':'alert-info';
+        const icon = a.tipo==='danger'?'🔴':a.tipo==='warning'?'🟡':'🔵';
+        return `<div class="alert ${cls}"><span class="alert-icon">${icon}</span><span>${a.mensaje}</span></div>`;
+      }).join('');
+    }
+
+    // Finance summary
+    if (fin.ok) {
+      $('ov-finance').innerHTML = `
+        <div class="finance-row">
+          <span style="color:var(--t2)">Egresos</span>
+          <span style="font-weight:600;color:var(--red)">${fmtARS(fin.total_egresos)}</span>
+        </div>
+        <div class="finance-row">
+          <span style="color:var(--t2)">Ingresos</span>
+          <span style="font-weight:600;color:var(--green)">${fmtARS(fin.total_ingresos)}</span>
+        </div>
+        <div class="finance-row">
+          <span style="color:var(--t2)">Balance</span>
+          <span style="font-weight:700;color:${fin.balance>=0?'var(--green)':'var(--red)'}">${fmtARS(fin.balance)}</span>
+        </div>`;
+    } else {
+      $('ov-finance').innerHTML = `<div style="color:var(--t3);font-size:13px">${fin.message||'Sin datos de tesorería'}</div>`;
+    }
+
+    // Birthdays
+    if (!cumples.length) {
+      $('ov-birthdays').innerHTML = `<div style="color:var(--t3);font-size:13px">Sin cumpleaños esta semana</div>`;
+    } else {
+      $('ov-birthdays').innerHTML = cumples.map(c => `
+        <div class="finance-row">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="avatar">${initials(c.nombre)}</div>
+            <div><div style="font-size:13px;font-weight:500">${c.nombre}</div><div style="font-size:11px;color:var(--t3)">${c.area||''}</div></div>
+          </div>
+          <span style="font-size:12px;color:${c.dias_para_cumple===0?'var(--yellow)':'var(--t2)'};font-weight:600">
+            ${c.dias_para_cumple===0?'¡Hoy! 🎉':'en '+c.dias_para_cumple+'d'}
+          </span>
+        </div>`).join('');
+    }
+
+    // Tasks
+    const pend = tasks.lista_pendientes||[];
+    if (!pend.length) {
+      $('ov-tasks-list').innerHTML = `<div class="alert alert-success"><span class="alert-icon">✅</span><span>Sin tareas pendientes</span></div>`;
+    } else {
+      $('ov-tasks-list').innerHTML = pend.slice(0,5).map(t => `
+        <div class="finance-row">
+          <div>
+            <div style="font-size:13px;font-weight:500">${t.titulo}</div>
+            <div style="font-size:11px;color:var(--t3)">${t.responsable} · ${t.fecha||'Sin fecha'}</div>
+          </div>
+        </div>`).join('');
+    }
+
+  } catch(e) {
+    toast('Error cargando datos: '+e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PEOPLE
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadPeople() {
+  try {
+    S.peopleData = await api('/api/people/vacaciones');
+    const total = S.peopleData.length;
+    const normal = S.peopleData.filter(p=>p.alerta==='normal').length;
+    const burnout = S.peopleData.filter(p=>['burnout_riesgo','acumuladas_altas'].includes(p.alerta)).length;
+    const deuda = S.peopleData.filter(p=>p.alerta==='deuda').length;
+    countUp($('pe-total'), total);
+    countUp($('pe-normal'), normal);
+    countUp($('pe-burnout'), burnout);
+    countUp($('pe-deuda'), deuda);
+    renderPeopleTable(S.peopleData);
+    setDot('dot-people', deuda>0||burnout>3?'yellow':'green');
+  } catch(e) { toast('Error cargando equipo','error'); }
+}
+
+function renderPeopleTable(data) {
+  $('pe-tbody').innerHTML = !data.length
+    ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--t3)">Sin resultados</td></tr>`
+    : data.map(p => {
+        const saldo = parseFloat(p.vacaciones_saldo)||0;
+        const saldoColor = saldo<0?'var(--red)':saldo>0?'var(--green)':'var(--t2)';
+        return `<tr>
+          <td><div style="display:flex;align-items:center;gap:9px">
+            <div class="avatar" style="width:28px;height:28px;font-size:10px">${initials(p.nombre)}</div>
+            <div style="font-size:13px;font-weight:500">${p.nombre}</div>
+          </div></td>
+          <td style="color:var(--t3);font-size:12px">${p.area||'—'}</td>
+          <td style="text-align:right;font-family:monospace;color:${saldoColor};font-weight:600">${fmt(saldo,1)}</td>
+          <td style="text-align:right;font-family:monospace;color:var(--t2)">${fmt(p.vacaciones_tomadas,0)}</td>
+          <td style="text-align:right;font-family:monospace;color:var(--t3)">${p.vacaciones_dias_ley||14}</td>
+          <td>${alertBadge(p.alerta)}</td>
+        </tr>`;
+      }).join('');
+}
+
+function filterPeople() {
+  const q = $('pe-search').value.toLowerCase();
+  const f = $('pe-filter').value;
+  renderPeopleTable(S.peopleData.filter(p=>
+    (!q || p.nombre.toLowerCase().includes(q) || (p.area||'').toLowerCase().includes(q)) &&
+    (!f || p.alerta === f)
+  ));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CUMPLEAÑOS
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadCumpleanos() {
+  try {
+    const data = await api('/api/people/cumpleanos?days=30');
+    const nb = $('nb-cumple');
+    const today = data.filter(c=>c.dias_para_cumple===0);
+    if (today.length) { nb.textContent = today.length; nb.style.display=''; }
+
+    $('cumple-grid').innerHTML = !data.length
+      ? `<div class="empty"><div class="empty-icon">🎂</div><div class="empty-text">Sin cumpleaños en los próximos 30 días</div></div>`
+      : data.map(c => `
+          <div class="card" style="transition:transform var(--trans);" onmouseenter="this.style.transform='translateY(-3px)'" onmouseleave="this.style.transform=''">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+              <div class="avatar" style="width:44px;height:44px;font-size:16px">${initials(c.nombre)}</div>
+              <div style="font-size:28px">${c.dias_para_cumple===0?'🎉':'🎂'}</div>
+            </div>
+            <div style="font-weight:600;margin-bottom:2px">${c.nombre}</div>
+            <div style="font-size:11px;color:var(--t3);margin-bottom:12px">${c.area||'Sin área'}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:11px;color:var(--t3)">${c.proximo_cumple} · ${c.edad} años</div>
+              <div class="badge ${c.dias_para_cumple===0?'badge-yellow':'badge-blue'}">
+                ${c.dias_para_cumple===0?'¡Hoy!':'en '+c.dias_para_cumple+'d'}
+              </div>
+            </div>
+          </div>`).join('');
+  } catch(e) { toast('Error cargando cumpleaños','error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LICENCIAS
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadLicencias() {
+  try {
+    const data = await api('/api/people/licencias');
+    $('lic-tbody').innerHTML = !data.length
+      ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--t3)">Sin licencias registradas</td></tr>`
+      : data.map(l => `<tr>
+          <td style="font-weight:500">${l.nombre}</td>
+          <td><span class="badge badge-blue">${l.tipo}</span></td>
+          <td style="color:var(--t3)">${l.desde||'—'}</td>
+          <td style="color:var(--t3)">${l.hasta||'—'}</td>
+          <td style="color:var(--t2);max-width:200px;font-size:12px">${l.motivo||'—'}</td>
+          <td>${l.estado?`<span class="badge badge-gray">${l.estado}</span>`:'—'}</td>
+        </tr>`).join('');
+  } catch(e) { toast('Error cargando licencias','error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadOnboarding() {
+  const nombre = $('ob-nombre').value.trim() || 'Nuevo Colaborador';
+  try {
+    const data = await api(`/api/onboarding?nombre=${encodeURIComponent(nombre)}`);
+    $('ob-progress-wrap').style.display = 'block';
+    $('ob-sections').innerHTML = data.categorias.map((cat,ci) => `
+      <div class="card" style="margin-bottom:12px">
+        <div class="checklist-cat">${cat.categoria}</div>
+        ${cat.items.map((item,ii) => {
+          const id = `ob_${ci}_${ii}`;
+          return `<div class="checklist-item">
+            <input type="checkbox" id="${id}" onchange="updateObProgress(${data.total_items})"/>
+            <label for="${id}">${item}</label>
+          </div>`;
+        }).join('')}
+      </div>`).join('');
+    updateObProgress(data.total_items);
+  } catch(e) { toast('Error generando checklist','error'); }
+}
+
+function updateObProgress(total) {
+  const all = document.querySelectorAll('#ob-sections input[type=checkbox]');
+  const chk = document.querySelectorAll('#ob-sections input[type=checkbox]:checked');
+  if (!all.length) return;
+  const pct = Math.round(chk.length/all.length*100);
+  $('ob-prog-fill').style.width = pct+'%';
+  $('ob-prog-pct').textContent = pct+'%';
+  $('ob-prog-label').textContent = `${chk.length} de ${all.length} completados`;
+  $('ob-prog-fill').style.background = pct===100?'var(--green)':pct>50?'var(--accent)':'var(--yellow)';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TASKS
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadTasks() {
+  try {
+    const d = await api('/api/tasks');
+    countUp($('tk-total'), d.total||0);
+    countUp($('tk-pend'), d.pendientes||0);
+    countUp($('tk-venc'), d.vencidas||0);
+    countUp($('tk-comp'), d.completadas||0);
+
+    const nb = $('nb-tasks');
+    if (d.vencidas>0){nb.textContent=d.vencidas;nb.style.display='';}
+
+    const taskRow = t => `
+      <div class="finance-row">
+        <div>
+          <div style="font-size:13px;font-weight:500">${t.titulo}</div>
+          <div style="font-size:11px;color:var(--t3)">${t.responsable} · ${t.fecha||t.completado||'—'}</div>
+        </div>
+      </div>`;
+
+    $('tk-pend-list').innerHTML = (d.lista_pendientes||[]).length
+      ? d.lista_pendientes.map(taskRow).join('')
+      : `<div class="alert alert-success"><span class="alert-icon">✅</span><span>Sin tareas pendientes</span></div>`;
+
+    $('tk-venc-list').innerHTML = (d.lista_vencidas||[]).length
+      ? d.lista_vencidas.map(t=>`<div class="finance-row" style="border-left:3px solid var(--red);padding-left:10px">
+            <div>
+              <div style="font-size:13px;font-weight:500;color:var(--red)">${t.titulo}</div>
+              <div style="font-size:11px;color:var(--t3)">${t.responsable} · venció ${t.fecha}</div>
+            </div></div>`).join('')
+      : `<div class="alert alert-success"><span class="alert-icon">✅</span><span>Sin tareas vencidas</span></div>`;
+
+    $('tk-comp-list').innerHTML = (d.lista_completadas||[]).length
+      ? d.lista_completadas.map(t=>`<div class="finance-row">
+            <div style="font-size:13px;color:var(--t2)"><span style="color:var(--green)">✓</span> ${t.titulo}</div>
+            <div style="font-size:11px;color:var(--t3)">${t.responsable}</div></div>`).join('')
+      : `<div style="color:var(--t3);padding:16px;font-size:13px">Sin tareas completadas aún</div>`;
+
+    $('tk-equipo-tbody').innerHTML = (d.por_responsable||[]).map(r=>`<tr>
+        <td style="font-weight:500">${r.nombre}</td>
+        <td style="text-align:right">${r.pendientes}</td>
+        <td style="text-align:right;color:${r.vencidas>0?'var(--red)':'var(--t2)'}">${r.vencidas}</td>
+        <td style="text-align:right;color:var(--green)">${r.completadas}</td>
+      </tr>`).join('');
+
+    setDot('dot-cx', d.vencidas>0?'yellow':'green');
+  } catch(e) { toast('Error cargando tareas','error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FINANCE MVP
+// ══════════════════════════════════════════════════════════════════════════════
+function buildPeriodOptions() {
+  const sel = $('fin-period');
+  const now = new Date();
+  sel.innerHTML = '';
+  for (let i=0; i<6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const val = d.toISOString().slice(0,7);
+    const label = d.toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+    sel.innerHTML += `<option value="${val}">${label}</option>`;
+  }
+}
+
+async function loadFinance() {
+  const period = $('fin-period').value;
+  try {
+    const d = await api(`/api/finance?period=${period}`);
+    document.getElementById('tb-sub').textContent = period;
+
+    if (!d.ok) {
+      $('fin-egresos').textContent = '—';
+      $('fin-ingresos').textContent = '—';
+      $('fin-balance').textContent = '—';
+      $('fin-count-eg').textContent = '—';
+      $('fin-count-ing').textContent = '—';
+      $('fin-borradores').textContent = '—';
+      $('fin-top-egresos').innerHTML = `<div style="color:var(--t3);font-size:13px;padding:12px 0">${d.message||'Sin datos'}</div>`;
+      $('fin-status').innerHTML = `<div class="alert alert-warning"><span class="alert-icon">⚠️</span><span>${d.message||'Finance MVP sin datos. Ejecutá bootstrap_finance_mvp.py e importá datos.'}</span></div>`;
+      setDot('dot-finance','yellow');
+      $('st-finance').textContent = 'Sin datos';
+      return;
+    }
+
+    $('fin-egresos').textContent = fmtARS(d.total_egresos);
+    $('fin-egresos').className = 'finance-amount red';
+    $('fin-ingresos').textContent = fmtARS(d.total_ingresos);
+    $('fin-ingresos').className = 'finance-amount green';
+
+    const bal = d.balance||0;
+    $('fin-balance').textContent = fmtARS(bal);
+    $('fin-balance').className = `finance-amount ${bal>=0?'green':'red'}`;
+    $('fin-count-eg').textContent = `${d.count_egresos||0} movimientos`;
+    $('fin-count-ing').textContent = `${d.count_ingresos||0} movimientos`;
+    $('fin-borradores').textContent = `${d.borradores_pendientes||0} borradores pendientes`;
+
+    const top = d.top_egresos||[];
+    $('fin-top-egresos').innerHTML = !top.length
+      ? `<div style="color:var(--t3);font-size:13px">Sin egresos registrados</div>`
+      : top.map((eg,i) => `
+          <div class="finance-row">
+            <div>
+              <div style="font-size:13px;font-weight:${i===0?'600':'400'}">${eg.proveedor}</div>
+              <div style="font-size:11px;color:var(--t3)">${eg.categoria}</div>
+            </div>
+            <div style="font-family:monospace;font-weight:600;color:var(--red)">${fmtARS(eg.monto)}</div>
+          </div>`).join('');
+
+    $('fin-status').innerHTML = `
+      <div class="alert alert-success"><span class="alert-icon">✅</span><span>Finance MVP conectado · Base de datos activa</span></div>
+      ${d.borradores_pendientes>0?`<div class="alert alert-warning" style="margin-top:8px"><span class="alert-icon">📝</span><span>${d.borradores_pendientes} borradores sin confirmar en este período</span></div>`:''}`;
+
+    setDot('dot-finance','green');
+    $('st-finance').textContent = 'Conectado';
+  } catch(e) {
+    toast('Error cargando tesorería','error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CX
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadCX() {
+  try {
+    const d = await api('/api/cx');
+    if (!d.ok || !d.summary || Object.keys(d.summary).length===0) {
+      $('cx-no-data').style.display='block';
+      $('cx-data-wrap').style.display='none';
+      setDot('dot-cx','gray');
+      $('st-cx').textContent='Sin datos';
+      return;
+    }
+    $('cx-no-data').style.display='none';
+    $('cx-data-wrap').style.display='block';
+
+    const s = d.summary||{};
+    const numKeys = Object.entries(s).filter(([k,v])=>typeof v==='number');
+    $('cx-kpis').innerHTML = numKeys.slice(0,4).map(([k,v])=>
+      `<div class="kpi"><div class="kpi-label">${k.replace(/_/g,' ')}</div><div class="kpi-value">${v.toFixed(1)}</div></div>`
+    ).join('');
+
+    const q = d.quality||{};
+    const dims = ['claridad','empatia','resolucion','severidad','alineacion'];
+    $('cx-quality-list').innerHTML = dims.map(dim => {
+      const val = q[dim]??q[dim+'_avg']??null;
+      if (val===null) return '';
+      const pct = Math.min(100, (val/5)*100);
+      const col = pct>=80?'var(--green)':pct>=60?'var(--yellow)':'var(--red)';
+      return `<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px">
+          <span style="text-transform:capitalize">${dim}</span>
+          <span style="font-weight:600;color:${col}">${parseFloat(val).toFixed(2)}</span>
+        </div>
+        <div class="progress"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div>
+      </div>`;
+    }).join('');
+
+    const team = d.team||{};
+    const ops = team.operators||team.operadores||[];
+    $('cx-team-tbody').innerHTML = ops.slice(0,10).map(op=>
+      `<tr>
+        <td style="font-weight:500">${op.operador||op.operator_name||op.name||'—'}</td>
+        <td style="text-align:right;font-family:monospace">${op.total_tickets||op.tickets||'—'}</td>
+        <td style="text-align:right;font-family:monospace;color:var(--accent)">${op.score_promedio!=null?parseFloat(op.score_promedio).toFixed(2):'—'}</td>
+      </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--t3)">Sin datos</td></tr>`;
+
+    setDot('dot-cx','green');
+    $('st-cx').textContent='Conectado';
+  } catch(e) { toast('Error cargando CX','error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CSV UPLOAD
+// ══════════════════════════════════════════════════════════════════════════════
+function handleFileSelect(event) {
+  uploadCSV(event.target.files[0]);
+}
+
+function handleDrop(event) {
+  event.preventDefault();
+  $('drop-zone').classList.remove('drag');
+  const file = event.dataTransfer.files[0];
+  if (file && file.name.endsWith('.csv')) uploadCSV(file);
+  else toast('Por favor seleccioná un archivo .csv','error');
+}
+
+async function uploadCSV(file) {
+  if (!file) return;
+  const status = $('upload-status');
+  const msg = $('upload-msg');
+  const result = $('upload-result');
+  const prog = $('upload-prog');
+
+  status.style.display='block';
+  result.style.display='none';
+  prog.style.width='10%';
+  msg.textContent = `Subiendo ${file.name}…`;
+  toast(`Procesando ${file.name}…`,'info');
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    prog.style.width='40%';
+    const resp = await fetch('/api/cx/upload', {method:'POST', body:fd});
+    prog.style.width='80%';
+    const d = await resp.json();
+    prog.style.width='100%';
+
+    if (d.ok) {
+      msg.textContent = '✅ Importación completada';
+      result.style.display='block';
+      result.innerHTML = `
+        <div class="alert alert-success" style="margin-bottom:8px">
+          <span class="alert-icon">✅</span>
+          <div>
+            <div style="font-weight:600">CSV importado exitosamente</div>
+            <div style="font-size:12px;color:var(--t2);margin-top:2px">${d.filename}</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:0">
+          <div class="grid-2">
+            <div><div class="kpi-label">Filas detectadas</div><div class="kpi-value">${d.total_rows||'—'}</div></div>
+            <div><div class="kpi-label">Filas válidas</div><div class="kpi-value green">${d.valid_rows||'—'}</div></div>
+            <div><div class="kpi-label">Excluidas</div><div class="kpi-value yellow">${d.excluded||0}</div></div>
+            <div><div class="kpi-label">Duplicadas</div><div class="kpi-value">${d.duplicated||0}</div></div>
+          </div>
+          ${d.missing_fields?.length?`<div class="alert alert-warning" style="margin-top:12px"><span class="alert-icon">⚠️</span><span>Campos faltantes: ${d.missing_fields.join(', ')}</span></div>`:''}
+          <div style="margin-top:14px">
+            <button class="btn btn-primary" onclick="goView('cx-audit');loadCX()">Ver resultados →</button>
+          </div>
+        </div>`;
+      toast('CSV importado correctamente','success');
+    } else {
+      msg.textContent = '❌ Error en importación';
+      result.style.display='block';
+      result.innerHTML = `<div class="alert alert-danger"><span class="alert-icon">❌</span><span>${d.error||'Error desconocido'}</span></div>`;
+      toast('Error al importar CSV: '+d.error,'error');
+    }
+  } catch(e) {
+    msg.textContent = '❌ Error de conexión';
+    prog.style.width='0%';
+    toast('Error de conexión al importar','error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// KNOWLEDGE
+// ══════════════════════════════════════════════════════════════════════════════
+async function searchKB() {
+  const q = $('kb-q').value.trim();
+  if (!q) return;
+  $('kb-results').innerHTML = `<div style="color:var(--t2);font-size:13px;padding:8px 0">Buscando en la base de conocimiento…</div>`;
+  $('kb-empty').style.display='none';
+  try {
+    const d = await api(`/api/knowledge?q=${encodeURIComponent(q)}`);
+    if (!d.results?.length) {
+      $('kb-results').innerHTML='';
+      $('kb-empty').style.display='block';
+    } else {
+      $('kb-empty').style.display='none';
+      $('kb-results').innerHTML = d.results.map((r,i) => `
+        <div class="kb-result" style="animation-delay:${i*0.05}s">
+          <div class="kb-result-name">📄 ${r.name}</div>
+          <div class="kb-result-text">${r.snippet||'—'}</div>
+          <div class="kb-result-path">📁 ${r.path}</div>
+        </div>`).join('');
+    }
+  } catch(e) { toast('Error en búsqueda','error'); }
+}
+
+function quickKB(q) {
+  $('kb-q').value = q;
+  searchKB();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════════════════
+async function init() {
+  // Date
+  const now = new Date();
+  $('sb-date').textContent = now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'});
+
+  buildPeriodOptions();
+
+  // Load overview first (visible)
+  await loadOverview();
+
+  // Hide splash
+  const splash = $('splash');
+  splash.style.opacity='0';
+  setTimeout(()=>splash.style.display='none',400);
+
+  // Background preload
+  Promise.all([loadPeople(), loadCumpleanos(), loadTasks(), loadFinance(), loadCX()]).catch(()=>{});
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

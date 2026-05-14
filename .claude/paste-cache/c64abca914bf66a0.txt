@@ -1,0 +1,8 @@
+                                                                                                                                                                                    ⎿  Error: Exit code 1
+     node:internal/modules/cjs/loader:1228
+       throw err;
+       ^
+
+     Error: Cannot find module 'C:\Users\Lucas\.claude\hooks\audit-system.js'                                                                                                                                                                                                           at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+         at Module._load (node:internal/modules/cjs/loader:1051:27)                                                                                                                                                                                                                     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:174:12)
+         at node:internal/main/run_main_module:

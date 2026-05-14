@@ -1,0 +1,7 @@
+                                                                                                                                                                                                                                                                ¿Es un proyecto nuevo o retomamos uno existente?
+
+  Si es nuevo, descríbeme qué querés construir y arrancamos con Fase 1.
+
+✻ Worked for 47s
+
+> node ~/.claude/hooks/audit-system.js                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ● Bash(node ~/.claude/hooks/audit-system.js 2>&1)                                            

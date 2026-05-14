@@ -1,0 +1,131 @@
+import json
+from typing import Any, Dict, List
+
+from agents.data_contracts import OpsPayload, normalize_ops_payload
+from tools.task_manager import crear_tarea, listar_pendientes
+
+
+def get_ops_data_pure() -> OpsPayload:
+    """
+    Contrato de datos de Ops para orquestador/UI.
+    Devuelve siempre estructura estable con defaults seguros.
+    """
+    try:
+        tareas = listar_pendientes() or []
+        pendientes: List[Dict[str, Any]] = []
+        for row in tareas:
+            try:
+                pendientes.append(
+                    {
+                        "id": row[0],
+                        "titulo": row[1],
+                        "responsable": row[2],
+                        "fecha_vencimiento": row[3],
+                    }
+                )
+            except Exception:
+                continue
+
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "estado": "ok",
+            "total_pendientes": len(pendientes),
+            "pendientes": pendientes,
+            "alertas": [],
+            "acciones_sugeridas": [],
+            "resumen": (
+                f"{len(pendientes)} tareas pendientes en base operativa."
+                if pendientes
+                else "No hay tareas pendientes en la base de datos operativa."
+            ),
+        }
+        return normalize_ops_payload(payload)
+    except Exception:
+        return normalize_ops_payload(
+            {
+                "ok": False,
+                "estado": "error",
+                "total_pendientes": 0,
+                "pendientes": [],
+                "alertas": ["Ops no disponible"],
+                "acciones_sugeridas": ["Revisar conectividad de base operativa"],
+                "resumen": "Ops no disponible",
+            }
+        )
+
+
+def _format_ops_payload_text(payload: OpsPayload) -> str:
+    if payload["total_pendientes"] <= 0:
+        return "No hay tareas pendientes en la base de datos operativa."
+
+    lines = ["📋 **Tareas Pendientes:**"]
+    for task in payload["pendientes"]:
+        lines.append(
+            f"- [ID: {task['id']}] {task['titulo']} | Resp: @{task['responsable']} | Vence: {task['fecha_vencimiento']}"
+        )
+    return "\n".join(lines)
+
+
+def procesar_operaciones(tarea_usuario, client, personalidad_obsidian, modelo="llama-3.1-8b-instant"):
+    tarea_lower = (tarea_usuario or "").lower()
+
+    # 1. CASO: VER TAREAS PENDIENTES
+    if "ver" in tarea_lower or "listar" in tarea_lower or "pendientes" in tarea_lower:
+        payload = get_ops_data_pure()
+        return _format_ops_payload_text(payload)
+
+    # 2. CASO: CREAR UNA NUEVA TAREA
+    if "crear" in tarea_lower or "asignar" in tarea_lower or "nueva tarea" in tarea_lower:
+        if client is None:
+            return "❌ @OPS error crítico: cliente LLM no disponible para extracción."
+
+        prompt_extractor = f"""
+        {personalidad_obsidian}
+        
+        INSTRUCCIÓN DEL SISTEMA:
+        El usuario quiere crear una tarea. Extrae la información y responde ÚNICAMENTE con un objeto JSON válido.
+        
+        Formato requerido:
+        {{
+            "titulo": "Resumen corto de la tarea",
+            "responsable": "Nombre de la persona",
+            "fecha": "YYYY-MM-DD"
+        }}
+        """
+
+        try:
+            res = client.chat.completions.create(
+                model=modelo,
+                messages=[
+                    {"role": "system", "content": prompt_extractor},
+                    {"role": "user", "content": tarea_usuario},
+                ],
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            ).choices[0].message.content
+
+            datos = json.loads(res)
+
+            resultado_db = crear_tarea(
+                titulo=datos.get("titulo", "Tarea sin título"),
+                responsable=datos.get("responsable", "Sin asignar"),
+                fecha_vencimiento=datos.get("fecha", "Sin definir"),
+            )
+            return f"⚙️ **@OPS informa:**\n{resultado_db}"
+
+        except Exception as e:
+            return f"❌ @OPS error crítico: {e}"
+
+    # 3. CASO: PREGUNTA GENERAL
+    if client is None:
+        return "Ops no disponible temporalmente para consultas generales."
+
+    prompt_charla = f"{personalidad_obsidian}\n\nResponde a la consulta del usuario basándote en tu perfil."
+    res = client.chat.completions.create(
+        model=modelo,
+        messages=[
+            {"role": "system", "content": prompt_charla},
+            {"role": "user", "content": tarea_usuario},
+        ],
+    ).choices[0].message.content
+    return res

@@ -1,0 +1,13 @@
+artup Pings" y mostrar un Resumen Ejecutivo con botonera interactiva.
+
+## 3. Base de Conocimiento (Obsidian)
+Las carpetas en MAYÚSCULAS (ej. `00_SISTEMA`, `01_AGENTES`, `02_CONOCIMIENTO`) contienen la documentación en Markdown. Estos archivos son la fuente de verdad de las reglas de negocio.
+
+## 4. Reglas de Desarrollo Obligatorias para Claude
+1. **No tocar lógica de negocio analítica en el Frontend.** Toda agregación ocurre en el Backend.
+2. **Nunca modificar el archivo `.env` ni exponer claves reales.**
+3. **Mantener la separación de capas:** CX Auditor no toca Tesorería ni People.
+4. **Respetar el "Code Freeze":** En el módulo `cx_auditor/`, actualmente solo estamos en fase de refinamiento operativo (UI, lecturas, exportación), no agregues nuevas lógicas de IA o métricas inventadas que no existan en la base de datos.
+5. **Preguntar antes de borrar:** Si vas a eliminar archivos que no creaste tú, pide confirmación primero.
+
+Actualmente, el proyecto acaba de ser migrado exitosamente al disco D: y el entorno NTF

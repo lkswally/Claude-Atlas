@@ -1,0 +1,19 @@
+El foco de esta sesión es exclusivamente el Piloto Interno del módulo CX Auditor.
+
+Te confirmo que estamos en Code Freeze estricto para este módulo. No vamos a programar features nuevas, no vamos a tocar la UI, y no vamos a atacar los gaps del OS core por ahora. Todo eso queda en pausa.
+
+Tu rol en esta sesión no es de desarrollador, sino de Ingeniero de Operaciones / Soporte. Necesito que me asistas para ejecutar la primera prueba real en este entorno del disco D:.
+
+Tu primera tarea (Fase 2):
+
+Analizá los scripts de ejecución (específicamente run_cx_auditor_lan.py y bootstrap_cx_auditor.py o el pipeline runner).
+
+Explicame paso a paso, de forma muy breve y clara, cómo debo hacer para:
+
+Poner mi CSV real en la carpeta correcta.
+
+Ejecutar el pipeline batch (ingesta y scoring) para que la IA procese ese CSV.
+
+Levantar la interfaz UI en mi red local para poder ver los resultados.
+
+Dame los comandos exactos de PowerShell que tengo que ejecutar en mi terminal venv313 para hacer esto, considerando que estamos en entorno Win

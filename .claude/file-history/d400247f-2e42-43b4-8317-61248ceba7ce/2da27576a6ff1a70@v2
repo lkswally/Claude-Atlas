@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Reyesoft OS — Dashboard 360°</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        brand: { DEFAULT:'#6366f1', dark:'#4f46e5' },
+        surface: { DEFAULT:'#1e1e2e', card:'#2a2a3e', border:'#3a3a52' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  body { background:#1e1e2e; color:#e2e8f0; font-family:'Inter',system-ui,sans-serif; }
+  .card { background:#2a2a3e; border:1px solid #3a3a52; border-radius:12px; }
+  .sidebar-item { border-radius:8px; cursor:pointer; transition:all .15s; }
+  .sidebar-item:hover, .sidebar-item.active { background:#3a3a52; }
+  .badge-verde { background:#166534; color:#bbf7d0; }
+  .badge-amarillo { background:#713f12; color:#fef08a; }
+  .badge-rojo { background:#7f1d1d; color:#fecaca; }
+  .badge-azul { background:#1e3a5f; color:#bfdbfe; }
+  .kpi-card { background: linear-gradient(135deg, #2a2a3e 0%, #323248 100%); border:1px solid #3a3a52; border-radius:12px; }
+  .section { display:none; }
+  .section.active { display:block; }
+  .progress-bar { height:6px; border-radius:3px; background:#3a3a52; }
+  .progress-fill { height:6px; border-radius:3px; transition:width .4s; }
+  .tag-danger { background:#7f1d1d; color:#fca5a5; padding:2px 8px; border-radius:4px; font-size:11px; }
+  .tag-warning { background:#713f12; color:#fde68a; padding:2px 8px; border-radius:4px; font-size:11px; }
+  .tag-ok { background:#166534; color:#86efac; padding:2px 8px; border-radius:4px; font-size:11px; }
+  .tag-info { background:#1e3a5f; color:#93c5fd; padding:2px 8px; border-radius:4px; font-size:11px; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .checklist-item { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid #3a3a52; }
+  .checklist-item:last-child { border-bottom:none; }
+  input[type=checkbox] { width:18px; height:18px; cursor:pointer; accent-color:#6366f1; flex-shrink:0; margin-top:2px; }
+  .table-row:hover { background:#323248; }
+  .knowledge-result { background:#252538; border:1px solid #3a3a52; border-radius:8px; padding:12px; margin-bottom:10px; }
+  #loading-overlay { position:fixed; inset:0; background:#1e1e2e; display:flex; align-items:center; justify-content:center; z-index:9999; }
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="text-center">
+    <div class="spin inline-block w-10 h-10 border-4 border-brand border-t-transparent rounded-full mb-4"></div>
+    <p class="text-slate-400">Cargando Reyesoft OS…</p>
+  </div>
+</div>
+
+<div class="flex h-screen overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside class="w-60 flex-shrink-0 flex flex-col p-4 gap-1 border-r border-surface-border overflow-y-auto" style="background:#16162a;">
+    <div class="mb-6 mt-2 px-2">
+      <div class="text-xs font-bold tracking-widest text-indigo-400 uppercase mb-1">Reyesoft OS</div>
+      <div class="text-slate-500 text-xs" id="sidebar-date">—</div>
+    </div>
+
+    <div class="text-xs text-slate-500 uppercase tracking-wider px-2 mb-1">Vista general</div>
+    <div class="sidebar-item active px-3 py-2 text-sm flex items-center gap-2" onclick="nav('overview')">
+      <span>📊</span> <span>Dashboard</span>
+    </div>
+
+    <div class="text-xs text-slate-500 uppercase tracking-wider px-2 mb-1 mt-4">People</div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('people')">
+      <span>👥</span> <span>Equipo y Vacaciones</span>
+    </div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('cumpleanos')">
+      <span>🎂</span> <span>Cumpleaños</span>
+    </div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('licencias')">
+      <span>📋</span> <span>Licencias</span>
+    </div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('onboarding')">
+      <span>🚀</span> <span>Onboarding</span>
+    </div>
+
+    <div class="text-xs text-slate-500 uppercase tracking-wider px-2 mb-1 mt-4">Operaciones</div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('tasks')">
+      <span>✅</span> <span>Tareas</span>
+    </div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('cfo')">
+      <span>💰</span> <span>Tesorería</span>
+    </div>
+
+    <div class="text-xs text-slate-500 uppercase tracking-wider px-2 mb-1 mt-4">CX Factory</div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('cx')">
+      <span>📞</span> <span>Auditoría CX</span>
+    </div>
+    <div class="sidebar-item px-3 py-2 text-sm flex items-center gap-2" onclick="nav('knowledge')">
+      <span>🔍</span> <span>Base de Conocimiento</span>
+    </div>
+
+    <!-- Status indicators -->
+    <div class="mt-auto pt-4 border-t border-surface-border">
+      <div class="text-xs text-slate-500 mb-2">Estado del sistema</div>
+      <div id="sidebar-status" class="space-y-1 text-xs">
+        <div class="flex justify-between"><span>People</span><span id="st-people" class="text-slate-500">—</span></div>
+        <div class="flex justify-between"><span>CFO</span><span id="st-cfo" class="text-slate-500">—</span></div>
+        <div class="flex justify-between"><span>Tareas</span><span id="st-tasks" class="text-slate-500">—</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 overflow-y-auto p-6">
+
+    <!-- ====== OVERVIEW ====== -->
+    <div id="sec-overview" class="section active">
+      <h1 class="text-2xl font-bold mb-1">Dashboard Ejecutivo</h1>
+      <p class="text-slate-400 text-sm mb-6">Vista 360° del estado operativo</p>
+
+      <!-- KPI Row -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Colaboradores</div>
+          <div class="text-3xl font-bold" id="kpi-total">—</div>
+          <div class="text-xs text-slate-500 mt-1">activos en equipo</div>
+        </div>
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Riesgo Burnout</div>
+          <div class="text-3xl font-bold text-yellow-400" id="kpi-burnout">—</div>
+          <div class="text-xs text-slate-500 mt-1">vacaciones acumuladas</div>
+        </div>
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Adeuda Vacaciones</div>
+          <div class="text-3xl font-bold text-red-400" id="kpi-deuda">—</div>
+          <div class="text-xs text-slate-500 mt-1">colaboradores</div>
+        </div>
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Tareas Vencidas</div>
+          <div class="text-3xl font-bold text-red-400" id="kpi-vencidas">—</div>
+          <div class="text-xs text-slate-500 mt-1">sin completar</div>
+        </div>
+      </div>
+
+      <!-- Alertas -->
+      <div class="card p-4 mb-6">
+        <div class="font-semibold mb-3 flex items-center gap-2">🚨 Alertas Activas</div>
+        <div id="alertas-list" class="space-y-2">
+          <div class="text-slate-500 text-sm">Cargando alertas…</div>
+        </div>
+      </div>
+
+      <!-- Próximos cumpleaños + Tareas pendientes -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card p-4">
+          <div class="font-semibold mb-3">🎂 Próximos Cumpleaños (7 días)</div>
+          <div id="ov-cumples" class="space-y-2 text-sm">—</div>
+        </div>
+        <div class="card p-4">
+          <div class="font-semibold mb-3">⏰ Tareas Pendientes</div>
+          <div id="ov-tasks" class="space-y-2 text-sm">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== PEOPLE ====== -->
+    <div id="sec-people" class="section">
+      <h1 class="text-2xl font-bold mb-1">Equipo & Vacaciones</h1>
+      <p class="text-slate-400 text-sm mb-6">Estado de vacaciones de cada colaborador</p>
+
+      <!-- Filters -->
+      <div class="flex gap-3 mb-4 flex-wrap">
+        <input id="people-search" type="text" placeholder="Buscar colaborador…"
+          class="bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm w-52 focus:outline-none focus:border-brand"
+          oninput="filterPeople()"/>
+        <select id="people-alerta" class="bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" onchange="filterPeople()">
+          <option value="">Todos los estados</option>
+          <option value="normal">Normal</option>
+          <option value="deuda">Deuda vacaciones</option>
+          <option value="burnout_riesgo">Riesgo burnout</option>
+          <option value="acumuladas_altas">Acumuladas altas</option>
+        </select>
+      </div>
+
+      <div class="card overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-surface-border text-slate-400">
+              <th class="text-left p-3">Nombre</th>
+              <th class="text-left p-3 hidden md:table-cell">Área</th>
+              <th class="text-right p-3">Saldo</th>
+              <th class="text-right p-3">Tomadas</th>
+              <th class="text-right p-3">Ley</th>
+              <th class="text-left p-3">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="people-table">
+            <tr><td colspan="6" class="p-4 text-slate-500">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ====== CUMPLEAÑOS ====== -->
+    <div id="sec-cumpleanos" class="section">
+      <h1 class="text-2xl font-bold mb-1">Cumpleaños</h1>
+      <p class="text-slate-400 text-sm mb-6">Próximos 30 días</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="cumple-grid">
+        <div class="card p-4 text-slate-500">Cargando…</div>
+      </div>
+    </div>
+
+    <!-- ====== LICENCIAS ====== -->
+    <div id="sec-licencias" class="section">
+      <h1 class="text-2xl font-bold mb-1">Licencias & Ausentismo</h1>
+      <p class="text-slate-400 text-sm mb-6">Registro de licencias médicas y ausentismo</p>
+      <div class="card overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-surface-border text-slate-400">
+              <th class="text-left p-3">Colaborador</th>
+              <th class="text-left p-3">Tipo</th>
+              <th class="text-left p-3">Desde</th>
+              <th class="text-left p-3">Hasta</th>
+              <th class="text-left p-3">Motivo</th>
+              <th class="text-left p-3">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="licencias-table">
+            <tr><td colspan="6" class="p-4 text-slate-500">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ====== ONBOARDING ====== -->
+    <div id="sec-onboarding" class="section">
+      <h1 class="text-2xl font-bold mb-1">Onboarding — Alta Administrativa</h1>
+      <p class="text-slate-400 text-sm mb-4">Checklist completo para dar de alta un nuevo talento</p>
+
+      <div class="flex gap-3 mb-6">
+        <input id="onboarding-nombre" type="text" placeholder="Nombre del nuevo colaborador"
+          class="bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:border-brand"/>
+        <button onclick="loadOnboarding()" class="bg-brand hover:bg-brand-dark px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          Generar Checklist
+        </button>
+      </div>
+
+      <div id="onboarding-progress" class="mb-4 hidden">
+        <div class="flex justify-between text-xs text-slate-400 mb-1">
+          <span id="ob-progress-label">Progreso</span>
+          <span id="ob-progress-pct">0%</span>
+        </div>
+        <div class="progress-bar"><div id="ob-progress-fill" class="progress-fill bg-indigo-500" style="width:0%"></div></div>
+      </div>
+
+      <div id="onboarding-sections" class="space-y-4"></div>
+    </div>
+
+    <!-- ====== TASKS ====== -->
+    <div id="sec-tasks" class="section">
+      <h1 class="text-2xl font-bold mb-1">Centro de Tareas</h1>
+      <p class="text-slate-400 text-sm mb-6">Métricas y gestión de tareas operativas</p>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Total Tareas</div>
+          <div class="text-3xl font-bold" id="tk-total">—</div>
+        </div>
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Pendientes</div>
+          <div class="text-3xl font-bold text-yellow-400" id="tk-pendientes">—</div>
+        </div>
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Vencidas</div>
+          <div class="text-3xl font-bold text-red-400" id="tk-vencidas">—</div>
+        </div>
+        <div class="kpi-card p-4">
+          <div class="text-xs text-slate-400 mb-1">Completadas (30d)</div>
+          <div class="text-3xl font-bold text-green-400" id="tk-completadas">—</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card p-4">
+          <div class="font-semibold mb-3">📋 Pendientes</div>
+          <div id="tasks-pending-list" class="space-y-2 text-sm">—</div>
+        </div>
+        <div class="card p-4">
+          <div class="font-semibold mb-3">⚠️ Vencidas</div>
+          <div id="tasks-expired-list" class="space-y-2 text-sm">—</div>
+        </div>
+      </div>
+
+      <div class="card p-4 mt-4">
+        <div class="font-semibold mb-2">📊 Informe Completo</div>
+        <pre id="tasks-informe" class="text-xs text-slate-300 whitespace-pre-wrap font-mono bg-surface-card rounded p-3 overflow-auto max-h-64">—</pre>
+      </div>
+    </div>
+
+    <!-- ====== CFO ====== -->
+    <div id="sec-cfo" class="section">
+      <h1 class="text-2xl font-bold mb-1">Tesorería</h1>
+      <p class="text-slate-400 text-sm mb-6">Estado financiero del período</p>
+
+      <div class="card p-6">
+        <div id="cfo-content" class="text-slate-300">
+          <div class="text-slate-500">Cargando datos financieros…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== CX AUDITORÍA ====== -->
+    <div id="sec-cx" class="section">
+      <h1 class="text-2xl font-bold mb-1">CX Factory — Auditoría</h1>
+      <p class="text-slate-400 text-sm mb-6">Métricas de calidad de atención al cliente</p>
+
+      <div class="card p-6 mb-4">
+        <div id="cx-content" class="text-slate-300">
+          <div class="text-slate-500">Cargando métricas CX…</div>
+        </div>
+      </div>
+
+      <div class="card p-4">
+        <div class="font-semibold mb-2 text-sm">Acceso completo a la interfaz de auditoría</div>
+        <a href="http://localhost:8601" target="_blank"
+          class="inline-block bg-brand hover:bg-brand-dark px-4 py-2 rounded-lg text-sm font-medium transition-colors mt-1">
+          Abrir CX Auditor UI →
+        </a>
+      </div>
+    </div>
+
+    <!-- ====== KNOWLEDGE BASE ====== -->
+    <div id="sec-knowledge" class="section">
+      <h1 class="text-2xl font-bold mb-1">Base de Conocimiento</h1>
+      <p class="text-slate-400 text-sm mb-4">Consultá protocolos, políticas y procesos de la empresa</p>
+
+      <div class="flex gap-3 mb-6">
+        <input id="kb-query" type="text" placeholder="¿Cómo responder a un reclamo? ¿Protocolo de COPREC?…"
+          class="flex-1 bg-surface-card border border-surface-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-brand"
+          onkeydown="if(event.key==='Enter') searchKnowledge()"/>
+        <button onclick="searchKnowledge()" class="bg-brand hover:bg-brand-dark px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          Consultar
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-500 mb-4">
+        Sugerencias:
+        <span class="cursor-pointer hover:text-slate-300 underline" onclick="quickSearch('protocolo COPREC')">Protocolo COPREC</span> ·
+        <span class="cursor-pointer hover:text-slate-300 underline" onclick="quickSearch('beneficios colaboradores')">Beneficios</span> ·
+        <span class="cursor-pointer hover:text-slate-300 underline" onclick="quickSearch('como responder reclamo')">Cómo responder reclamos</span> ·
+        <span class="cursor-pointer hover:text-slate-300 underline" onclick="quickSearch('vacaciones ley')">Vacaciones ley</span>
+      </div>
+
+      <div id="knowledge-results" class="space-y-3"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+const BASE = '';
+let _peopleData = [];
+let _checkboxes = {};
+
+// ── Navigation ─────────────────────────────────────────────
+function nav(section) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + section).classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+// ── Utilities ──────────────────────────────────────────────
+function badge(alerta) {
+  const map = {
+    deuda: '<span class="tag-danger">Deuda</span>',
+    burnout_riesgo: '<span class="tag-warning">Burnout</span>',
+    acumuladas_altas: '<span class="tag-warning">Acum. altas</span>',
+    normal: '<span class="tag-ok">Normal</span>',
+    sin_dato: '<span class="text-slate-500 text-xs">Sin dato</span>',
+  };
+  return map[alerta] || `<span class="text-slate-500 text-xs">${alerta}</span>`;
+}
+
+function fmtNum(n, dec=1) {
+  if (n === null || n === undefined || n === '') return '—';
+  return parseFloat(n).toFixed(dec);
+}
+
+function alertBadge(tipo) {
+  if (tipo === 'danger') return '<span class="tag-danger">Crítico</span>';
+  if (tipo === 'warning') return '<span class="tag-warning">Alerta</span>';
+  return '<span class="tag-info">Info</span>';
+}
+
+// ── API calls ──────────────────────────────────────────────
+async function get(url) {
+  try {
+    const r = await fetch(BASE + url);
+    return await r.json();
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+// ── Overview ───────────────────────────────────────────────
+async function loadOverview() {
+  const [summary, tasks, cumples] = await Promise.all([
+    get('/api/people/summary'),
+    get('/api/tasks'),
+    get('/api/people/cumpleanos?days=7'),
+  ]);
+
+  document.getElementById('kpi-total').textContent = summary.total_colaboradores ?? '—';
+  document.getElementById('kpi-burnout').textContent = summary.riesgo_burnout ?? '—';
+  document.getElementById('kpi-deuda').textContent = summary.deudores_vacaciones ?? '—';
+  document.getElementById('kpi-vencidas').textContent = tasks.total_vencidas ?? '—';
+
+  // sidebar status
+  document.getElementById('st-people').textContent = summary.total_colaboradores ? '🟢 OK' : '⚠️';
+  document.getElementById('st-tasks').textContent = (tasks.total_vencidas > 0) ? `🟡 ${tasks.total_vencidas} venc.` : '🟢 OK';
+
+  // Alertas
+  const al = document.getElementById('alertas-list');
+  const alertas = summary.alertas || [];
+  if (!alertas.length) {
+    al.innerHTML = '<div class="text-green-400 text-sm">✅ Sin alertas críticas activas</div>';
+  } else {
+    al.innerHTML = alertas.map(a =>
+      `<div class="flex items-center gap-2 text-sm py-1">${alertBadge(a.tipo)} <span>${a.mensaje}</span></div>`
+    ).join('');
+  }
+
+  // Cumples
+  const cv = document.getElementById('ov-cumples');
+  if (!cumples.length) {
+    cv.innerHTML = '<span class="text-slate-500">Sin cumpleaños en los próximos 7 días</span>';
+  } else {
+    cv.innerHTML = cumples.map(c =>
+      `<div class="flex justify-between items-center py-1 border-b border-surface-border last:border-0">
+        <span>🎂 ${c.nombre}</span>
+        <span class="text-slate-400">${c.dias_para_cumple === 0 ? '¡Hoy!' : 'en ' + c.dias_para_cumple + 'd'}</span>
+      </div>`
+    ).join('');
+  }
+
+  // Tasks overview
+  const tv = document.getElementById('ov-tasks');
+  const pend = tasks.pendientes || [];
+  if (!pend.length) {
+    tv.innerHTML = '<span class="text-slate-500">Sin tareas pendientes</span>';
+  } else {
+    tv.innerHTML = pend.slice(0, 5).map(t =>
+      `<div class="flex justify-between items-center py-1 border-b border-surface-border last:border-0">
+        <span class="truncate max-w-xs">${t.titulo}</span>
+        <span class="text-slate-400 text-xs ml-2">${t.responsable}</span>
+      </div>`
+    ).join('');
+  }
+}
+
+// ── People ─────────────────────────────────────────────────
+async function loadPeople() {
+  _peopleData = await get('/api/people/vacaciones');
+  renderPeopleTable(_peopleData);
+}
+
+function renderPeopleTable(data) {
+  const tbody = document.getElementById('people-table');
+  if (!data || data.error) {
+    tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-red-400">${data?.error || 'Sin datos'}</td></tr>`;
+    return;
+  }
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-slate-500">Sin colaboradores</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(p => `
+    <tr class="table-row border-b border-surface-border last:border-0">
+      <td class="p-3 font-medium">${p.nombre}</td>
+      <td class="p-3 text-slate-400 hidden md:table-cell text-xs">${p.area || '—'}</td>
+      <td class="p-3 text-right font-mono ${p.vacaciones_saldo < 0 ? 'text-red-400' : 'text-green-400'}">${fmtNum(p.vacaciones_saldo)}</td>
+      <td class="p-3 text-right font-mono text-slate-300">${fmtNum(p.vacaciones_tomadas, 0)}</td>
+      <td class="p-3 text-right font-mono text-slate-500">${p.vacaciones_dias_ley || 14}</td>
+      <td class="p-3">${badge(p.alerta)}</td>
+    </tr>
+  `).join('');
+}
+
+function filterPeople() {
+  const q = document.getElementById('people-search').value.toLowerCase();
+  const alerta = document.getElementById('people-alerta').value;
+  const filtered = _peopleData.filter(p => {
+    const matchQ = !q || p.nombre.toLowerCase().includes(q) || (p.area||'').toLowerCase().includes(q);
+    const matchA = !alerta || p.alerta === alerta;
+    return matchQ && matchA;
+  });
+  renderPeopleTable(filtered);
+}
+
+// ── Cumpleaños ─────────────────────────────────────────────
+async function loadCumpleanos() {
+  const data = await get('/api/people/cumpleanos?days=30');
+  const grid = document.getElementById('cumple-grid');
+  if (!data.length) {
+    grid.innerHTML = '<div class="card p-4 text-slate-500">Sin cumpleaños en los próximos 30 días</div>';
+    return;
+  }
+  grid.innerHTML = data.map(c => `
+    <div class="card p-4">
+      <div class="text-lg font-bold mb-1">${c.nombre}</div>
+      <div class="text-slate-400 text-xs mb-2">${c.area || 'Sin área'}</div>
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-2xl font-bold text-indigo-400">${c.dias_para_cumple === 0 ? '¡HOY!' : c.dias_para_cumple + 'd'}</div>
+          <div class="text-xs text-slate-500">${c.proximo_cumple} · ${c.edad} años</div>
+        </div>
+        <div class="text-3xl">${c.dias_para_cumple === 0 ? '🎉' : '🎂'}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Licencias ──────────────────────────────────────────────
+async function loadLicencias() {
+  const data = await get('/api/people/licencias');
+  const tbody = document.getElementById('licencias-table');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-slate-500">Sin licencias registradas</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(l => `
+    <tr class="table-row border-b border-surface-border last:border-0">
+      <td class="p-3 font-medium">${l.nombre}</td>
+      <td class="p-3"><span class="tag-info">${l.tipo}</span></td>
+      <td class="p-3 text-slate-400 text-xs">${l.desde || '—'}</td>
+      <td class="p-3 text-slate-400 text-xs">${l.hasta || '—'}</td>
+      <td class="p-3 text-slate-400 text-xs">${l.motivo || '—'}</td>
+      <td class="p-3 text-xs">${l.estado || '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Onboarding ─────────────────────────────────────────────
+async function loadOnboarding() {
+  const nombre = document.getElementById('onboarding-nombre').value || 'Nuevo Colaborador';
+  const data = await get(`/api/onboarding?nombre=${encodeURIComponent(nombre)}`);
+  document.getElementById('onboarding-progress').classList.remove('hidden');
+  updateProgress();
+  const container = document.getElementById('onboarding-sections');
+  container.innerHTML = data.categorias.map((cat, ci) => `
+    <div class="card p-4">
+      <div class="font-semibold mb-3 text-indigo-300">${cat.categoria}</div>
+      <div>
+        ${cat.items.map((item, ii) => {
+          const id = `ob_${ci}_${ii}`;
+          return `<div class="checklist-item">
+            <input type="checkbox" id="${id}" data-total="${data.total_items}" onchange="updateProgress(${data.total_items})"/>
+            <label for="${id}" class="text-sm cursor-pointer">${item}</label>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateProgress(total) {
+  const all = document.querySelectorAll('#onboarding-sections input[type=checkbox]');
+  const checked = document.querySelectorAll('#onboarding-sections input[type=checkbox]:checked');
+  if (!all.length) return;
+  const pct = Math.round((checked.length / all.length) * 100);
+  document.getElementById('ob-progress-fill').style.width = pct + '%';
+  document.getElementById('ob-progress-pct').textContent = pct + '%';
+  document.getElementById('ob-progress-label').textContent = `${checked.length} de ${all.length} completados`;
+}
+
+// ── Tasks ──────────────────────────────────────────────────
+async function loadTasks() {
+  const data = await get('/api/tasks');
+
+  document.getElementById('tk-total').textContent = (data.pendientes?.length || 0) + (data.vencidas?.length || 0);
+  document.getElementById('tk-pendientes').textContent = data.total_pendientes ?? '—';
+  document.getElementById('tk-vencidas').textContent = data.total_vencidas ?? '—';
+
+  const informe = data.informe || '';
+  const completadasMatch = informe.match(/Completadas en el periodo: (\d+)/);
+  document.getElementById('tk-completadas').textContent = completadasMatch ? completadasMatch[1] : '—';
+
+  const pList = document.getElementById('tasks-pending-list');
+  const pend = data.pendientes || [];
+  pList.innerHTML = pend.length
+    ? pend.map(t => `<div class="flex justify-between py-1 border-b border-surface-border last:border-0">
+        <span class="truncate">${t.titulo}</span>
+        <span class="text-slate-400 text-xs ml-2">${t.responsable}</span>
+      </div>`).join('')
+    : '<span class="text-slate-500">Sin tareas pendientes</span>';
+
+  const eList = document.getElementById('tasks-expired-list');
+  const venc = data.vencidas || [];
+  eList.innerHTML = venc.length
+    ? venc.map(t => `<div class="flex justify-between py-1 border-b border-surface-border last:border-0">
+        <span class="truncate text-red-400">${t.titulo}</span>
+        <span class="text-slate-400 text-xs ml-2">${t.fecha || '—'}</span>
+      </div>`).join('')
+    : '<span class="text-green-400">Sin tareas vencidas</span>';
+
+  document.getElementById('tasks-informe').textContent = data.informe || 'Sin datos';
+  document.getElementById('st-tasks').textContent = (data.total_vencidas > 0) ? `🟡 ${data.total_vencidas} venc.` : '🟢 OK';
+}
+
+// ── CFO ────────────────────────────────────────────────────
+async function loadCFO() {
+  const data = await get('/api/cfo');
+  const div = document.getElementById('cfo-content');
+  if (data.error) {
+    div.innerHTML = `<div class="text-yellow-400">⚠️ ${data.error}</div>`;
+    document.getElementById('st-cfo').textContent = '⚠️ Parcial';
+    return;
+  }
+
+  const gasto = data.gasto_mes ?? data.kpis?.gasto_actual;
+  const mom = data.mom ?? data.kpis?.variacion_mom;
+  const estado = data.estado || '—';
+
+  div.innerHTML = `
+    <div class="grid grid-cols-2 gap-6 mb-4">
+      <div>
+        <div class="text-xs text-slate-400 mb-1">Gasto del período</div>
+        <div class="text-3xl font-bold">${gasto != null ? '$' + parseFloat(gasto).toLocaleString('es-AR') : 'Sin datos'}</div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-400 mb-1">Variación MoM</div>
+        <div class="text-3xl font-bold ${mom > 20 ? 'text-red-400' : mom > 0 ? 'text-yellow-400' : 'text-green-400'}">
+          ${mom != null ? (mom > 0 ? '+' : '') + parseFloat(mom).toFixed(1) + '%' : '—'}
+        </div>
+      </div>
+    </div>
+    <div class="text-xs text-slate-500">Estado: ${estado}</div>
+    ${data.alertas?.length ? `
+      <div class="mt-4 space-y-1">
+        ${data.alertas.map(a => `<div class="text-sm text-yellow-300 border-l-2 border-yellow-500 pl-3">${a}</div>`).join('')}
+      </div>` : ''}
+  `;
+
+  document.getElementById('st-cfo').textContent = data.ok ? '🟢 OK' : '🟡 Parcial';
+}
+
+// ── CX ─────────────────────────────────────────────────────
+async function loadCX() {
+  const data = await get('/api/cx');
+  const div = document.getElementById('cx-content');
+  if (data.error && !data.summary) {
+    div.innerHTML = `<div class="text-yellow-400">⚠️ CX Auditor: ${data.error}<br/><span class="text-slate-500 text-xs">Ejecutá el pipeline batch primero para cargar datos.</span></div>`;
+    return;
+  }
+  const s = data.summary || {};
+  div.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      ${Object.entries(s).slice(0,8).map(([k,v]) => `
+        <div class="bg-surface-card rounded-lg p-3">
+          <div class="text-xs text-slate-400 mb-1">${k.replace(/_/g,' ')}</div>
+          <div class="text-xl font-bold">${typeof v === 'number' ? v.toFixed(2) : v ?? '—'}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ── Knowledge ──────────────────────────────────────────────
+async function searchKnowledge() {
+  const q = document.getElementById('kb-query').value.trim();
+  if (!q) return;
+  const div = document.getElementById('knowledge-results');
+  div.innerHTML = '<div class="text-slate-500 text-sm">Buscando en la base de conocimiento…</div>';
+  const data = await get(`/api/knowledge?q=${encodeURIComponent(q)}`);
+  if (!data.resultados?.length) {
+    div.innerHTML = '<div class="text-slate-400">No encontré información sobre eso en la base de conocimiento.</div>';
+    return;
+  }
+  div.innerHTML = data.resultados.map(r => `
+    <div class="knowledge-result">
+      <div class="font-semibold text-sm text-indigo-300 mb-1">📄 ${r.nombre}</div>
+      <div class="text-sm text-slate-300 leading-relaxed mb-2">${r.snippet || '—'}</div>
+      <div class="text-xs text-slate-500">📁 ${r.ruta}</div>
+    </div>
+  `).join('');
+}
+
+function quickSearch(query) {
+  document.getElementById('kb-query').value = query;
+  searchKnowledge();
+}
+
+// ── Init ───────────────────────────────────────────────────
+async function init() {
+  document.getElementById('sidebar-date').textContent = new Date().toLocaleDateString('es-AR', {weekday:'long', day:'numeric', month:'long'});
+
+  await loadOverview();
+  document.getElementById('loading-overlay').style.display = 'none';
+
+  // Pre-load other sections in background
+  loadPeople();
+  loadCumpleanos();
+  loadLicencias();
+  loadTasks();
+  loadCFO();
+  loadCX();
+}
+
+// Attach section loaders on nav click
+const loaders = {
+  overview: loadOverview,
+  people: loadPeople,
+  cumpleanos: loadCumpleanos,
+  licencias: loadLicencias,
+  tasks: loadTasks,
+  cfo: loadCFO,
+  cx: loadCX,
+  knowledge: () => {},
+  onboarding: () => {},
+};
+
+window.nav = function(section) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + section).classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  if (loaders[section]) loaders[section]();
+};
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

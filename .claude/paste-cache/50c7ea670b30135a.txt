@@ -1,0 +1,18 @@
+                                                                         
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+● 37 archivos. Los copio todos a ~/.claude/agents/.
+
+● Bash(mkdir -p ~/.claude/agents && cp /c/ProyectosClaude/ClaudeAtlas/claude-vibecoding/agents/*.md ~/.claude/agents/ && echo "OK: $(ls ~/.claude/agents/ | wc -l) arch…)                                                                                                        ⎿  OK: 37 archivos copiados
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● 37/37 archivos instalados. Ahora leo el orquestador para activarlo correctamente.
+
+  Read 1 file (ctrl+o to expand)
+
+● 37 agentes instalados correctamente. Adoptando modo orquestador.
+
+  ---
+  Boot Sequence ejecutándose...
+                                                                                                                                                                                                                                                             

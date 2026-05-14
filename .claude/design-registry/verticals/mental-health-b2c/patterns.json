@@ -1,0 +1,145 @@
+{
+  "vertical_id": "mental-health-b2c",
+  "extracted_patterns": {
+    "hero_section": {
+      "emotional_appeal": "empathy + permission",
+      "emotional_ratio": 7,
+      "emotional_ratio_notes": "High warmth (empathy) with clinical credibility",
+      "cta_segmentation": "pre_qualify",
+      "cta_segmentation_notes": "Segment users BEFORE commitment (Individual/Couples/Teen reduces friction)",
+      "barrier_removal_priority": ["trust_in_therapist", "cost_anxiety", "commitment_anxiety"],
+      "conversion_signal": "'Get matched to a therapist' or 'Find a therapist' - action-oriented, not vague",
+      "headline_structure": "permission-based: 'You deserve...', 'It's okay...', 'You're not alone...'",
+      "reference_data": {
+        "betterhelp": "You deserve to be happy",
+        "talkspace": "Space to figure things out",
+        "headspace": "Take care of your mind"
+      }
+    },
+    "tone_and_language": {
+      "warmth": 7,
+      "authority": 6,
+      "urgency": 0,
+      "formality": 4,
+      "data_forward": 4,
+      "distribution": "70% warm, 20% clinical credibility, 10% humor/relatability, 0% pressure",
+      "key_phrases": [
+        "licensed therapist / credentialed",
+        "cancel anytime",
+        "message whenever you want",
+        "flexible scheduling",
+        "no waiting room",
+        "safe space"
+      ],
+      "tone_notes": "Blend empathy (make them feel okay) with expertise (prove competence). Avoid sterile/clinical. Zero pressure/scarcity."
+    },
+    "social_proof": {
+      "types_used": ["therapist_credentialing_stats", "customer_testimonials_with_outcomes", "outcome_metrics"],
+      "effectiveness_ranking": [
+        "therapist_credentialing (build trust in expert)",
+        "customer_testimonials_with_photos_and_names (prove helpfulness)",
+        "outcome_metrics (show scale)"
+      ],
+      "specificity_level": "highly_specific",
+      "specificity_notes": "Testimonials must include: name, photo, specific outcome. e.g., 'Sarah M.: Helped me manage anxiety during work stress'",
+      "diversity_signals": "Show diverse ages, genders, ethnicities, use cases (individuals, couples, parents, teens)",
+      "outcome_quantification": "Qualitative (specific stories) > Quantitative (% improved) for this vertical"
+    },
+    "visual_hierarchy": {
+      "whitespace_ratio": 45,
+      "whitespace_notes": "Generous whitespace signals calm and safety. Anxious users scan, don't read dense text.",
+      "section_order": [
+        "permission (emotional safety)",
+        "trust_building (credentialing, experience)",
+        "matching_process (how it works, reduces uncertainty)",
+        "social_proof (testimonials, outcomes)",
+        "faq (address remaining objections)"
+      ],
+      "density_profile": "sparse",
+      "color_temperature": 5,
+      "color_temperature_notes": "Cool colors (blue, teal, green) signal calm. Avoid warm oranges/reds, pure medical white.",
+      "primary_colors": ["teal (#16a085 to #20c997)", "blue (#0066cc to #0056b3)", "green (#28a745)"],
+      "avoid_colors": ["pure_white_backgrounds", "aggressive_reds", "warm_oranges"],
+      "psychology_notes": "Cool palette = trust + calm. Green = growth/healing. Blue = stability."
+    },
+    "conversion_mechanics": {
+      "cta_points": [
+        "hero (primary: 'Get matched')",
+        "value_prop_section (secondary: 'Start free assessment')",
+        "testimonials_section (building confidence)",
+        "faq (removing final objections)",
+        "footer (persistent availability)"
+      ],
+      "cta_texts": [
+        "Get matched to a therapist",
+        "Find your therapist",
+        "Start your free assessment",
+        "Take the first step"
+      ],
+      "friction_removal_techniques": [
+        "multi-step questionnaire (reduce cognitive load)",
+        "reassurance language: 'cancel anytime', 'message at your pace'",
+        "immediate matching (no waiting list)",
+        "insurance coverage emphasis (remove cost barrier)",
+        "therapist preview before committing"
+      ],
+      "what_fails_if_removed": [
+        "therapist credentialing → trust collapse",
+        "diverse testimonials with outcomes → credibility gap",
+        "flexible language → commitment anxiety blocks",
+        "whitespace and calm layout → abandonment (feels clinical)"
+      ],
+      "conversion_funnel_length": "questionnaire_based (3-5 min engagement)"
+    },
+    "stage_indicators": {
+      "trust_buildup_sequence": "credentialing → patient stories → outcome proof → flexibility reassurance",
+      "proof_points_by_stage": {
+        "early": ["therapist background", "core value prop"],
+        "mid": ["first customer testimonials", "safety/privacy info"],
+        "late": ["5+ diverse testimonials", "outcome metrics", "credentialing badges"]
+      },
+      "typical_conversion_timeline": "2_min_scan (hero) → 5_min_questionnaire (assessment) → 10_min_review (matching)"
+    },
+    "vertical_specific_patterns": {
+      "credentialing_requirement": "CRITICAL. Therapist qualifications, licensing, experience. This is THE core trust signal.",
+      "insurance_coverage": "IMPORTANT. Cost is major barrier. Lead with '$0 copay' if available.",
+      "matching_mechanism": "Users want to know they'll be matched to RIGHT therapist. Make process transparent.",
+      "confidentiality_language": "Safe space, private, secure messaging. Mental health seekers have trust concerns.",
+      "ethical_tone": "Avoid scarcity/urgency language. Mental health seekers have high fraud awareness. Be authentic."
+    }
+  },
+  "source_benchmarks": [
+    {
+      "site": "betterhelp.com",
+      "ranking_signal": "Top-ranked for 'therapy online', 'online counseling'",
+      "patterns_found": [
+        "hero_emotional_ratio: 7",
+        "cta_segmentation: pre_qualify",
+        "credentialing_stats_emphasis",
+        "testimonials_with_outcomes",
+        "generous_whitespace"
+      ]
+    },
+    {
+      "site": "talkspace.com",
+      "ranking_signal": "Top-ranked for 'online therapy', 'therapist chat'",
+      "patterns_found": [
+        "hero_emotional_ratio: 7",
+        "insurance_coverage_front_loaded",
+        "diverse_testimonials",
+        "comparison_table (vs in-person)"
+      ]
+    },
+    {
+      "site": "headspace.com/ginger (acquired)",
+      "ranking_signal": "Conversion-optimized for meditation/counseling blend",
+      "patterns_found": [
+        "warm_tone_emphasis",
+        "flexible_scheduling_language",
+        "multi_path_entry_points"
+      ]
+    }
+  ],
+  "last_updated": "2026-05-14",
+  "framework_version": "1.0"
+}

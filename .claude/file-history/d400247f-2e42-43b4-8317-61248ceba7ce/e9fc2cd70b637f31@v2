@@ -1,0 +1,15 @@
+---
+name: Reglas de desarrollo Reyesoft OS
+description: Restricciones obligatorias al desarrollar en este proyecto
+type: feedback
+originSessionId: d400247f-2e42-43b4-8317-61248ceba7ce
+---
+1. No tocar lógica analítica en el frontend. Toda agregación ocurre en backend.
+2. Nunca modificar `.env` ni exponer claves.
+3. Mantener separación de capas: CX Auditor no toca Tesorería ni People.
+4. Code Freeze en `cx_auditor/`: solo refinamiento operativo (UI, lecturas, exportación). No agregar nuevas métricas de IA.
+5. Preguntar antes de borrar archivos que no creaste vos.
+
+**Why:** Son las reglas que Lucas estableció explícitamente en `instrucciones.md`.
+
+**How to apply:** Antes de cualquier cambio, verificar que no cruza módulos y que no modifica cx_auditor con features nuevas.

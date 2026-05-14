@@ -1,0 +1,274 @@
+from __future__ import annotations
+
+import os
+import re
+import glob
+from datetime import datetime, date, timedelta
+from typing import Any
+
+import yaml
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LEGAJOS_DIR = os.path.join(ROOT, "03_AREAS", "People", "legajos")
+
+ONBOARDING_CHECKLIST = [
+    {"categoria": "Administrativo / Legal", "items": [
+        "Alta Temprana en ARCA (ex AFIP) — plazo máximo: día hábil anterior al ingreso",
+        "Firma de contrato de trabajo",
+        "Copia de DNI frente y dorso recibida",
+        "CUIL registrado en sistema",
+    ]},
+    {"categoria": "Seguridad Social", "items": [
+        "Alta en obra social (formulario 4.8 / AFIP)",
+        "Elección de obra social comunicada al empleado",
+        "Alta en ART (Aseguradora de Riesgos del Trabajo)",
+        "Formulario de depósito de haberes (CBU/alias bancario)",
+    ]},
+    {"categoria": "Acceso y Seguridad Física", "items": [
+        "Registro de rostro en portero/control de acceso",
+        "Entrega de tarjeta/credencial de acceso",
+        "Tour por instalaciones + protocolos de seguridad",
+    ]},
+    {"categoria": "Herramientas y Sistemas", "items": [
+        "Alta en Google Workspace (email corporativo)",
+        "Acceso a Slack / sistema de comunicación",
+        "Alta en plataformas de gestión (Reyesoft OS, CRM, etc.)",
+        "Configuración de 2FA obligatorio en todas las cuentas",
+        "Manual de contraseñas y política de seguridad entregado",
+    ]},
+    {"categoria": "Onboarding Cultural", "items": [
+        "Reunión de bienvenida con CEO / líder de área",
+        "Lectura de misión, visión y valores de la empresa",
+        "Presentación formal al equipo",
+        "Reunión 1:1 programada a los 15 días",
+        "Asignación de buddy / referente de área",
+        "Inducción a cultura Reyesoft completada",
+    ]},
+    {"categoria": "Documentación Interna", "items": [
+        "Legajo creado en Reyesoft OS",
+        "Foto del colaborador cargada",
+        "Datos de contacto de emergencia registrados",
+        "Política de vacaciones explicada",
+        "Reglamento interno firmado",
+    ]},
+]
+
+
+def _parse_legajo(path: str) -> dict[str, Any] | None:
+    try:
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        # Extract YAML frontmatter
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                data = yaml.safe_load(parts[1]) or {}
+                return data
+        return None
+    except Exception:
+        return None
+
+
+def _all_legajos() -> list[dict[str, Any]]:
+    results = []
+    for path in glob.glob(os.path.join(LEGAJOS_DIR, "*.md")):
+        data = _parse_legajo(path)
+        if data and data.get("nombre"):
+            data["_file"] = os.path.basename(path)
+            results.append(data)
+    return results
+
+
+def _parse_date(value: Any) -> date | None:
+    if not value:
+        return None
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def get_birthdays_next_days(days: int = 30) -> list[dict[str, Any]]:
+    today = date.today()
+    results = []
+    for leg in _all_legajos():
+        nacimiento = _parse_date(leg.get("fecha_nacimiento"))
+        if not nacimiento:
+            continue
+        # Next birthday this year or next
+        try:
+            birthday_this_year = nacimiento.replace(year=today.year)
+        except ValueError:
+            birthday_this_year = nacimiento.replace(year=today.year, day=28)
+        if birthday_this_year < today:
+            try:
+                birthday_next = nacimiento.replace(year=today.year + 1)
+            except ValueError:
+                birthday_next = nacimiento.replace(year=today.year + 1, day=28)
+        else:
+            birthday_next = birthday_this_year
+
+        delta = (birthday_next - today).days
+        if 0 <= delta <= days:
+            results.append({
+                "nombre": leg.get("nombre", ""),
+                "area": leg.get("area", ""),
+                "fecha_nacimiento": str(nacimiento),
+                "proximo_cumple": str(birthday_next),
+                "dias_para_cumple": delta,
+                "edad": today.year - nacimiento.year - (
+                    (today.month, today.day) < (nacimiento.month, nacimiento.day)
+                ),
+            })
+    results.sort(key=lambda x: x["dias_para_cumple"])
+    return results
+
+
+def get_vacation_status_all() -> list[dict[str, Any]]:
+    results = []
+    for leg in _all_legajos():
+        saldo = leg.get("vacaciones_saldo")
+        tomadas = leg.get("vacaciones_tomadas", 0)
+        disponibles = leg.get("vacaciones_disponibles", 0)
+        dias_ley = leg.get("vacaciones_dias_ley", 14)
+        estado = leg.get("vacaciones_estado", "normal")
+        acumuladas = leg.get("vacaciones_acumuladas", 0)
+
+        try:
+            saldo_f = float(saldo) if saldo is not None else 0.0
+        except (TypeError, ValueError):
+            saldo_f = 0.0
+
+        results.append({
+            "nombre": leg.get("nombre", ""),
+            "area": leg.get("area", ""),
+            "puesto": leg.get("puesto", ""),
+            "vacaciones_saldo": saldo_f,
+            "vacaciones_tomadas": tomadas,
+            "vacaciones_disponibles": disponibles,
+            "vacaciones_dias_ley": dias_ley,
+            "vacaciones_acumuladas": acumuladas,
+            "vacaciones_estado": estado,
+            "alerta": _vacation_alert(saldo_f, acumuladas, dias_ley),
+        })
+    results.sort(key=lambda x: x["vacaciones_saldo"])
+    return results
+
+
+def _vacation_alert(saldo: float, acumuladas: float, dias_ley: float) -> str:
+    try:
+        saldo_f = float(saldo)
+        acum_f = float(acumuladas)
+        ley_f = float(dias_ley) if dias_ley else 14.0
+    except (TypeError, ValueError):
+        return "sin_dato"
+
+    if saldo_f < 0:
+        return "deuda"
+    if acum_f >= ley_f * 1.5:
+        return "burnout_riesgo"
+    if acum_f >= ley_f * 0.8:
+        return "acumuladas_altas"
+    return "normal"
+
+
+def get_burnout_risks() -> list[dict[str, Any]]:
+    results = []
+    for v in get_vacation_status_all():
+        if v["alerta"] in ("burnout_riesgo", "acumuladas_altas"):
+            results.append(v)
+    return results
+
+
+def get_vacation_debtors() -> list[dict[str, Any]]:
+    results = []
+    for v in get_vacation_status_all():
+        if v["alerta"] == "deuda" or v["vacaciones_saldo"] < 0:
+            results.append(v)
+    return results
+
+
+def get_team_summary() -> dict[str, Any]:
+    legajos = _all_legajos()
+    total = len(legajos)
+    areas: dict[str, int] = {}
+    for leg in legajos:
+        area = str(leg.get("area") or "Sin área").strip()
+        areas[area] = areas.get(area, 0) + 1
+
+    vac_status = get_vacation_status_all()
+    deudores = [v for v in vac_status if v["alerta"] == "deuda"]
+    burnout = [v for v in vac_status if v["alerta"] in ("burnout_riesgo", "acumuladas_altas")]
+
+    cumples_hoy = get_birthdays_next_days(days=0)
+    cumples_semana = get_birthdays_next_days(days=7)
+
+    return {
+        "total_colaboradores": total,
+        "areas": areas,
+        "deudores_vacaciones": len(deudores),
+        "riesgo_burnout": len(burnout),
+        "cumples_hoy": len(cumples_hoy),
+        "cumples_proxima_semana": len(cumples_semana),
+        "alertas": _build_alerts(deudores, burnout, cumples_hoy),
+    }
+
+
+def _build_alerts(deudores, burnout, cumples_hoy) -> list[dict[str, str]]:
+    alerts = []
+    for d in deudores:
+        alerts.append({
+            "tipo": "danger",
+            "mensaje": f"{d['nombre']} adeuda {abs(d['vacaciones_saldo']):.1f} días de vacaciones",
+        })
+    for b in burnout:
+        alerts.append({
+            "tipo": "warning",
+            "mensaje": f"{b['nombre']} acumuló {b['vacaciones_acumuladas']} días — riesgo burnout",
+        })
+    for c in cumples_hoy:
+        alerts.append({
+            "tipo": "info",
+            "mensaje": f"Hoy es el cumpleaños de {c['nombre']}",
+        })
+    return alerts
+
+
+def get_onboarding_checklist(nombre: str = "") -> dict[str, Any]:
+    return {
+        "nombre": nombre,
+        "fecha_generacion": str(date.today()),
+        "categorias": ONBOARDING_CHECKLIST,
+        "total_items": sum(len(c["items"]) for c in ONBOARDING_CHECKLIST),
+    }
+
+
+def get_licenses_summary() -> list[dict[str, Any]]:
+    results = []
+    for leg in _all_legajos():
+        licencias = leg.get("licencias") or []
+        if isinstance(licencias, list) and licencias:
+            for lic in licencias:
+                if isinstance(lic, dict):
+                    results.append({
+                        "nombre": leg.get("nombre", ""),
+                        "tipo": lic.get("tipo", "Sin tipo"),
+                        "desde": lic.get("desde", ""),
+                        "hasta": lic.get("hasta", ""),
+                        "estado": lic.get("estado", ""),
+                        "motivo": lic.get("motivo", ""),
+                    })
+        ausentismo = leg.get("ausentismo_dias_anio", 0)
+        if ausentismo and int(ausentismo) > 0:
+            results.append({
+                "nombre": leg.get("nombre", ""),
+                "tipo": "ausentismo",
+                "desde": leg.get("ausentismo_ultima_fecha", ""),
+                "hasta": "",
+                "estado": "registrado",
+                "motivo": leg.get("ausentismo_ultimo_motivo", ""),
+            })
+    return results
