@@ -1,0 +1,7 @@
+{
+  "args": [
+    "mcp",
+    "--tools=agent"
+  ],
+  "command": "C:\\Users\\Lucas\\bin\\engram.exe"
+}

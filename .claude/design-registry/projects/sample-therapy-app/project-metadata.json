@@ -1,0 +1,12 @@
+{
+  "project_id": "sample-therapy-app",
+  "project_name": "TherapyMatch - Sample B2C Mental Health Platform",
+  "description": "Sample online therapy platform project for validating mental-health-b2c framework gates",
+  "vertical": "mental-health-b2c",
+  "stage": "mid_stage",
+  "created_date": "2026-05-14",
+  "validation_purpose": "Test framework schema + stage gates before Phase 0.5 Week 2",
+  "owner": "Design Registry Framework",
+  "budget": "Framework validation (minimal viable)",
+  "timeline": "2026-05-14 to 2026-05-16"
+}

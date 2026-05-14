@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "description": "Configuration schema for defining a new vertical. Use as template.",
+  "vertical_template": {
+    "vertical_id": "string: kebab-case identifier (e.g., 'mental-health-b2c')",
+    "name": "string: human-readable name",
+    "description": "string: what this vertical is (e.g., 'Online therapy, counseling, coaching')",
+    "category": "string: B2C | B2B | Creator | SaaS | Marketplace | Other",
+    "benchmarks_analyzed": [
+      {
+        "site": "string: domain",
+        "ranking_signal": "string: why it ranks",
+        "patterns_extracted": "array: pattern IDs or brief descriptions"
+      }
+    ],
+    "winning_patterns": {
+      "hero": {
+        "emotional_ratio": "number: typical warmth level for this vertical",
+        "cta_segmentation": "string: how do winners segment users",
+        "barrier_priority": "array: [primary_blocker, secondary, tertiary]",
+        "headline_type": "string: question | permission | authority | curiosity"
+      },
+      "tone": {
+        "warmth": "number 0-10",
+        "authority": "number 0-10",
+        "urgency": "number 0-10",
+        "formality": "number 0-10",
+        "data_forward": "number 0-10",
+        "notes": "string: why this tone balance works"
+      },
+      "social_proof": {
+        "primary": "string: which type works best",
+        "secondary": "array: [type2, type3]",
+        "avoid": "array: [anti_pattern1, anti_pattern2]"
+      },
+      "visual": {
+        "density": "number 0-10: how densely packed is the layout",
+        "whitespace_ratio": "number 0-100: typical % empty space",
+        "colors": "array: [color1, color2, ...] that work for this vertical",
+        "avoid_colors": "array: colors that underperform for this vertical"
+      }
+    },
+    "stage_gates": {
+      "early_stage": {
+        "definition": "string: MVP or concept, may lack assets",
+        "philosophy": "string: permissive | balanced | strict",
+        "checks": [
+          {
+            "id": "string: check identifier",
+            "rule": "string: what must be true",
+            "severity": "string: LOW | MEDIUM | HIGH",
+            "blocking": "boolean: can this FAIL or just WARN",
+            "message": "string: what to tell the user"
+          }
+        ]
+      },
+      "mid_stage": {
+        "definition": "string: beta or soft launch, some assets exist",
+        "philosophy": "string: permissive | balanced | strict",
+        "checks": "array: check objects"
+      },
+      "late_stage": {
+        "definition": "string: production ready, full go-to-market",
+        "philosophy": "string: permissive | balanced | strict",
+        "checks": "array: check objects"
+      }
+    },
+    "missing_asset_handling": {
+      "logos": "string: when to mark MISSING vs FAIL",
+      "metrics": "string: when to mark MISSING vs FAIL",
+      "testimonials": "string: when to mark MISSING vs FAIL",
+      "credentialing": "string: when to mark MISSING vs FAIL",
+      "notes": "string: general guidance on missing assets vs bad design"
+    },
+    "core_trust_signals": {
+      "description": "array: what MUST exist by late_stage (non-negotiable)",
+      "examples": "for therapy: credentialing or insurance coverage; for B2B: ROI or compliance"
+    },
+    "anti_patterns": {
+      "high_risk": "array: patterns that kill conversion for this vertical",
+      "medium_risk": "array: patterns that hurt but don't block",
+      "low_risk": "array: patterns that are suboptimal"
+    },
+    "reference_sites": {
+      "description": "array: URLs analyzed to build this vertical's config"
+    }
+  }
+}

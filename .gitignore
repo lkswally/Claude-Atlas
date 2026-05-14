@@ -1,0 +1,60 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+.secret/
+*.key
+*.pem
+
+# Settings local (user-specific)
+settings.local.json
+
+# Caches and runtime
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage/
+htmlcov/
+node_modules/
+.next/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Logs and temp files
+logs/
+*.log
+tmp_*
+*.tmp
+*.bak
+*.orig
+
+# OS noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Exclude projects with their own repos (not part of Claude-Atlas)
+Proyectos internos/
+conexo-web/
+lucas-rojo-web/web/.git/
+
+# Test databases and temp data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+_test_runs/

@@ -1,0 +1,180 @@
+{
+  "vertical_id": "mental-health-b2c",
+  "name": "Mental Health Therapy (B2C)",
+  "description": "Online therapy, counseling, coaching platforms targeting individuals seeking mental health support",
+  "category": "B2C",
+  "winning_patterns": {
+    "hero": {
+      "emotional_ratio": 7,
+      "cta_segmentation": "pre_qualify",
+      "barrier_priority": ["trust_in_therapist", "cost_anxiety", "commitment_anxiety"],
+      "headline_type": "permission"
+    },
+    "tone": {
+      "warmth": 7,
+      "authority": 6,
+      "urgency": 0,
+      "formality": 4,
+      "data_forward": 4,
+      "notes": "Empathy + credibility, zero pressure"
+    },
+    "social_proof": {
+      "primary": "testimonials_with_photos_and_names",
+      "secondary": ["therapist_credentialing_stats", "outcome_metrics"],
+      "avoid": ["generic_reviews", "unnamed_testimonials", "pressure_tactics"]
+    },
+    "visual": {
+      "density": 3,
+      "whitespace_ratio": 45,
+      "colors": ["teal", "blue", "green"],
+      "avoid_colors": ["pure_medical_white", "aggressive_red"]
+    }
+  },
+  "stage_gates": {
+    "early_stage": {
+      "definition": "MVP or concept, may lack customer testimonials or full credentialing info",
+      "philosophy": "permissive",
+      "checks": [
+        {
+          "id": "tone_warmth_baseline",
+          "rule": "emotional_ratio >= 5",
+          "severity": "MEDIUM",
+          "blocking": false,
+          "message": "Tone is becoming too clinical. This vertical needs empathy + authority, not just authority."
+        },
+        {
+          "id": "cta_clarity",
+          "rule": "CTA text is action-oriented (not 'Learn more', 'See more', 'Explore')",
+          "severity": "MEDIUM",
+          "blocking": false,
+          "message": "CTA should guide action: 'Get matched', 'Check coverage', 'Start assessment'. Vague CTAs reduce conversion."
+        },
+        {
+          "id": "hero_permission_language",
+          "rule": "hero uses permission-based language (optional, recommended)",
+          "severity": "LOW",
+          "blocking": false,
+          "message": "SUGGEST: Include permission language like 'You deserve...', 'It's okay...' to reduce shame barrier"
+        }
+      ]
+    },
+    "mid_stage": {
+      "definition": "Beta or soft-launch, have early customers but may lack logos or full metrics",
+      "philosophy": "balanced",
+      "checks": [
+        {
+          "id": "tone_warmth_mid",
+          "rule": "emotional_ratio >= 6",
+          "severity": "MEDIUM",
+          "blocking": false,
+          "message": "Tone is drifting cold. Increase empathy language and warmth for this vertical."
+        },
+        {
+          "id": "credentialing_presence",
+          "rule": "therapist credentials mentioned (licenses, experience, expertise)",
+          "severity": "HIGH",
+          "blocking": false,
+          "message": "WARN - credentialing is CORE trust signal for therapy. Add therapist qualifications prominently."
+        },
+        {
+          "id": "testimonials_presence",
+          "rule": "at least 1 real testimonial with name, photo, specific outcome",
+          "severity": "MEDIUM",
+          "blocking": false,
+          "message": "MISSING_ASSET - You need real customer stories. Start collecting testimonials from early users."
+        },
+        {
+          "id": "zero_urgency_tactics",
+          "rule": "no countdown timers, scarcity language, or 'limited spots' messaging",
+          "severity": "HIGH",
+          "blocking": false,
+          "message": "DESIGN_ISSUE - Pressure tactics backfire for mental health. Remove urgency language."
+        },
+        {
+          "id": "whitespace_density",
+          "rule": "whitespace_ratio >= 35%",
+          "severity": "MEDIUM",
+          "blocking": false,
+          "message": "Layout feels too dense. Add breathing room to signal calm + accessibility."
+        }
+      ]
+    },
+    "late_stage": {
+      "definition": "Production ready, full go-to-market, should have testimonials, clear credentialing, full funnel",
+      "philosophy": "strict",
+      "checks": [
+        {
+          "id": "tone_warmth_late",
+          "rule": "emotional_ratio >= 7",
+          "severity": "HIGH",
+          "blocking": true,
+          "message": "FAIL - Warmth is below expectation for launch. This vertical MUST feel empathetic, not clinical."
+        },
+        {
+          "id": "credentialing_full",
+          "rule": "therapist qualifications clearly stated (licenses, specialties, experience)",
+          "severity": "HIGH",
+          "blocking": true,
+          "message": "FAIL - Credentialing is NON-NEGOTIABLE for therapy. Users must see proof of expertise."
+        },
+        {
+          "id": "testimonials_diverse",
+          "rule": "at least 3-5 diverse testimonials with names, photos, specific outcomes",
+          "severity": "HIGH",
+          "blocking": true,
+          "message": "FAIL - Need diverse customer stories. Collect more testimonials before launch."
+        },
+        {
+          "id": "zero_urgency_final",
+          "rule": "zero countdown timers, scarcity language, pressure tactics",
+          "severity": "HIGH",
+          "blocking": true,
+          "message": "FAIL - Pressure tactics detected. Remove all urgency language for production."
+        },
+        {
+          "id": "conversion_funnel",
+          "rule": "clear path from hero CTA → questionnaire → matching process",
+          "severity": "HIGH",
+          "blocking": true,
+          "message": "FAIL - Conversion funnel has gaps. Wire all CTAs and clarify the matching process."
+        },
+        {
+          "id": "flexibility_language",
+          "rule": "explicitly mention 'cancel anytime', flexible scheduling, message at own pace",
+          "severity": "MEDIUM",
+          "blocking": false,
+          "message": "WARN - Flexibility language removes commitment anxiety. Add reassurance: 'cancel anytime', 'message at your pace'"
+        }
+      ]
+    }
+  },
+  "missing_asset_handling": {
+    "testimonials": "early_stage=MISSING (collect), mid_stage=MISSING if <1, late_stage=FAIL if <3",
+    "metrics": "early_stage=INFO, mid_stage=MISSING if not quantified, late_stage=MISSING if no outcomes",
+    "credentialing": "all_stages=WARN if missing (core trust signal)",
+    "logos": "not critical for B2C therapy, don't mark FAIL",
+    "notes": "Distinguish between 'missing assets' (content not created yet) and 'design issues' (wrong pattern applied)"
+  },
+  "core_trust_signals": [
+    "therapist_credentialing (licenses, experience, specialties)",
+    "customer_testimonials_with_outcomes",
+    "flexible_commitment_language (can cancel)"
+  ],
+  "anti_patterns": {
+    "high_risk": [
+      "urgency_tactics (countdowns, scarcity, limited spots)",
+      "generic_testimonials (no name, photo, or specific outcome)",
+      "clinical_coldness (no warmth, feels sterile)"
+    ],
+    "medium_risk": [
+      "vague_cta_text",
+      "dense_layout (low whitespace)",
+      "too_much_data (therapy is personal, not metrics-driven)"
+    ],
+    "low_risk": [
+      "missing_comparison_table",
+      "no_founder_story",
+      "limited_color_variation"
+    ]
+  }
+}
