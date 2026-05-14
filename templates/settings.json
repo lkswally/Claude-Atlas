@@ -1,0 +1,69 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/block-no-verify.js" }],
+        "description": "Blocks git commit/push --no-verify and --no-gpg-sign"
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/config-protection.js" }],
+        "description": "Warns when modifying linter/formatter/tsconfig files"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/quality-gate.js" }],
+        "description": "Warns about debugger, .only(), @ts-ignore in JS/TS files"
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/console-log-warning.js" }],
+        "description": "Warns about console.log/warn/error in production JS/TS files"
+      },
+      {
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/suggest-compact.js", "async": true }],
+        "description": "Suggests /compact every ~50 tool calls to manage context window"
+      },
+      {
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/cost-tracker.js", "async": true }],
+        "description": "Logs tool calls by category for cost/usage analysis"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/session-summary.js", "async": true }],
+        "description": "Logs session activity for recovery and tracking"
+      },
+      {
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/engram-sync.js --hook", "async": true, "timeout": 60000 }],
+        "description": "Auto-syncs Engram memories to GitHub on session stop"
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/session-start-context.js" }],
+        "description": "Loads previous session context on startup"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/pre-compact-engram.js" }],
+        "description": "Saves session snapshot and resets tool counter before context compaction"
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "engram@engram": true
+  },
+  "extraKnownMarketplaces": {
+    "engram": {
+      "source": {
+        "source": "github",
+        "repo": "Gentleman-Programming/engram"
+      }
+    }
+  }
+}
