@@ -16,18 +16,64 @@ model: opus
 
 **Ejecutar SIEMPRE al inicio, antes de cualquier otra cosa.**
 
-### Carga progresiva del DAG State (2 niveles)
+### Carga progresiva del DAG State (Light vs Full Mode — Phase 0.6A+)
 
 El DAG State puede ser grande (10+ KB en proyectos avanzados). Para no inflar el contexto innecesariamente, se carga en 2 niveles:
 
-| Nivel | Que carga | Cuando | Tokens aprox |
-|-------|-----------|--------|--------------|
-| **Boot ligero** | fase_actual, tarea_actual/total, stack (resumen 1 linea), ultimo_save | SIEMPRE al retomar | ~50-100 |
-| **Boot completo** | DAG State entero (fases_completadas, tareas_fallidas, certificacion, decisiones) | Solo cuando el orquestador necesita tomar decisiones de coordinacion | ~500-2000 |
+| Modo | Contenido | Cuándo activar | Tokens aprox | Mejora |
+|------|-----------|----------------|--------------|---------|
+| **Boot LIGHT** | fase_actual, tarea_actual/total, stack (1 linea), ultimo_save | Retomar sesión anterior sin cambios | ~50-100 | -70% vs full |
+| **Boot FULL** | DAG State entero (fases_completadas, tareas_fallidas, decisiones, certificacion) | Decisiones de orquestación, cambios de fase, escalaciones | ~500-2000 | 100% contexto |
 
-**Regla**: el boot ligero es suficiente para informar al usuario y continuar la tarea en progreso. El boot completo solo se necesita cuando:
+**Lógica de selección (OBLIGATORIA Phase 0.6A+)**:
+
+```
+_boot_light() ← USAR CUANDO:
+  ✅ session_id == last_session_id
+  ✅ intento_actual < 3 (reintentos aún disponibles)
+  ✅ No hay cambio de fase solicitado
+  ✅ No hay escalación
+
+_boot_full() ← USAR CUANDO:
+  ✅ session_id != last_session_id (nueva sesión)
+  ✅ intento_actual >= 3 (escalación — necesita DAG completo)
+  ✅ Cambio de fase (Fase 1 → 2, 3 → 4, etc.)
+  ✅ Decisión crítica de arquitectura/stack
+  ✅ Usuario solicita revisión de contexto histórico
+```
+
+### Variables de estado para Boot Sequence (PERSISTIDAS en Engram)
+
+```yaml
+# Topic_key: {proyecto}/boot-state (OBLIGATORIO guardar aquí)
+
+session_id: "vibecoding-atlas-20260514-143022"  # UUID unico por sesión
+last_session_id: "vibecoding-atlas-20260514-093015"  # Sesión anterior (para detectar continuidad)
+intento_actual: 2  # Contador 1-3 (reset en nueva sesión o escalación)
+boot_mode_used: "light"  # "light" o "full" (para debugging)
+timestamp_boot: "2026-05-14T14:30:22Z"  # Cuándo se hizo el último boot
+```
+
+**Ciclo de vida**:
+1. Sesión nueva: `session_id` ← nuevo UUID, `intento_actual` ← 1
+2. Retomar misma sesión: `session_id` == `last_session_id`, `intento_actual` += 1
+3. Cambio de sesión (usuario cierra y reabre): `last_session_id` ← anterior, `session_id` ← nuevo, `intento_actual` ← 1
+4. Escalación (intento_actual ≥ 3): Pasar a `_boot_full()` automáticamente
+
+**Guardar después de cada boot**:
+```
+mem_save(
+  title: "{proyecto} — boot state",
+  content: "session_id: {session_id}\nlast_session_id: {last_session_id}\nintento_actual: {intento_actual}\n...",
+  type: "config",
+  topic_key: "{proyecto}/boot-state",
+  project: "{proyecto}"
+)
+```
+
+**Regla de oro**: El boot ligero es suficiente para informar al usuario y continuar tarea en progreso. El boot completo solo se necesita cuando:
 - Se completa una fase y hay que decidir la siguiente
-- Una tarea falla 3 veces y hay que escalar
+- Una tarea falla 3 veces (`intento_actual ≥ 3`) y hay que escalar
 - El usuario pide cambiar scope/stack/prioridades
 - Se inicia Fase 4 (certificacion) o Fase 5 (publicacion)
 
@@ -76,7 +122,18 @@ El DAG State puede ser grande (10+ KB en proyectos avanzados). Para no inflar el
 3. Si hay una sesion anterior abierta en Engram (no cerrada por crash/Ctrl+C) → cerrarla:
    `mem_session_end(id: "{sesion_anterior_id}")` — previene acumulacion de sesiones huerfanas.
 
-4. `mem_session_start(id: "vibecoding-{proyecto}-{timestamp}", project: "{proyecto}")`
+4. **Determinar boot mode**:
+   ```
+   IF mem_search("{proyecto}/boot-state") retorna last_session_id == session_id 
+      AND intento_actual < 3:
+     THEN _boot_light()  // Economía de contexto
+   ELSE:
+     THEN _boot_full()   // Contexto completo necesario
+   ```
+   
+   Guardar la decisión en topic_key `{proyecto}/boot-state` con campo `boot_mode_used`
+
+5. `mem_session_start(id: "vibecoding-{proyecto}-{timestamp}", project: "{proyecto}")`
 
 ### Re-lectura bajo demanda del DAG State completo
 

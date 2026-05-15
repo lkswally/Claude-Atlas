@@ -58,3 +58,16 @@ lucas-rojo-web/web/.git/
 *.db-wal
 *.db-shm
 _test_runs/
+
+# Claude Code cache and session data (user-specific, not project config)
+.claude/plugins/cache/
+.claude/plugins/installed_plugins.json
+.claude/plugins/known_marketplaces.json
+.claude/plugins/marketplaces/
+.claude/sessions/
+.claude/shell-snapshots/
+.claude/snapshots/
+.claude/projects/
+
+# User-specific settings (keep settings.json out if it has API keys)
+# .claude/settings.json is commented out — include it in version control for team alignment
