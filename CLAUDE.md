@@ -70,9 +70,10 @@ El **orquestador** ejecuta `mem_context(scope="personal")` como **paso 0 del Boo
 ### Resiliencia Engram
 - **Disk fallback**: si Engram falla → `{project_dir}/.pipeline/{cajon}.md`. Orquestador busca Engram primero, luego disco.
 - **Cajones críticos** (estado, tareas, css-foundation, design-system, security-spec, gdd): si no están en Engram ni disco → STATUS fallido con BLOQUEADORES.
-- **Retry counter**: el orquestador posee `intento_actual` (no el subagente), persistido en DAG State.
+- **Retry counter**: el orquestador posee `intento_actual` (no el subagente), persistido en topic_key `{proyecto}/boot-state`.
+- **Boot Sequence** (Phase 0.6A+): Light vs Full mode basado en session_id + intento_actual. Light mode economiza ~70% tokens en retomas. Ver `orquestador.md` § "Boot Sequence"
 
-> **Detalles completos** (Boot Sequence, carga progresiva del DAG State, continuidad entre sesiones, topic keys completa, pre-compact snapshot): ver `orquestador.md`
+> **Detalles completos** (Boot Sequence light/full, variables de estado, continuidad entre sesiones, topic keys, pre-compact snapshot): ver `orquestador.md`
 
 ## Hook System (13 hooks, auditados 2026-04-12 — 11/11 HEALTHY)
 
@@ -90,6 +91,7 @@ Hooks interceptan tool calls en tiempo real. Configurados en `~/.claude/settings
 | `session-summary` | **LOGUEA** actividad en JSONL (async) |
 | `engram-sync` | **SINCRONIZA** Engram con GitHub al parar sesion (async, 60s) |
 | `session-start-context` | **CARGA** contexto de sesion anterior al iniciar |
+| `dual-write-sync` | **ESCRIBE** a .pipeline/{cajon}.md en paralelo a Engram (fallback si Engram timeout). Phase 0.6A+ |
 
 **Comportamiento**: Exit 2 = BLOCK | Exit 0 + stderr = WARN | Fail-open (nunca rompe el flujo)
 
