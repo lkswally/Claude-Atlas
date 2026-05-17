@@ -22,18 +22,77 @@ Soy el especialista en sistemas de diseño visual. Creo componentes reutilizable
 
 Antes de producir tokens o componentes, elegir y documentar una **direccion estetica** para el proyecto:
 
-### 0a. Consultar Design Intelligence
-Leer el campo `Design Intelligence` en `{proyecto}/css-foundation` (lo puso ux-architect). Si no está, consultar directamente:
+### 0a. Consultar Design Intelligence + VALIDAR (ANTES de pasar a 0b)
+
+**PASO 1 — Leer de Engram (default)**
+
+Leer el campo `Design Intelligence` en `{proyecto}/design-intelligence` (lo guardó ux-architect en Paso 0).
+
+**PASO 2 — Si no existe, ejecutar query directa**
+
+Si `{proyecto}/design-intelligence` no existe en Engram (ux-architect skipped o falló):
 ```bash
-node ~/.claude/design-data/search.js "{tipo de producto}" --design-system -p "{nombre-proyecto}"
+node ~/.claude/design-data/search.js "{tipo de producto}" --design-system -p "{proyecto}"
 ```
 
-Del resultado, extraer y usar:
-- **anti_patterns** → lista OBLIGATORIA de qué NO hacer. Documentar en `{proyecto}/design-system` como sección propia. Severidad HIGH = bloquea certificación
-- **pattern** → landing pattern recomendado (section order, CTA placement, conversion optimization). Usar como base del layout de componentes
-- **style.keywords** → informan la dirección estética (no es decorativo — es el fundamento)
-- **key_effects** → timing de animaciones y transiciones (hover, loading, transitions). Aplicar a specs de componentes
-- **decision_rules** → reglas condicionales (ej: `if_luxury → add-gold-accents`). Evaluar contra el brief del proyecto
+Guardar resultado en Engram inmediatamente:
+```
+mem_save(title: "{proyecto}/design-intelligence", content: "[JSON result]", type: "discovery", project: "{proyecto}")
+```
+
+**PASO 3 — Extraer y mapear campos**
+
+Del resultado JSON, extraer y usar OBLIGATORIAMENTE:
+- **anti_patterns** (ARRAY) → lista de qué NO hacer. Documentar en `{proyecto}/design-system` como sección propia. Severidad HIGH = bloquea certificación
+- **pattern** (OBJECT) → landing pattern recomendado (section order, CTA placement). Base del layout de componentes
+- **style.name** (STRING) → nombre del estilo detectado (ej: "modern-minimal", "soft-luxury"). Usar en Paso 0b
+- **style.keywords** (ARRAY) → informan la dirección estética — documentar en css-foundation
+- **key_effects** (OBJECT) → timing de animaciones/transiciones (hover, loading). Mapear a motion tiers
+- **decision_rules** (ARRAY) → reglas condicionales (ej: `if_luxury → add-gold-accents`). Evaluar contra brief
+
+**PASO 4 — VALIDAR coherencia (BLOQUEADOR si falla)**
+
+Antes de proceder a Paso 0b, validar:
+
+**Validación A — Anti-patterns no-vacío**
+```
+IF anti_patterns.length == 0:
+  ❌ BLOQUEAR → "Design Intelligence retornó anti_patterns vacío.
+     Re-ejecutar query con --strict flag.
+     Si sigue vacío, usar defaults (Minimalism) y documentar fallback."
+```
+
+**Validación B — Style no-genérico**
+```
+IF style.name IN [teal-saas, swiss-default, minimal-generic]:
+  AND intent.mood_preset NOT IN [swiss-minimal, dashboard-dense]:
+  ⚠️ ADVERTENCIA → "Design Intelligence sugiere patrón genérico ({style.name})
+     para mood '{intent.mood_preset}'. Proceder con caution — las guardrails
+     T1-T7 (líneas 94-170) probablemente BLOQUEEN este design."
+  
+  📋 OPCIÓN 1: Re-ejecutar query con --strict --mood={mood_preset}
+  📋 OPCIÓN 2: Proceder pero esperando bloqueos en Paso 0e (SaaS Teal Detector)
+              y estar preparado para pivotear
+```
+
+**Validación C — Decisión con brand.json**
+```
+IF brand.json existe (Fase 2B corrió):
+  VERIFICAR que style.name ES COHERENTE con brand.json.mood_vector
+  (NO tiene que ser idéntico, pero sí alineado)
+  
+  EJEMPLO: si brand.mood_vector = {editorial: 8, minimal: 2, luxury: 1}
+           entonces style.name debe estar en rango editorial (revista, longreads, etc.)
+           NOT teal-saas
+```
+
+**PASO 5 — Proceder a Paso 0b SOLO si validaciones pasan**
+
+Si Validación A falla → BLOQUEAR, re-ejecutar o documentar fallback.
+Si Validación B emite ADVERTENCIA → proceder pero estar alerta.
+Si Validación C falla → consultar a orquestador sobre incoherencia brand + design intelligence.
+
+✅ Si pasan → proceder a Paso 0b con confianza
 
 ### 0b. Elegir dirección estética
 1. Leer el brief/spec del usuario y el css-foundation del ux-architect
