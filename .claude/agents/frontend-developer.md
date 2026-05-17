@@ -383,9 +383,71 @@ Cuando una tarea requiere un efecto visual (animacion, hover, scroll reveal, par
 
 ### 21st.dev — Workflow de consulta via Context7 MCP
 
-**Cuándo**: el handoff incluye `COMPONENT_SOURCE: 21st.dev`, o la tarea requiere un componente visual/animado que podría existir pre-hecho (backgrounds, heroes, cards animadas, transiciones).
+**Cuándo**: el handoff incluye `COMPONENT_SOURCE: 21st.dev`, O la tarea requiere un componente visual/animado que podría existir pre-hecho (backgrounds, heroes, cards animadas, transiciones).
 
-**Flujo (2 pasos — máx 3 llamadas por consulta)**:
+#### Fase 0 — Validación PRE-consulta (OBLIGATORIO — ejecutar ANTES de consultar)
+
+Antes de consultar 21st.dev, aplicar filtros anti-generic para evitar componentes genéricos (teal SaaS, defaults):
+
+**Validación 1 — Coherencia con Brand + Motion Tier**
+```
+LEER intent.mood_preset Y motion_intensity (de {proyecto}/intent)
+
+IF motion_intensity ≤ 3:
+  ❌ SKIP 21st.dev completamente — componentes de 21st.dev son overengineered
+     USAR: CSS puro + hover states simples
+     GUARDAR: "motion_intensity≤3 → no use 21st.dev" en Engram
+
+IF motion_intensity 4-6:
+  ✅ 21st.dev OK pero validar que sea Framer Motion, no GSAP
+
+IF motion_intensity ≥ 7:
+  ✅ 21st.dev OK, puede incluir GSAP + Lenis + SplitText
+```
+
+**Validación 2 — Anti-patterns Bloqueantes**
+```
+LEER anti_patterns_HIGH array desde {proyecto}/design-intelligence
+
+FOR each anti_pattern:
+  IF component_intención violated by anti_pattern:
+    ❌ SKIP 21st.dev — implementar custom
+  
+  EJEMPLOS:
+  - Si anti_pattern = ["gradient-overuse"]
+    Y necesitas "gradient mesh background" → ❌ custom CSS sin gradients
+  - Si anti_pattern = ["shadow-gloss"]
+    Y buscas "card hover effect" con shadow → ❌ buscar alternative o custom
+```
+
+**Validación 3 — Coherencia con brand.json (si existe)**
+```
+IF brand.json existe:
+  LEER brand.json.mood_vector
+  
+  IF mood_vector es minimal/corporate (ej: {swiss: 8, minimal: 6, luxury: 1}):
+    ⚠️ 21st.dev components pueden ser overkill — usar custom si es posible
+    PROCEED ONLY IF motion_intensity ≥ 4 AND componente es light/minimal
+
+  IF mood_vector es audaz (editorial, luxury, immersive):
+    ✅ 21st.dev OK — alineado con marca
+```
+
+**Validación 4 — Guardrail T1-T7 (ui-designer lines 94-170)**
+```
+VERIFICAR que la tarea NO cae en patrones SaaS generic:
+  - Centered hero + 2 CTAs + 3 feature cards
+  - Teal/cyan paleta con typography genérica
+  - Cards uniformes con border-radius 8-16px
+
+IF la tarea PROPONE uno de estos → ❌ SKIP 21st.dev
+DOCUMENTAR en Engram: "Componente descartado por T1-T7 guardrail"
+```
+
+#### Fase 1 — Flujo de Consulta (2 pasos — máx 3 llamadas por consulta)
+
+SOLO si Fase 0 validaciones pasan:
+
 ```
 Paso 1: resolve-library-id("21st.dev")
         → retorna library ID: /websites/21st_dev_community_components
@@ -396,17 +458,68 @@ Paso 2: query-docs("/websites/21st_dev_community_components", "{query descriptiv
         "parallax scroll", "gradient mesh", "animated button", "testimonial carousel"
 ```
 
-**Reglas de adaptación** (NO copy-paste directo):
-1. **Leer** el código retornado por Context7 — entender la mecánica, no copiar ciegamente
-2. **Extraer** solo los patterns útiles: animaciones, efectos, interacciones
-3. **Adaptar** al design system del proyecto:
-   - Colores → usar tokens de `{proyecto}/css-foundation` o brand.json
-   - Tipografía → usar las fuentes definidas en el proyecto
-   - Spacing → usar escala del design system
-   - Clases → integrar con Tailwind/CSS del proyecto (no dejar hardcodeados)
-4. **Dependencias**: los componentes de 21st.dev suelen usar `framer-motion` (motion/react). Si el proyecto no lo tiene → `npm install framer-motion`
-5. **NO instalar** paquetes `@21st-dev/*` — son solo código copiado y adaptado
-6. **Evaluar peso**: si el componente requiere deps pesadas (Three.js, canvas complejos), informar al orquestador sobre impacto en bundle
+#### Fase 2 — Validación POST-consulta + Adaptación
+
+Después de obtener el componente de 21st.dev:
+
+**Validación A — Anti-patterns en Código**
+```
+VERIFICAR que el componente retornado NO usa técnicas prohibidas:
+
+FOR each anti_pattern IN anti_patterns_HIGH:
+  BUSCAR en código si usa esa técnica
+  
+  EJEMPLO: si anti_pattern = "gradient-overuse"
+           Grep en código: /linear-gradient|radial-gradient/
+           IF encontrado:
+             ❌ RECHAZAR componente
+             DOCUMENTAR: "Componente rechazado: contiene gradient-overuse (anti-pattern)"
+             IMPLEMENTAR: custom solution sin gradients
+```
+
+**Validación B — Contraste con Brand**
+```
+IF brand.json existe:
+  VERIFICAR que colores en componente son adaptables a brand.json tokens
+  
+  SI colores están hardcodeados y NO son reemplazables:
+    ⚠️ ADVERTENCIA — el componente puede lucir desalineado con brand
+    OPCIÓN: (a) usar tokens de brand.json en lugar
+           (b) rechazar y implementar custom
+```
+
+**Reglas de Adaptación** (OBLIGATORIAS — NO copy-paste directo):
+
+1. **LEER** el código retornado — entender la mecánica, no copiar ciegamente
+2. **VALIDAR** contra anti_patterns (Validación A arriba)
+3. **EXTRAER** solo los patterns útiles: animaciones, efectos, interacciones
+4. **ADAPTAR** al design system del proyecto:
+   - **Colores** → reemplazar con tokens de `{proyecto}/css-foundation` o brand.json
+     ```js
+     // ANTES: background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+     // DESPUÉS: background: `linear-gradient(135deg, var(--color-primary), var(--color-secondary))`
+     ```
+   - **Tipografía** → usar las fuentes definidas en el proyecto (no dejar Google Fonts hardcodeadas)
+     ```js
+     // ANTES: fontFamily: "Inter, sans-serif"
+     // DESPUÉS: fontFamily: "var(--font-heading)" // definido en css-foundation
+     ```
+   - **Spacing** → mapear a escala de design system
+     ```js
+     // ANTES: padding: "24px"
+     // DESPUÉS: padding: "var(--space-6)" // si --space-6 = 24px en css-foundation
+     ```
+   - **Clases** → integrar con Tailwind/CSS del proyecto (no dejar hardcodeados)
+   - **Motion timing** → validar contra motion_intensity (no usar GSAP si motion≤3)
+
+5. **DEPENDENCIAS**: los componentes de 21st.dev suelen usar `framer-motion` (motion/react). 
+   - Si el proyecto NO tiene → `npm install framer-motion`
+   - Si el proyecto usa GSAP → validar que componente usa GSAP, no Framer (para consistency)
+   - NO instalar paquetes `@21st-dev/*` — son solo código copiado y adaptado
+
+6. **EVALUAR PESO**: si el componente requiere deps pesadas (Three.js, canvas complejos):
+   - Informar al orquestador sobre impacto en bundle
+   - Considerar alternativa CSS-only si motion_intensity lo permite
 
 **Qué buscar por tipo de tarea**:
 | Necesidad | Query sugerida |

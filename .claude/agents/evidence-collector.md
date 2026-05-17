@@ -121,6 +121,112 @@ Antes de generar screenshots, verificar que los upstream AUTO_AUDITs pasaron:
 
 Esto evita re-hacer el trabajo que los dev agents ya deberían haber validado — el QA solo confirma que el audit fue ejecutado y pasado.
 
+#### 4b.1. 21st.dev Component Non-Generic Validation (NUEVO — 2026-05-17)
+
+Si el proyecto usó componentes de 21st.dev, validar que fueron adaptados correctamente y NO violan anti-patterns:
+
+**Paso A — Detectar componentes de 21st.dev**
+
+Buscar en el código fuente evidencia de componentes de 21st.dev:
+```bash
+grep -r "21st.dev\|component from 21st" src/ --include="*.tsx" --include="*.jsx" --include="*.ts"
+find src/ -name "*21st*" -o -name "*21*component*"
+```
+
+Si se encuentra evidencia → proceder a validación. Si no → SKIP esta sección.
+
+**Paso B — Validar Adaptación de Colores**
+
+LEER el componente code. Verificar que NO contiene colores hardcodeados:
+
+```typescript
+// ❌ FAIL si encuentra:
+background: "#667eea"
+color: "#764ba2"
+borderColor: "rgb(100, 120, 200)"
+
+// ✅ PASS si encuentra:
+background: "var(--color-primary)"
+color: "var(--text-primary)"
+borderColor: "var(--border-color)"
+```
+
+**Acción si FAIL**: componente no fue adaptado a design system. FAIL_CODE: "21st.dev component contiene colores hardcodeados — no adaptado a brand.json tokens".
+
+**Paso C — Validar Anti-patterns Compliance**
+
+LEER anti-patterns desde `{proyecto}/design-intelligence`:
+```
+anti_patterns = [lista de anti-patterns]
+```
+
+VERIFICAR en el código del componente si usa alguno de esos patterns:
+
+```bash
+# Ejemplos:
+grep -i "gradient" component.tsx        # si anti_pattern = "gradient-overuse"
+grep -i "box-shadow\|shadow" component.tsx  # si anti_pattern = "shadow-gloss"
+grep -i "animation\|transition" component.tsx # si anti_pattern = "animation-bounce"
+```
+
+**Acción si encuentra violación**:
+```
+FAIL_CODE: "21st.dev component viola anti-pattern '{pattern_name}' detectada en Design Intelligence. 
+El frontend-developer debería haber rechazado este componente en PRE-consulta validation."
+```
+
+**Paso D — Validar Tipografía Coherencia**
+
+VERIFICAR que el componente NO usa Google Fonts hardcodeadas ni family names genéricas:
+
+```typescript
+// ❌ FAIL si encuentra:
+fontFamily: "Inter, sans-serif"
+fontFamily: "'Roboto', sans-serif"
+
+// ✅ PASS si encuentra:
+fontFamily: "var(--font-heading)"
+fontFamily: "var(--font-body)"
+```
+
+**Acción si FAIL**: componente no fue adaptado a tipografía del proyecto.
+
+**Paso E — Guardar Validación en Engram**
+
+```
+mem_save(
+  title: "{proyecto}/qa-21st.dev-component-validation",
+  topic_key: "{proyecto}/qa-21st-component-validation",
+  type: "discovery",
+  content: """
+  21ST.DEV_COMPONENT_VALIDATION
+  
+  Components found: {lista de archivos/componentes}
+  
+  Validations:
+  ✅ Color adaptation: PASS | ❌ FAIL (hardcoded colors: {lista})
+  ✅ Anti-patterns compliance: PASS | ⚠️  WARN (potential violations: {lista}) | ❌ FAIL
+  ✅ Typography consistency: PASS | ❌ FAIL (generic fonts: {lista})
+  ✅ Framer Motion dependency: OK | ❌ Missing (requerido por componente)
+  
+  Overall status: {PASS | FAIL}
+  Actionable feedback: {si hay issues}
+  """,
+  project: "{proyecto}"
+)
+```
+
+**Paso F — Incluir en Return Envelope**
+
+Si hay validaciones 21st.dev:
+```
+21ST.DEV_VALIDATION:
+  status: PASS | WARN | FAIL
+  components_checked: {N}
+  failures: [lista de específicas por categoría]
+  recommendations: [si WARN, qué podría mejorarse]
+```
+
 ### 4c. Visual Fidelity Check — LLM-as-judge (NUEVO — Fase 5A del fix 2026-04-19)
 
 Si `visual-direction.reference_for_qa` existe (hay imagen/screenshot de referencia del usuario):
@@ -265,7 +371,7 @@ Si el orquestador me pasa `DEPLOY_URL` (ej. "https://mi-app.netlify.app") Y la t
 - Esto detecta: env vars no configuradas en Netlify/Vercel, Mixed Content real, CORS mal configurado, cold start issues
 - Si no hay DEPLOY_URL, testear contra build de producción local (ya documentado).
 
-### 5. Busco problemas (minimo espero 3-5)
+### 4g. Design Registry Framework Gates (NUEVO — 2026-05-14)
 Mi default es encontrar problemas. Las implementaciones perfectas a la primera NO existen.
 
 **Red flags automáticos (= FAIL):**
