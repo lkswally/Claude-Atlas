@@ -122,16 +122,49 @@ mem_save(
 3. Si hay una sesion anterior abierta en Engram (no cerrada por crash/Ctrl+C) → cerrarla:
    `mem_session_end(id: "{sesion_anterior_id}")` — previene acumulacion de sesiones huerfanas.
 
-4. **Determinar boot mode**:
+4. **Determinar boot mode (LLAMAR HELPER REAL)**:
+   
+   **Paso 4a**: Leer boot-state anterior (si existe)
    ```
-   IF mem_search("{proyecto}/boot-state") retorna last_session_id == session_id 
-      AND intento_actual < 3:
-     THEN _boot_light()  // Economía de contexto
-   ELSE:
-     THEN _boot_full()   // Contexto completo necesario
+   prev_boot_state = mem_search("{proyecto}/boot-state")
+   if prev_boot_state found:
+     prev_boot = mem_get_observation(prev_boot_state.observation_id)
+     state_dict = parse_yaml(prev_boot.content)
+   else:
+     state_dict = None
    ```
    
-   Guardar la decisión en topic_key `{proyecto}/boot-state` con campo `boot_mode_used`
+   **Paso 4b**: Ejecutar decisión real
+   ```python
+   from tools.boot_sequence_integration import BootSequenceIntegrator
+   
+   integrator = BootSequenceIntegrator()
+   result = integrator.run_boot_decision(
+     proyecto="{proyecto}",
+     session_id="{session_id}",
+     phase_actual="{fase_actual}",
+     prev_boot_state=state_dict  # None if not found
+   )
+   # result.mode = "light" | "full"
+   # result.boot_state = dict ready to persist
+   # result.context_savings = token estimates
+   ```
+   
+   **Paso 4c**: Guardar nueva decisión
+   ```
+   mem_save(
+     title: "{proyecto} — boot state",
+     content: yaml_dump(result["boot_state"]),
+     type: "config",
+     topic_key: "{proyecto}/boot-state",
+     project: "{proyecto}"
+   )
+   ```
+   
+   **Paso 4d**: Usar decisión en Paso 5
+   ```
+   boot_mode = result["mode"]  # "light" | "full"
+   ```
 
 5. `mem_session_start(id: "vibecoding-{proyecto}-{timestamp}", project: "{proyecto}")`
 
