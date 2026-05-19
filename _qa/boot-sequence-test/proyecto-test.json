@@ -1,0 +1,16 @@
+{
+  "nombre": "test-proyecto-boot-sequence",
+  "tipo": "web",
+  "estructura": "single-repo",
+  "brief": "Proyecto minimal para validacion de Boot Sequence",
+  "stack": {
+    "frontend": "Next.js",
+    "backend": "Hono",
+    "db": "PostgreSQL"
+  },
+  "scope": [
+    "Landing page simple",
+    "API health check",
+    "Minimal setup"
+  ]
+}
