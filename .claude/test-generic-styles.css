@@ -1,0 +1,53 @@
+/* TEST FILE — Contains intentional anti-generic violations */
+
+/* HIGH: Fuentes genéricas */
+.heading {
+  font-family: "Inter", sans-serif;
+}
+
+.body-text {
+  font-family: "Roboto", sans-serif;
+}
+
+/* HIGH: Colores corporativos genéricos */
+.primary-btn {
+  background-color: #3B82F6;  /* Azul corporativo Tailwind */
+  color: #FFFFFF;
+}
+
+.danger-btn {
+  background-color: #EF4444;  /* Rojo genérico */
+}
+
+/* MEDIUM: Opacidades predecibles */
+.hover-state {
+  opacity: 0.8;  /* Genérico para hover */
+  transition: opacity 300ms;  /* Duración predecible */
+}
+
+/* MEDIUM: Border-radius Tailwind default */
+.card-container {
+  border-radius: 8px;  /* Tailwind default, overused */
+  background: #F3F4F6;  /* Gris plano */
+}
+
+/* LOW: Layouts predecibles */
+.grid-layout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);  /* 3 columnas aburridas */
+  max-width: 1200px;  /* Width corporativo estándar */
+  margin: 0 auto;  /* Centrado predecible */
+}
+
+/* LOW: Nombres de componentes genéricos */
+.Button {
+  padding: 10px 20px;
+  border-radius: 4px;  /* Bootstrap default */
+  cursor: pointer;
+}
+
+.Card {
+  padding: 20px;
+  background: white;
+  border-radius: 12px;  /* Shadcn default */
+}

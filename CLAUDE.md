@@ -96,6 +96,60 @@ echo '{ "status": "completado", "tarea": "...", ... }' | python tools/atlas_disp
 # { "ok": true/false, "errores": [...] }
 ```
 
+## Design Quality Enforcement — Anti-Generic Detector (Phase 0.6A+)
+
+El `tools/design_quality_enforcement.py` detecta outputs "genéricos" (colores corporativos, fonts aburridas, layouts predecibles) y asigna severidades **SIN BLOQUEO**:
+
+### Severidad: HIGH → MEDIUM → LOW
+
+- **HIGH**: Degrada posture a "NEEDS WORK" (colores genéricos #3B82F6, fonts Inter/Roboto, layouts boilerplate)
+- **MEDIUM**: Warnings que se reportan (opacidades predecibles 0.8, border-radius Tailwind defaults 8px)
+- **LOW**: Notas sobre mejoras (duraciones 300ms, nombres componentes genéricos Button/Card)
+
+### Patrones Detectados
+
+| Categoría | Ejemplos | Severidad |
+|-----------|----------|-----------|
+| **Fonts** | Inter, Roboto, Open Sans, Arial | HIGH |
+| **Colors** | #3B82F6 (Tailwind), #EF4444 (corporativo) | HIGH |
+| **Paletas** | Gradiente púrpura, grises neutros planos | HIGH |
+| **Opacity** | 0.8 (hover), 0.5, 0.75 | MEDIUM |
+| **Border-radius** | 8px (Tailwind), 4px (Bootstrap), 12px (Shadcn) | MEDIUM |
+| **Durations** | 300ms, 500ms, 1s | LOW |
+| **Layouts** | grid-cols-3, max-w-1200px, mx-auto, justify-center items-center | LOW |
+| **Components** | Button, Card, Container, Box, Wrapper | LOW |
+
+### Comandos
+
+```bash
+# Analizar archivo individual
+python tools/design_quality_enforcement.py src/styles/button.css
+
+# Analizar directorio completo
+python tools/design_quality_enforcement.py src/ --json
+
+# Salida JSON para integración
+python tools/design_quality_enforcement.py src/ --json > design-report.json
+```
+
+### Reporte Ejemplo
+
+```
+Posture: NEEDS WORK (4 HIGH findings)
+Total findings: 12
+  HIGH: 4 (degrada posture)
+  MEDIUM: 5 (warnings)
+  LOW: 3 (notes)
+
+[HIGH] SEVERITY (Posture degraded):
+  - font: inter @ src/styles.css:5
+    -> Usar fonts con personalidad: Syne, Clash Display, Fraunces, etc.
+  - color: #3B82F6 @ src/button.css:14
+    -> Paleta con dominante + acento sharp
+```
+
+**Nota**: Sin bloqueo duro — es informativo. Los agentes deben leer el reporte y mejorar, pero pueden enviar sin arreglarlo (aún).
+
 ## Gestión de contexto
 
 ### Reglas de protección de contexto
