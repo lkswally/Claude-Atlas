@@ -1228,14 +1228,18 @@ Para **cada tarea** de la lista, en orden:
 
    **Cajones por agente dev:** ver tabla "Qué cajón lee cada agente" en sección Engram arriba.
 
-4. Agente devuelve: STATUS + archivos modificados (rutas, no contenido)
+4. **Dev agent retorna su parte de Return Envelope** (Dev PASS ≠ tarea finalizada):
+   
+   El dev agent devuelve: `STATUS: completado | fallido + archivos + ENGRAM` en Return Envelope Dev.
+
+   **NOTA CRÍTICA**: `STATUS: completado` del dev agent significa **"código listo para validación QA"**, NO **"tarea finalizada"**. La tarea solo queda finalizada cuando evidence-collector también retorna PASS.
 
    **Pre-QA check — dev agent STATUS: fallido**:
    Si el dev agent retorna `STATUS: fallido`, NO enviar a evidence-collector (desperdicia un retry).
    - Re-delegar al mismo dev agent con el error como contexto adicional
-   - Trackear `dev_consecutive_fails` en DAG State para esa tarea
+   - Trackear en DAG State: `tareas[N].dev_consecutive_fails++`
    - Si falla 2 veces seguidas sin llegar a QA → escalar al usuario (mismas opciones que escalación 3x)
-   - Solo enviar a evidence-collector cuando el dev agent retorna `STATUS: completado`
+   - Solo continuar a Paso 5 (evidence-collector) cuando el dev agent retorna `STATUS: completado`
 
    **Verificación post-return obligatoria (backend-architect)**:
    Si la tarea involucraba endpoints y el Return Envelope NO incluye `ENGRAM: {proyecto}/api-spec`:
@@ -1244,17 +1248,28 @@ Para **cada tarea** de la lista, en orden:
    - Si existe → continuar normalmente
    Esto previene que api-tester en Fase 4 parsee {proyecto}/tareas como fallback (produce resultados corruptos).
 
-5. Delega a evidence-collector (usando el puerto reportado por el dev agent):
-   "Valida tarea {N} del proyecto {proyecto}. URL: http://localhost:{puerto}
-   Intento: {intento_actual}/3
+5. **Delega a evidence-collector (QA gate — bloquea de verdad)**:
+   
+   Ahora el dev-agent ha pasado su parte, pero la tarea NO está cerrada. Invocar evidence-collector con:
+   ```
+   "Valida tarea {N}/{Total} del proyecto {proyecto}. 
+   URL: http://localhost:{puerto} (reportado por dev-agent)
+   QA Intento: {intento_actual}/3 (tracked en DAG State)
    TIPO_PROYECTO: {web | mobile} (del DAG State)
    Captura screenshots con Playwright MCP.
    Guarda screenshots en /tmp/qa/tarea-{N}-{device}.png (NO inline, solo rutas)
    Lee criterio de aceptación de Engram: {proyecto}/tareas — localiza tarea {N}
-   Guarda resultado en Engram: {proyecto}/qa-{N}
-   Devuelve: PASS | FAIL + rutas screenshots + lista de issues (si FAIL)"
+   Guarda resultado en Engram: {proyecto}/qa-{N} con Return Envelope QA
+   Devuelve: STATUS PASS | FAIL + rutas screenshots + lista de issues (si FAIL)"
+   ```
+   
+   **Validación de Return Envelope QA (orquestador)**:
+   - Verificar que evidence-collector retorna `STATUS: PASS | FAIL` en formato Return Envelope QA (ver agent-protocol.md § "Return Envelope QA")
+   - Si Engram write falla con timeout/error (Engram error, NO tarea error): NO marcar como FAIL. Reintenta evidence-collector (mismo intento, no incrementa contador). Si falla 2x Engram → informar al usuario "Engram timeout — procedera como QA manual" y continuar
+   - Si evidence-collector crashea (zero return): reintenta 1x (mismo intento). Si crashea 2x → escalar al usuario
+
    **Mobile**: si evidence-collector reporta "QA visual limitada", informar al usuario una vez: "QA de tareas mobile se limita a validación de build — no hay simulador visual disponible."
-   **El orquestador mantiene el contador de intentos en DAG State** (`tareas_fallidas[N].intentos`), NO depende de que evidence-collector lo trackee internamente.
+   **El orquestador mantiene el contador de intentos en DAG State** en `tareas[N].qa_intento_actual`, incrementándolo SOLO en fallos funcionales de QA, NO en fallos de Engram.
 
 **Umbral PASS/FAIL:**
 - Rating B- o superior → PASS
@@ -1262,16 +1277,22 @@ Para **cada tarea** de la lista, en orden:
 - 0 errores en consola es OBLIGATORIO para PASS
 - **Mobile responsive OBLIGATORIO para PASS**: 0 failures del "Mobile responsive checklist" de evidence-collector. Cualquier fallo (scroll-h no deseado, inputs <16px, touch targets <44px, sidebar con margin-left en mobile, parallax sin guard) → FAIL automático sin importar el rating general. Aplica a todas las tareas de UI web — excepción única: `TIPO_PROYECTO: mobile` (React Native) que usa QA distinta.
 
-6. Si PASS:
-   - Actualiza DAG State: tarea N → completada
+6. **Si QA PASS**:
+   - evidence-collector retorna: `STATUS: PASS + ENGRAM: {proyecto}/qa-{N}`
+   - Orquestador verifica que `{proyecto}/qa-{N}` existe en Engram (mem_search → mem_get_observation)
+   - **Actualiza DAG State: `tareas[N].status = "completada"` + `tareas[N].qa_intento_actual = {final count}`**
    - Continúa con tarea N+1
 
-7. Si FAIL (intento < 3):
-   - Pasa feedback específico al agente de desarrollo (qué falló exactamente)
-   - Incrementa contador
-   - Vuelve al paso 3
+7. **Si QA FAIL (intento < 3)**:
+   - evidence-collector retorna: `STATUS: FAIL + issues`
+   - Orquestador incrementa: `tareas[N].qa_intento_actual++`
+   - Pasa feedback específico al dev agent: "QA falló: {lista de issues}. Intento {qa_intento_actual}/3. Arregla y reintenta."
+   - Vuelve al paso 3 (re-delega mismo dev agent)
 
-8. Si FAIL (intento = 3) → ESCALACIÓN:
+8. **Si QA FAIL (intento = 3) → ESCALACIÓN (tarea NO avanza)**:
+   - evidence-collector ha fallado 3 veces tras arreglos del dev
+   - Tarea queda bloqueada con estado `{proyecto}/tareas[N].status = "bloqueada"`
+   - Opciones presentadas al usuario:
    a) Reasignar: delegar a otro agente dev
    b) Descomponer: partir en sub-tareas más pequeñas
    c) Diferir: marcar con ⚠️ y continuar con otras tareas
@@ -1363,11 +1384,31 @@ Deteccion de URLs de CodePen en mensajes del usuario:
 - Si el usuario dice "usa este pen: codepen.io/..." → saltar paso 1, ir directo a extraccion
 - Regex: `codepen\.io\/[\w-]+\/pen\/[\w]+`
 
-**Phase Gate → Fase 4**: verificar antes de empezar:
-- Todas las tareas tienen `{proyecto}/qa-{N}` con PASS (o aceptadas con ⚠)
-- Si hay tareas backend: `{proyecto}/api-spec` existe (si no, pedir a backend-architect que lo genere)
-- Si se usaron efectos CodePen: checkpoint post-efectos completado
-- Servidor de producción levantado y accesible: `npm run build && npm start` → verificar con `curl -s -o /dev/null -w '%{http_code}' http://localhost:{puerto}` (expect 200)
+**Phase Gate → Fase 4** (QA GATE — BLOQUEA DE VERDAD):
+
+Antes de avanzar a Fase 4, verificar que TODAS las tareas pasaron QA. Este gate BLOQUEA la transición — no hay way around.
+
+**Validación obligatoria**:
+1. **Para CADA tarea N en {proyecto}/tareas**:
+   - Verificar que existe `{proyecto}/qa-{N}` en Engram (mem_search + mem_get_observation, 2-pasos)
+   - Si NO existe → GATE BLOQUEADO. Informar: "Tarea {N} no tiene QA. Evidence-collector no fue ejecutado o su resultado no está en Engram. Resolver antes de continuar a Fase 4."
+   - Si existe → verificar que `qa-{N}.status = "PASS"` (leer contenido completo)
+   - Si status ≠ PASS → GATE BLOQUEADO. Informar: "Tarea {N} tiene QA status: {status}. Debe ser PASS. Aceptados: PASS solamente. Reintenta QA o escala."
+
+2. **Si Engram timeout/error al leer qa-{N}** (MCP no responde):
+   - NO marcar como cajon faltante ni como FAIL
+   - Reintenta 1x con mem_search
+   - Si sigue fallando → informar al usuario: "Engram no responde al verificar QA de tarea {N}. No puedo bloqueador/permitir avance. Intenta de nuevo en un momento."
+   - NO avanzar automáticamente (gate se queda en PENDING, esperando Engram)
+
+3. **Si hay tareas backend**: verificar que `{proyecto}/api-spec` existe en Engram
+
+4. **Si se usaron efectos CodePen**: checkpoint post-efectos debe estar completado en Engram o DAG State
+
+5. **Build production**: `npm run build && npm start` → verificar con `curl -s -o /dev/null -w '%{http_code}' http://localhost:{puerto}` (expect 200)
+
+**Si ALL checks PASS** → desbloquea transición a Fase 4
+**Si ALGÚN check FALLA** → gate BLOQUEADO. Devuelve BLOQUEADORES al usuario con lista exacta de qué falta
 
 ### Build failures → build-resolver
 Si `npm run build` falla en cualquier fase (Fase 3, Fase 4, o Phase Gate):

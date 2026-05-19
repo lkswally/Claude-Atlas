@@ -279,6 +279,79 @@ Los demás agentes adoptarán progresivamente en reintentos o siguientes tareas.
 
 ---
 
+## 3.6. Return Envelope QA — Estándar para evidence-collector
+
+Evidence-collector (agente de QA) usa una variante del Return Envelope Standard optimizada para validación. Obligatorio a partir de Phase 0.6B.
+
+### Formato OBLIGATORIO (evidence-collector)
+
+```
+STATUS: PASS | FAIL
+TAREA: Validé tarea {N}: {título corto}
+ARCHIVOS: {lista de rutas a screenshots: /tmp/qa/tarea-{N}-desktop.png, /tmp/qa/tarea-{N}-mobile.png, ...}
+ENGRAM: {proyecto}/qa-{N}
+VERIFICACION: layout
+BLOQUEADORES: [lista de issues encontrados] (solo si STATUS=FAIL)
+NOTAS: {resumen ejecutivo: qué pasó y qué no}
+```
+
+**Campos obligatorios para evidence-collector**:
+- **STATUS**: PASS o FAIL solamente. Nada de "CERTIFIED", "PENDING", etc. PASS = todas las validaciones pasaron. FAIL = al menos un criterio de aceptación falló.
+- **TAREA**: Identificar qué tarea se validó (ej: "Tarea 3: Auth UI — Login form")
+- **ARCHIVOS**: Rutas a screenshots (en /tmp/qa/, no inline). Si mobile, incluir screenshot de mobile también.
+- **ENGRAM**: Guardar resultado en `{proyecto}/qa-{N}` con todo el contenido: screenshots (rutas), issues (si FAIL), rating, checklist results.
+- **BLOQUEADORES**: Si FAIL, listar issues concretos (ej: "scroll-h no deseado en mobile", "font-size < 16px en inputs", "Mixed Content warning en consola"). Sin esto, el dev-agent no sabe qué arreglar.
+
+### Ejemplo 1: QA PASS
+
+```
+STATUS: PASS
+TAREA: Validé tarea 2: Hero section con animación Aurora
+ARCHIVOS: /tmp/qa/tarea-2-desktop.png, /tmp/qa/tarea-2-mobile.png
+ENGRAM: atlas/qa-2
+VERIFICACION: layout
+NOTAS: Rating A. Mobile responsive OK. Aurora animation smooth 60fps. 0 console errors. Ready para siguiente tarea.
+```
+
+### Ejemplo 2: QA FAIL
+
+```
+STATUS: FAIL
+TAREA: Validé tarea 5: Navigation — componente Navbar
+ARCHIVOS: /tmp/qa/tarea-5-desktop.png, /tmp/qa/tarea-5-mobile.png, /tmp/qa/tarea-5-mobile-scroll.png
+ENGRAM: atlas/qa-5
+VERIFICACION: layout
+BLOQUEADORES: [scroll-h-unintended-mobile, touch-targets-too-small, color-contrast-wcag-fail-on-dark]
+NOTAS: Rating C+. Mobile: horizontal scroll cuando no debería (nav items overflow). Touch targets 32px (min 44px requerido). Color contrast en dark mode viola WCAG AA. Requiere reintento.
+```
+
+### Validación de tarea en evidence-collector
+
+Checklist mínimo que evidence-collector DEBE verificar antes de devolver PASS:
+
+1. **Build**: `npm run build` sin errores (si la tarea lo requiere)
+2. **Server**: URL reportada por dev-agent responde con 200
+3. **Console**: 0 console errors (warnings OK, pero flagear en NOTAS si hay muchos)
+4. **Responsive**: Mobile responsive checklist:
+   - ✅ Sin scroll horizontal no deseado
+   - ✅ Font size ≥ 16px en inputs (móvil)
+   - ✅ Touch targets ≥ 44px × 44px (móvil)
+   - ✅ No parallax sin guard en mobile (parallax fijo causa scroll-h)
+5. **Accessibility**: WCAG 2.1 AA mínimo (heading hierarchy, alt text, color contrast, focus states)
+6. **Spec**: Criterios de aceptación de {proyecto}/tareas[N].acceptance_criteria — todos cubiertos
+7. **Visual**: Matches visual-direction choices (colores, tipografía, nivel animación)
+
+Si ALGÚN checklist item falla → STATUS: FAIL + BLOQUEADORES con lista concreta.
+
+### Integración con Fase 3 loop
+
+Evidence-collector es invocado por el orquestador en Paso 5 del loop Fase 3 (ver orquestador.md línea 1247). El Return Envelope QA es leído por el orquestador para decidir:
+- PASS → avanzar a siguiente tarea (tarea N completada)
+- FAIL → re-delegar a dev-agent con feedback (intento N+1)
+- FAIL × 3 → escalar al usuario
+
+---
+
 ## 4. Proactive Saves (descubrimientos)
 
 Si durante tu trabajo descubres algo no obvio (gotcha, incompatibilidad, patrón útil), guárdalo inmediatamente:
