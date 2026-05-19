@@ -2,6 +2,10 @@
   "fase_1_planificacion": {
     "name": "Planificación",
     "allowed_commands": ["start-project"],
+    "boot_config": {
+      "force_full_mode": true,
+      "allow_light_mode": false
+    },
     "e2e_required": [],
     "required_cajones": [],
     "recommended_actions": [
@@ -14,6 +18,10 @@
   "fase_2_arquitectura": {
     "name": "Arquitectura & Design",
     "allowed_commands": ["continue-phase"],
+    "boot_config": {
+      "force_full_mode": false,
+      "allow_light_mode": true
+    },
     "e2e_required": [
       {
         "flow": "ux-architect-design-review",
@@ -32,6 +40,10 @@
   "fase_2b_assets_creativos": {
     "name": "Assets Creativos",
     "allowed_commands": ["continue-phase"],
+    "boot_config": {
+      "force_full_mode": false,
+      "allow_light_mode": true
+    },
     "e2e_required": [],
     "required_cajones": ["{proyecto}/css-foundation", "{proyecto}/design-system"],
     "produces_cajones": ["{proyecto}/branding", "{proyecto}/creative-logos", "{proyecto}/creative-images", "{proyecto}/creative-video"],
@@ -45,6 +57,10 @@
   "fase_3_desarrollo": {
     "name": "Desarrollo & Implementación",
     "allowed_commands": ["continue-phase", "run-task"],
+    "boot_config": {
+      "force_full_mode": false,
+      "allow_light_mode": true
+    },
     "e2e_required": [
       {
         "flow": "evidence-collector-qa",
@@ -64,6 +80,10 @@
   "fase_4_certificacion": {
     "name": "Certificación & QA",
     "allowed_commands": ["certify-project"],
+    "boot_config": {
+      "force_full_mode": true,
+      "allow_light_mode": false
+    },
     "e2e_required": [
       {
         "flow": "seo-discovery",
@@ -99,6 +119,10 @@
   "fase_5_publicacion": {
     "name": "Publicación & Deploy",
     "allowed_commands": ["deploy"],
+    "boot_config": {
+      "force_full_mode": true,
+      "allow_light_mode": false
+    },
     "e2e_required": [],
     "required_cajones": ["{proyecto}/certificacion"],
     "produces_cajones": ["{proyecto}/git-commit", "{proyecto}/deploy-url"],
@@ -112,6 +136,10 @@
   "modificacion": {
     "name": "Modo Modificación (proyecto existente)",
     "allowed_commands": ["continue-phase", "run-task"],
+    "boot_config": {
+      "force_full_mode": false,
+      "allow_light_mode": true
+    },
     "e2e_required": [
       {
         "flow": "evidence-collector-qa",
