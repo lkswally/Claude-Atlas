@@ -1,0 +1,131 @@
+{
+  "fase_1_planificacion": {
+    "name": "Planificación",
+    "allowed_commands": ["start-project"],
+    "e2e_required": [],
+    "required_cajones": [],
+    "recommended_actions": [
+      "definir goal del proyecto",
+      "definir scope y constraints",
+      "elegir stack tecnológico",
+      "crear brief"
+    ]
+  },
+  "fase_2_arquitectura": {
+    "name": "Arquitectura & Design",
+    "allowed_commands": ["continue-phase"],
+    "e2e_required": [
+      {
+        "flow": "ux-architect-design-review",
+        "description": "Validar que css-foundation sigue convenciones de accesibilidad y performance",
+        "required_for": "pasar a UI design"
+      }
+    ],
+    "required_cajones": ["{proyecto}/tareas"],
+    "produces_cajones": ["{proyecto}/css-foundation", "{proyecto}/design-system", "{proyecto}/security-spec"],
+    "recommended_actions": [
+      "crear CSS foundation (ux-architect)",
+      "crear design system (ui-designer)",
+      "definir security spec (security-engineer)"
+    ]
+  },
+  "fase_2b_assets_creativos": {
+    "name": "Assets Creativos",
+    "allowed_commands": ["continue-phase"],
+    "e2e_required": [],
+    "required_cajones": ["{proyecto}/css-foundation", "{proyecto}/design-system"],
+    "produces_cajones": ["{proyecto}/branding", "{proyecto}/creative-logos", "{proyecto}/creative-images", "{proyecto}/creative-video"],
+    "recommended_actions": [
+      "generar brand identity",
+      "generar logos",
+      "generar imágenes hero",
+      "generar videos de demostración"
+    ]
+  },
+  "fase_3_desarrollo": {
+    "name": "Desarrollo & Implementación",
+    "allowed_commands": ["continue-phase", "run-task"],
+    "e2e_required": [
+      {
+        "flow": "evidence-collector-qa",
+        "description": "QA visual automático después de cada tarea de dev",
+        "required_for": "avanzar a siguiente tarea"
+      }
+    ],
+    "required_cajones": ["{proyecto}/css-foundation", "{proyecto}/design-system", "{proyecto}/security-spec", "{proyecto}/tareas"],
+    "produces_cajones": ["{proyecto}/tarea-N", "{proyecto}/qa-N"],
+    "recommended_actions": [
+      "implementar frontend tasks",
+      "implementar backend tasks",
+      "ejecutar QA visual después de cada tarea",
+      "fijar issues antes de avanzar"
+    ]
+  },
+  "fase_4_certificacion": {
+    "name": "Certificación & QA",
+    "allowed_commands": ["certify-project"],
+    "e2e_required": [
+      {
+        "flow": "seo-discovery",
+        "description": "Validar SEO técnico y estructura",
+        "required_for": "certificar"
+      },
+      {
+        "flow": "api-tester",
+        "description": "Validar endpoints API contra spec",
+        "required_for": "certificar"
+      },
+      {
+        "flow": "performance-benchmarker",
+        "description": "Validar Core Web Vitals",
+        "required_for": "certificar"
+      },
+      {
+        "flow": "reality-checker",
+        "description": "Validación final integrada",
+        "required_for": "alcanzar estado CERTIFIED"
+      }
+    ],
+    "required_cajones": ["{proyecto}/estado", "{proyecto}/qa-N"],
+    "produces_cajones": ["{proyecto}/seo", "{proyecto}/api-qa", "{proyecto}/perf-report", "{proyecto}/certificacion"],
+    "recommended_actions": [
+      "ejecutar seo-discovery",
+      "ejecutar api-tester",
+      "ejecutar performance-benchmarker",
+      "ejecutar reality-checker",
+      "resolver bloqueadores antes de pasar a publicación"
+    ]
+  },
+  "fase_5_publicacion": {
+    "name": "Publicación & Deploy",
+    "allowed_commands": ["deploy"],
+    "e2e_required": [],
+    "required_cajones": ["{proyecto}/certificacion"],
+    "produces_cajones": ["{proyecto}/git-commit", "{proyecto}/deploy-url"],
+    "recommended_actions": [
+      "revisar checklist de deploy",
+      "hacer commit final",
+      "desplegar a producción",
+      "validar en prod"
+    ]
+  },
+  "modificacion": {
+    "name": "Modo Modificación (proyecto existente)",
+    "allowed_commands": ["continue-phase", "run-task"],
+    "e2e_required": [
+      {
+        "flow": "evidence-collector-qa",
+        "description": "QA visual obligatorio para cambios",
+        "required_for": "avanzar a siguiente tarea"
+      }
+    ],
+    "required_cajones": ["{proyecto}/estado"],
+    "produces_cajones": ["{proyecto}/tarea-N", "{proyecto}/qa-N"],
+    "recommended_actions": [
+      "analizar cambios requeridos",
+      "generar nuevas tareas",
+      "implementar con QA obligatorio",
+      "re-ejecutar reality-checker si cambios son sustanciales"
+    ]
+  }
+}

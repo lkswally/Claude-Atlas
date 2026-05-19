@@ -7,9 +7,11 @@ Claude opera en dos modos distintos. El usuario elige explícitamente cuál usar
 | Modo | Cuándo usarlo | Cómo activarlo |
 |------|--------------|----------------|
 | **Claude normal** | Preguntas, fixes puntuales, revisiones, chat técnico | Por defecto — simplemente habla |
-| **Orquestador** | Proyectos completos de software de principio a fin | Di explícitamente: *"activa el pipeline"*, *"modo orquestador"*, o *"nuevo proyecto completo: X"* |
+| **Orquestador operativo** | Proyectos completos de software de principio a fin | Di explícitamente: *"activa el pipeline"*, *"modo orquestador"*, o *"nuevo proyecto completo: X"* |
 
 Cuando se activa el modo orquestador, Claude adopta el comportamiento definido en `~/.claude/agents/orquestador.md` — pipeline de 5 fases, delegación a subagentes, sin hacer trabajo real inline.
+
+**IMPORTANTE (Phase 0.6A)**: El dispatcher en `tools/atlas_dispatcher.py` ahora **ENFORZA** Return Envelope format, phase gates, y E2E flows obligatorios. Ya no es "recomendado" — es obligatorio para que un proyecto avance.
 
 ## Arquitectura
 
@@ -38,6 +40,61 @@ Cada agente tiene `model:` en su frontmatter YAML. El orquestador lo respeta al 
 
 ### Regla de oro
 El orquestador **NUNCA** hace trabajo real (no lee código, no escribe código, no analiza arquitectura). Solo coordina. Cada token inline es contexto perdido.
+
+## Dispatcher Operativo (Phase 0.6A+)
+
+El `tools/atlas_dispatcher.py` es el **motor de enforcement** que transforma la arquitectura documentada en sistema operativo. Automatiza:
+
+### 1. Validación de Return Envelope
+Todo subagente DEBE devolver respuesta en formato estándar (fase 3+):
+```
+STATUS: completado | fallido | PASS | FAIL
+TAREA: {descripción}
+ARCHIVOS: [lista]
+ENGRAM: {proyecto}/{cajon}
+VERIFICACION: layout | typo | config | none
+BLOQUEADORES: [lista opcional]
+NOTAS: {texto}
+```
+El dispatcher **rechaza respuestas mal formateadas** y pide al subagente re-enviar.
+
+### 2. Phase Gates (control de transiciones)
+Antes de avanzar a la siguiente fase, el dispatcher verifica:
+- ¿Existen todos los cajones requeridos en Engram/disco?
+- ¿Tienen el STATUS esperado?
+- ¿Se completaron todos los E2E flows?
+
+Si falta algo → FASE BLOQUEADA. No continuar hasta resolver bloqueadores.
+
+Comandos:
+```bash
+# Verificar si se puede transicionar
+python tools/atlas_dispatcher.py check-phase fase_1 fase_2
+
+# Retorna:
+# {
+#   "ok": true/false,
+#   "bloqueadores": [lista de bloqueadores si ok=false]
+# }
+```
+
+### 3. E2E Flows Obligatorios
+Definidos en `config/phase_playbook.json` para cada fase. Ejemplos:
+- **Fase 2**: ux-architect design review
+- **Fase 3**: evidence-collector QA después de cada tarea
+- **Fase 4**: seo-discovery + api-tester + performance-benchmarker + reality-checker
+
+El dispatcher no deja avanzar si un E2E flow requerido falla.
+
+### 4. Validación de Respuestas
+Comandos:
+```bash
+# Validar que la respuesta de un agente sigue el formato
+echo '{ "status": "completado", "tarea": "...", ... }' | python tools/atlas_dispatcher.py validate-envelope
+
+# Retorna:
+# { "ok": true/false, "errores": [...] }
+```
 
 ## Gestión de contexto
 
