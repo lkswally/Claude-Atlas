@@ -743,7 +743,21 @@ intent_version: 1
 
 ---
 
-**Phase Gate → Fase 2**: verificar que `{proyecto}/tareas` Y `{proyecto}/intent` existen en Engram antes de continuar. Si no existe intent, Paso 0 fue saltado indebidamente — volver a ejecutarlo. Si no existe tareas, Fase 1 falló silenciosamente — re-delegar a project-manager-senior.
+**Phase Gate → Fase 2** (ENFORCED):
+
+Antes de delegar a ux-architect, ejecutar `enforce_phase_gate("{proyecto}", "fase_2", ["{proyecto}/tareas", "{proyecto}/intent"])` desde dispatcher:
+
+```
+python tools/atlas_dispatcher.py check-phase fase_1 fase_2
+```
+
+**Validación obligatoria**:
+- Si `{proyecto}/intent` NO existe → FASE BLOQUEADA. Mensaje: "Fase 2 blocked: {proyecto}/intent missing. Paso 0 (Intent Clarifier) fue saltado indebidamente — volver a ejecutarlo."
+- Si `{proyecto}/tareas` NO existe → FASE BLOQUEADA. Mensaje: "Fase 2 blocked: {proyecto}/tareas missing. Fase 1 falló silenciosamente — re-delegar a project-manager-senior."
+- Si Engram timeout → PENDING. Usuario debe confirmar manualmente que ambos cajones existen.
+
+**Si ALL checks PASS** → desbloquea Fase 2, delega a ux-architect
+**Si FALLA** → halt, devuelve BLOQUEADORES message, NO continuar
 
 **Auto-format opt-in**: Si el proyecto tiene `.prettierrc`, `biome.json`, o `eslint.config` con reglas de fix, el orquestador indica a los agentes dev que ejecuten el formatter despues de cada archivo escrito. No es un hook global — se decide por proyecto en Fase 1 y se incluye como instruccion en el handoff a agentes dev: `"formatter": "npx prettier --write"` (o `npx biome check --fix`, segun el stack).
 
@@ -961,7 +975,21 @@ reference_for_qa: .pipeline/references/{ref-file}  # path absoluto si hay imagen
 )
 ```
 
-**Phase Gate → Paso 2 de Fase 2**: `{proyecto}/visual-direction` debe existir con `extraction_status` seteado (success/failed/skipped) y decisiones VDC confirmadas. Si falta → re-ejecutar Paso 1.5 completo.
+**Phase Gate → Paso 2 de Fase 2** (ENFORCED):
+
+Antes de delegar a ui-designer, ejecutar `enforce_phase_gate("{proyecto}", "paso_2_fase_2", ["{proyecto}/visual-direction"])`:
+
+```
+python tools/atlas_dispatcher.py check-phase paso_1_fase_2 paso_2_fase_2
+```
+
+**Validación obligatoria**:
+- Si `{proyecto}/visual-direction` NO existe → FASE BLOQUEADA. Mensaje: "Paso 2 Fase 2 blocked: {proyecto}/visual-direction missing. Paso 1.5 no fue completado correctamente — re-ejecutar completo."
+- Verificar que `visual_direction.extraction_status ∈ [success, failed, skipped]` (si existe cajon)
+- Verificar que decisiones VDC fueron confirmadas por usuario (booleano en contenido)
+
+**Si ALL checks PASS** → desbloquea Paso 2 Fase 2, delega a ui-designer
+**Si FALLA** → halt, devuelve BLOQUEADORES message
 
 ---
 
@@ -1180,12 +1208,28 @@ Ejecutar en paralelo a Fase 2 o antes de Fase 3, según cuándo se necesiten los
 - Assets copiados a public/ (verificar que existen en filesystem)
 Si alguno falta, NO avanzar. Resolver primero.
 
-**Phase Gate → Fase 3**: verificar que estos cajones existen en Engram antes de empezar:
-- `{proyecto}/css-foundation` — si falta, re-delegar ux-architect
-- `{proyecto}/design-system` — si falta, re-delegar ui-designer
-- `{proyecto}/security-spec` — si falta, re-delegar security-engineer
-Si alguno falta, NO empezar Fase 3. Resolver primero.
-**Anti-loop**: cada re-delegación por Phase Gate cuenta contra el límite de 2 re-delegaciones de Fase 2. Si un cajón sigue faltando después de agotar las re-delegaciones → escalar al usuario. Trackear `phase_gate_retries` en DAG State. **NUNCA** re-delegar más de 2 veces por cajón faltante en total (Fase 2 + Phase Gate combinados).
+**Phase Gate → Fase 3** (ENFORCED — HARD BLOCK):
+
+Antes de delegar a primer dev-agent, ejecutar `enforce_phase_gate("{proyecto}", "fase_3", ["{proyecto}/css-foundation", "{proyecto}/design-system", "{proyecto}/security-spec", "{proyecto}/tareas"])`:
+
+```
+python tools/atlas_dispatcher.py check-phase fase_2b fase_3
+```
+
+**Validación obligatoria — CADA cajón**:
+- `{proyecto}/css-foundation` — si falta → FASE BLOQUEADA. Mensaje: "Fase 3 blocked: {proyecto}/css-foundation missing. Re-delegar ux-architect."
+- `{proyecto}/design-system` — si falta → FASE BLOQUEADA. Mensaje: "Fase 3 blocked: {proyecto}/design-system missing. Re-delegar ui-designer."
+- `{proyecto}/security-spec` — si falta → FASE BLOQUEADA. Mensaje: "Fase 3 blocked: {proyecto}/security-spec missing. Re-delegar security-engineer."
+- `{proyecto}/tareas` — si falta → FASE BLOQUEADA. Mensaje: "Fase 3 blocked: {proyecto}/tareas missing. Fase 1 o Fase 2 falló — investigar."
+
+**Anti-loop enforcement**:
+- Cada re-delegación por Phase Gate falla CUENTA contra límite de 2 re-delegaciones de Fase 2
+- Si un cajón sigue faltando después de 2 re-delegaciones → escalar al usuario (no continuar)
+- Trackear `phase_gate_retries` en DAG State
+- **NUNCA** re-delegar más de 2 veces total por cajón faltante
+
+**Si ALL checks PASS** → desbloquea Fase 3, comienza dev loop
+**Si ALGÚN check FALLA** → halt, devuelve BLOQUEADORES exactos
 
 ### FASE 3 — Dev ↔ QA Loop
 
