@@ -743,13 +743,20 @@ intent_version: 1
 
 ---
 
-**Phase Gate → Fase 2** (ENFORCED):
+**Phase Gate → Fase 2** (ENFORCED — REAL Engram Integration, Bloque 1A.11):
 
 Antes de delegar a ux-architect, ejecutar `enforce_phase_gate("{proyecto}", "fase_2", ["{proyecto}/tareas", "{proyecto}/intent"])` desde dispatcher:
 
 ```
 python tools/atlas_dispatcher.py check-phase fase_1 fase_2
 ```
+
+**NOTA**: A partir de Bloque 1A.11, enforce_phase_gate() busca REALMENTE en Engram (no simulación):
+- Si cajón existe → found → OK, continúa
+- Si cajón falta → not_found → BLOQUEADO
+- Si Engram timeout → timeout → intenta fallback disco
+  - Disk existe → OK, continúa
+  - Disk también falta → PENDING (requiere confirmación usuario)
 
 **Validación obligatoria**:
 - Si `{proyecto}/intent` NO existe → FASE BLOQUEADA. Mensaje: "Fase 2 blocked: {proyecto}/intent missing. Paso 0 (Intent Clarifier) fue saltado indebidamente — volver a ejecutarlo."
