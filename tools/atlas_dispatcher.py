@@ -13,6 +13,15 @@ from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass, asdict
 
+# Bloque 1A.15: Pre-Return Audit re-validation
+_dispatcher_dir = Path(__file__).parent
+if str(_dispatcher_dir) not in sys.path:
+    sys.path.insert(0, str(_dispatcher_dir))
+try:
+    from pre_return_audit import audit_files as _audit_files
+except ImportError:
+    _audit_files = None  # disponible solo si pre_return_audit.py esta presente
+
 # ============================================================
 #  DATA MODELS
 # ============================================================
@@ -231,14 +240,92 @@ class ATLASDispatcher:
         }
         return cajon_map.get(phase, [])
 
+    def verify_pre_return_audit(self, response: Dict[str, Any]) -> List[str]:
+        """
+        Bloque 1A.15: Re-verifica independientemente el campo pre_return_audit
+        del Return Envelope contra el estado real de los archivos en disco.
+
+        Retorna: lista de errores (vacia si todo coincide).
+
+        Comportamiento:
+        - Si falta campo pre_return_audit -> error "obligatorio"
+        - Si campo presente pero malformado -> error de formato
+        - Si agente declara ok=true pero dispatcher encuentra blocks -> mismatch
+        - Si agente declara ok=false -> error "no debio emitir envelope"
+        - Si archivos=[] -> trivially OK (no hay nada que auditar)
+        """
+        errores: List[str] = []
+
+        # 1. Campo obligatorio
+        audit = response.get("pre_return_audit")
+        if audit is None:
+            errores.append("pre_return_audit obligatorio (Bloque 1A.15): dev-agent debe correr tools/pre_return_audit.py e incluir resultado en envelope")
+            return errores
+
+        # 2. Formato
+        if not isinstance(audit, dict):
+            errores.append(f"pre_return_audit debe ser objeto, recibido {type(audit).__name__}")
+            return errores
+
+        if "ok" not in audit:
+            errores.append("pre_return_audit.ok obligatorio (bool)")
+            return errores
+
+        if not isinstance(audit.get("ok"), bool):
+            errores.append(f"pre_return_audit.ok debe ser bool, recibido {type(audit.get('ok')).__name__}")
+            return errores
+
+        # 3. Si agente declara ok=false, no debio emitir envelope
+        if audit["ok"] is False:
+            block_findings = audit.get("block_findings", [])
+            errores.append(
+                f"pre_return_audit.ok=false: dev-agent debio corregir blocks ANTES de emitir envelope. "
+                f"Blocks declarados: {len(block_findings)}"
+            )
+            return errores
+
+        # 4. Re-ejecutar audit independientemente sobre los archivos del envelope
+        archivos = response.get("archivos", [])
+        if not isinstance(archivos, list):
+            errores.append("archivos debe ser lista para verificar pre_return_audit")
+            return errores
+
+        if len(archivos) == 0:
+            # Trivially OK: no hay archivos que auditar
+            return errores
+
+        if _audit_files is None:
+            errores.append("pre_return_audit module no disponible — no se puede re-verificar (instalar tools/pre_return_audit.py)")
+            return errores
+
+        # Re-ejecutar el audit con el mismo motor
+        try:
+            dispatcher_report = _audit_files(archivos, self.project_root)
+        except Exception as e:
+            errores.append(f"Error re-ejecutando pre_return_audit: {e}")
+            return errores
+
+        # 5. Comparar claim vs reality
+        if dispatcher_report["ok"] is False and audit["ok"] is True:
+            block_count = len(dispatcher_report["block_findings"])
+            blocked_rules = sorted({f["rule"] for f in dispatcher_report["block_findings"]})
+            errores.append(
+                f"Pre-return audit MISMATCH: agente declaro ok=true, "
+                f"pero dispatcher encontro {block_count} blocks ({', '.join(blocked_rules)}). "
+                f"El agente debe correr el audit REAL antes de emitir envelope."
+            )
+
+        return errores
+
     def validate_return_envelope(self, response: Dict[str, Any], mode: str = "standard") -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
         Retorna: (is_valid, errores)
 
         Modos:
-        - "standard": validación suave (para dev agents, creativos, etc.)
+        - "standard": validación suave (para creativos, utilidades, etc.)
         - "qa_strict": validación estricta para evidence-collector (QA obligatorio)
+        - "dev_strict": validación para dev-agents — requiere pre_return_audit (Bloque 1A.15)
         """
         errores = []
 
@@ -253,6 +340,11 @@ class ATLASDispatcher:
             valid_status = {"PASS", "FAIL"}
             if response.get("status") not in valid_status:
                 errores.append(f"STATUS inválido: {response.get('status')}. Para QA esperado: PASS o FAIL")
+        elif mode == "dev_strict":
+            # Dev agents devuelven status "completado" o "fallido"
+            valid_status = {"completado", "fallido"}
+            if response.get("status") not in valid_status:
+                errores.append(f"STATUS inválido: {response.get('status')}. Para dev_strict esperado: completado o fallido")
         else:
             valid_status = {"completado", "fallido", "PASS", "FAIL", "CERTIFIED", "NEEDS WORK"}
             if response.get("status") not in valid_status:
@@ -301,6 +393,20 @@ class ATLASDispatcher:
 
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("BLOQUEADORES debe ser lista o null")
+
+        # Bloque 1A.15: dev_strict requiere pre_return_audit verificado
+        if mode == "dev_strict":
+            # Solo aplica si status=completado (fallido no requiere audit — el agente fallo)
+            if response.get("status") == "completado":
+                audit_errores = self.verify_pre_return_audit(response)
+                errores.extend(audit_errores)
+
+            # archivos debe ser lista (igual que standard)
+            if not isinstance(response.get("archivos", []), list):
+                errores.append("archivos debe ser lista")
+
+            if not isinstance(response.get("bloqueadores"), (list, type(None))):
+                errores.append("bloqueadores debe ser lista o null")
 
         return len(errores) == 0, errores
 

@@ -383,6 +383,142 @@ Evidence-collector es invocado por el orquestador en Paso 5 del loop Fase 3 (ver
 
 ---
 
+## 3.7. Pre-Return Audit — OBLIGATORIO + ENFORCED (Bloque 1A.14 + 1A.15)
+
+Todo dev-agent (frontend-developer, backend-architect, rapid-prototyper, mobile-developer, xr-immersive-developer, build-resolver) DEBE:
+
+1. Ejecutar `tools/pre_return_audit.py` sobre los archivos modificados ANTES de emitir el Return Envelope (Bloque 1A.14)
+2. Incluir el resultado del audit como campo `pre_return_audit` en el Return Envelope (Bloque 1A.15)
+3. El dispatcher re-verifica independientemente — si el agente miente o salta el audit, el envelope es rechazado (Bloque 1A.15)
+
+### Qué hace
+
+Audita los archivos listados en `archivos` del envelope aplicando 6 reglas:
+
+**BLOCK (impiden el envelope — corregir antes de devolver):**
+1. `debugger` / `debugger;` en archivos NO-test
+2. `breakpoint()` en archivos Python NO-test
+3. `.only(` / `.skip(` en archivos test/spec
+4. Hardcoded secrets (api_key, password, secret, Bearer, sk-*, ghp_*, AKIA*)
+
+**WARN (informativos — incluir en `notas`):**
+5. `console.log/warn/error` fuera de tests y dev-utilities (`tools/`, `_qa/`, `scripts/`, `.claude/`)
+6. `TODO` / `FIXME` / `HACK` recién agregados (detectado vía `git diff HEAD`)
+
+### Cómo invocarlo
+
+```bash
+# Auditar archivos del envelope
+python tools/pre_return_audit.py src/foo.ts src/bar.tsx
+
+# O leer la lista del envelope JSON
+python tools/pre_return_audit.py --files-from envelope.json
+```
+
+### Salida (JSON a stdout)
+
+```json
+{
+  "ok": true,
+  "block_findings": [],
+  "warn_findings": [
+    {"rule": "console_log", "severity": "WARN", "file": "src/foo.ts", "line": 17, "match": "console.log(...)"}
+  ],
+  "files_audited": ["src/foo.ts", "src/bar.tsx"],
+  "summary": "PASS (0 blocks, 1 warns)"
+}
+```
+
+Exit code: `0` si `ok=true`, `1` si hay BLOCK findings, `2` si error de uso.
+
+### Reglas de enforcement (Bloque 1A.15)
+
+| Resultado | Acción del dev-agent | Acción del dispatcher (validate_return_envelope mode="dev_strict") |
+|-----------|---------------------|----------------------|
+| `ok=true`, sin warns | Emitir envelope con campo `pre_return_audit` | Re-verifica audit, acepta si coincide |
+| `ok=true`, con warns | Emitir envelope con `pre_return_audit` + warns en `notas` | Re-verifica audit, acepta si no hay blocks |
+| `ok=false` (blocks) | **Corregir blocks primero, NO emitir envelope** | Rechaza envelope ("dev-agent debió corregir blocks ANTES") |
+| `pre_return_audit` ausente | (no debe ocurrir) | Rechaza envelope ("pre_return_audit obligatorio") |
+| Agente miente: declara `ok=true` sin correr audit | (no debe ocurrir) | Rechaza envelope ("MISMATCH: dispatcher encontró N blocks") |
+
+### Campo obligatorio en Return Envelope (modo dev_strict)
+
+```json
+{
+  "status": "completado",
+  "tarea": "...",
+  "archivos": ["src/foo.ts"],
+  "engram": "atlas/tareas",
+  "verificacion": "layout",
+  "bloqueadores": [],
+  "pre_return_audit": {
+    "ok": true,
+    "summary": "PASS (0 blocks, 1 warns)",
+    "block_findings": [],
+    "warn_findings": [{"rule": "console_log", "file": "src/foo.ts", "line": 17}]
+  }
+}
+```
+
+El campo `pre_return_audit` debe ser **idéntico** al output JSON de `tools/pre_return_audit.py` para los archivos listados en `archivos`. El dispatcher re-corre el audit y compara — si hay desajuste, rechaza.
+
+### Ejemplo de integración en flow del dev-agent
+
+```python
+# Después de implementar la tarea
+archivos_modificados = ["src/components/Header.tsx", "src/lib/api.ts"]
+
+# OBLIGATORIO: correr audit antes de envelope
+result = subprocess.run(
+    ["python", "tools/pre_return_audit.py"] + archivos_modificados,
+    capture_output=True, text=True
+)
+audit_report = json.loads(result.stdout)
+
+if not audit_report["ok"]:
+    # Hay BLOCK findings — corregir antes de emitir envelope
+    # NO devolver envelope todavía
+    for finding in audit_report["block_findings"]:
+        # fix the issue at finding["file"]:finding["line"]
+        ...
+    # re-correr audit hasta que ok=true
+
+# Incluir warns en notas si los hay
+notas = ""
+if audit_report["warn_findings"]:
+    notas = f"Pre-Return Audit warns: {len(audit_report['warn_findings'])} (ver detalle en log)"
+
+# Ahora sí emitir envelope
+envelope = {
+    "status": "completado",
+    "archivos": archivos_modificados,
+    "notas": notas,
+    ...
+}
+```
+
+### Casos exentos
+
+El audit IGNORA automáticamente:
+- Líneas de comentario (`//`, `#` al inicio) para reglas debugger/breakpoint/console
+- Archivos test/spec (matches `(test|tests|spec|__tests__|.spec.|.test.)`) para regla debugger/breakpoint
+- Archivos en `tools/`, `_qa/`, `scripts/`, `.claude/` para regla console.*
+- Archivos no modificados (solo audita la lista pasada como args)
+
+### Por qué importa
+
+Sin este audit:
+- Bugs triviales (debugger statements) llegan a evidence-collector → QA falla → retry caro
+- Secrets hardcodeados pueden filtrarse a Git → security incident
+- `.only()` en tests deja el test suite incompleto sin que nadie se entere
+
+Con este audit ejecutado ANTES del envelope:
+- 90%+ de issues triviales se atrapan en segundos (no minutos de QA)
+- Ciclo dev↔QA se reduce (menos retries)
+- Calidad mínima garantizada por enforcement, no por disciplina humana
+
+---
+
 ## 4. Proactive Saves (descubrimientos)
 
 Si durante tu trabajo descubres algo no obvio (gotcha, incompatibilidad, patrón útil), guárdalo inmediatamente:
