@@ -102,6 +102,80 @@ Cuando se inyecta callback con `use_disk_fallback=True` (default):
 
 ---
 
+## 1.6. Engram MCP Real Connection (Bloque 1B.2)
+
+**ESTADO**: Engram MCP real **operativo y opt-in** vía `dispatcher.enable_engram_mcp()`. El default sigue siendo `DiskFallbackStrategy` (1B.1) — para activar Engram real hay que llamarlo explícitamente.
+
+### Cómo activar
+
+```python
+from atlas_dispatcher import ATLASDispatcher
+
+dispatcher = ATLASDispatcher(project_root)
+
+# Activación opt-in con auto-detección del binario
+success, message = dispatcher.enable_engram_mcp()
+
+# Con path explícito
+success, message = dispatcher.enable_engram_mcp(binary_path="/usr/local/bin/engram")
+
+# Con timeout custom (default 5s)
+success, message = dispatcher.enable_engram_mcp(timeout_s=10.0)
+
+# Sin disk_fallback (modo estricto — para tests)
+success, message = dispatcher.enable_engram_mcp(use_disk_fallback=False)
+```
+
+### Resolución del binario (en este orden)
+
+1. Parámetro `binary_path=` explícito
+2. Env var `ENGRAM_MCP_BINARY`
+3. `shutil.which("engram")` en PATH
+
+Si ninguno funciona, `enable_engram_mcp()` retorna `(False, error_msg)` y **mantiene `DiskFallbackStrategy`** — no rompe el dispatcher.
+
+### Comportamiento del bridge
+
+| Resultado | Acción |
+|-----------|--------|
+| Engram retorna `found` | Source = `engram_mcp_real`, dispatcher usa directamente |
+| Engram retorna `not_found` | Source = `engram_mcp_real`, autoritativo |
+| Engram timeout (>5s default) | Status `timeout` → fallback a disk si `use_disk_fallback=True` |
+| Subprocess crash | Retry 1 vez → si falla, status `timeout` → fallback |
+| Binary no encontrado al activar | `enable_engram_mcp()` retorna `False`, mantiene disk |
+| Handshake JSON-RPC falla | Subprocess se mata, retorna `timeout` → fallback |
+
+### Garantías honestas
+
+- ✅ **Backward compat total**: si no se llama `enable_engram_mcp()`, comportamiento idéntico a 1B.1
+- ✅ **Opt-in explícito**: nada se activa automáticamente
+- ✅ **Disk fallback como red de seguridad**: timeout/crash/binary missing NO se confunden con `not_found`
+- ✅ **Singleton lazy**: subprocess se lanza solo al primer query, no en init
+- ✅ **Cleanup**: `atexit` registra terminación limpia del subprocess
+
+### Activación recomendada en orquestador
+
+El orquestador debería llamar `enable_engram_mcp()` al boot:
+
+```python
+# En el flujo del orquestador (al inicializar el dispatcher)
+success, msg = dispatcher.enable_engram_mcp()
+if success:
+    log("Engram MCP real activo")
+else:
+    log(f"Engram MCP no disponible, usando disk_fallback: {msg}")
+# Sea cual sea el resultado, el dispatcher sigue operativo
+```
+
+### LO QUE NO HACE 1B.2 (gaps remanentes honestos)
+
+- ❌ NO maneja `mem_get_observation` (solo `mem_search`)
+- ❌ NO maneja `ambiguous_project` ni `recovery_token` (queda para 1B.3)
+- ❌ NO hace cross-machine sync activamente (Engram lo soporta nativo, pero ATLAS no lo invoca aún)
+- ❌ Heurística de parseo de output de Engram es text-based + `structuredContent` opcional — robusta pero no perfecta
+
+---
+
 ## 2. Engram — Escritura (SIEMPRE con topic_key)
 
 ### Primera vez (crear observación):

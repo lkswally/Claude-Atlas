@@ -174,3 +174,61 @@ class CallbackStrategy(EngramStrategy):
         # Status normal (found / not_found) o sin fallback configurado
         result.setdefault("source", self._name)
         return result
+
+
+# ============================================================
+#  MCP BRIDGE STRATEGY (Bloque 1B.2)
+# ============================================================
+
+def make_mcp_bridge_strategy(
+    binary_path: Optional[str] = None,
+    timeout_s: float = 5.0,
+    use_disk_fallback: bool = True,
+    project_root: Optional[Path] = None,
+) -> EngramStrategy:
+    """
+    Factory para Engram MCP Real Strategy (Bloque 1B.2).
+
+    Crea CallbackStrategy con bridge MCP stdio + DiskFallbackStrategy como
+    red de seguridad.
+
+    Args:
+        binary_path: Ruta al binario engram. Si None, busca en ENGRAM_MCP_BINARY
+                     o PATH.
+        timeout_s: Timeout por query (default 5s).
+        use_disk_fallback: Si True (default), disk_fallback se activa cuando
+                           el bridge falla (binary missing, timeout, crash).
+        project_root: Necesario si use_disk_fallback=True.
+
+    Raises:
+        EngramBinaryNotFound: Si binary no se encuentra (ANTES de retornar).
+                              El caller debe capturar y caer a disk_fallback
+                              explicitamente si quiere comportamiento graceful.
+
+    Returns:
+        EngramStrategy lista para inyectar en dispatcher.set_engram_callback().
+    """
+    # Import lazy para no requerir el bridge si no se activa
+    from engram_mcp_bridge import EngramMCPBridge
+
+    bridge = EngramMCPBridge(binary_path=binary_path, timeout_s=timeout_s)
+
+    fallback: Optional[EngramStrategy] = None
+    if use_disk_fallback:
+        if project_root is None:
+            raise ValueError(
+                "use_disk_fallback=True requiere project_root para DiskFallbackStrategy"
+            )
+        fallback = DiskFallbackStrategy(project_root)
+
+    def callback(proyecto: str, cajon: str) -> Dict[str, Any]:
+        return bridge.mem_search(project=proyecto, topic_key=cajon)
+
+    strategy = CallbackStrategy(
+        callback=callback,
+        fallback=fallback,
+        name="engram_mcp_real",
+    )
+    # Mantener referencia al bridge para cleanup explicito si se necesita
+    strategy._bridge = bridge  # type: ignore
+    return strategy
