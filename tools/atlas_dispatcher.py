@@ -240,6 +240,115 @@ class ATLASDispatcher:
         }
         return cajon_map.get(phase, [])
 
+    # Bloque 1A.16: Paths excluidos de la verificacion de archivos declarados.
+    _DECLARED_FILES_EXCLUSIONS = (
+        ".pipeline/",
+        "_qa/temp/",
+        "_qa/.",
+        "node_modules/",
+        "dist/",
+        "build/",
+        ".claude/worktrees/",
+        ".next/",
+        ".cache/",
+    )
+
+    def _normalize_path(self, path: str) -> str:
+        """Normaliza path para comparacion cross-platform (Bloque 1A.16).
+        OJO: lstrip('./') comeria el '.' de '.pipeline/' — usar startswith en vez."""
+        norm = path.replace("\\", "/")
+        if norm.startswith("./"):
+            norm = norm[2:]
+        return norm
+
+    def _is_excluded_path(self, path: str) -> bool:
+        """Determina si un path debe excluirse de la verificacion (Bloque 1A.16)"""
+        norm = self._normalize_path(path)
+        return any(norm.startswith(prefix) for prefix in self._DECLARED_FILES_EXCLUSIONS)
+
+    def _get_git_changed_files(self) -> Tuple[List[str], Optional[str]]:
+        """
+        Bloque 1A.16: Obtiene lista de archivos modificados via git.
+
+        Incluye modified tracked + untracked. Retorna (changed, soft_fail_reason).
+        Si soft_fail_reason no es None, no se pudo determinar (no es repo git, etc).
+        """
+        try:
+            diff_result = subprocess.run(
+                ["git", "diff", "--name-only", "HEAD"],
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if diff_result.returncode != 0:
+                return ([], f"git diff fallo (rc={diff_result.returncode}): {diff_result.stderr.strip()[:100]}")
+
+            modified = [l.strip() for l in diff_result.stdout.splitlines() if l.strip()]
+
+            untracked_result = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            untracked: List[str] = []
+            if untracked_result.returncode == 0:
+                untracked = [l.strip() for l in untracked_result.stdout.splitlines() if l.strip()]
+
+            all_changed = sorted({*modified, *untracked})
+            return (all_changed, None)
+
+        except (subprocess.SubprocessError, FileNotFoundError, OSError) as e:
+            return ([], f"git no disponible: {e}")
+
+    def verify_declared_files(self, response: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1A.16: Verifica que 'archivos' declarados sea SUPERSET real de los
+        archivos modificados segun git diff + untracked.
+
+        Retorna: (errores, warnings)
+        - errores: blocks duros (envelope rechazado)
+        - warnings: avisos blandos (soft-fail si no es repo git)
+
+        Reglas:
+        - Cambios git (post-exclusiones) subset de declarados -> OK
+        - Cambios git fuera de la lista -> error con undeclared
+        - Sin git / no es repo -> warning, no error
+        - Over-declaration permitida; under-declaration NO
+        """
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        archivos_declarados = response.get("archivos", []) or []
+        if not isinstance(archivos_declarados, list):
+            errores.append("archivos debe ser lista para verificar declaracion")
+            return (errores, warnings)
+
+        declarados_norm = {self._normalize_path(a) for a in archivos_declarados}
+
+        changed_files, soft_fail_reason = self._get_git_changed_files()
+
+        if soft_fail_reason is not None:
+            warnings.append(f"file declaration verification omitida ({soft_fail_reason})")
+            return (errores, warnings)
+
+        changed_relevant = [f for f in changed_files if not self._is_excluded_path(f)]
+        changed_norm = {self._normalize_path(f) for f in changed_relevant}
+
+        undeclared = sorted(changed_norm - declarados_norm)
+
+        if undeclared:
+            errores.append(
+                f"archivos declarados NO es superset de cambios git: "
+                f"{len(undeclared)} archivo(s) modificado(s) sin declarar: {undeclared}. "
+                f"El dev-agent debe listar TODOS los archivos modificados en 'archivos' "
+                f"(over-declaration permitida; under-declaration NO)."
+            )
+
+        return (errores, warnings)
+
     def verify_pre_return_audit(self, response: Dict[str, Any]) -> List[str]:
         """
         Bloque 1A.15: Re-verifica independientemente el campo pre_return_audit
@@ -394,12 +503,20 @@ class ATLASDispatcher:
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("BLOQUEADORES debe ser lista o null")
 
-        # Bloque 1A.15: dev_strict requiere pre_return_audit verificado
+        # Bloque 1A.15 + 1A.16: dev_strict requiere pre_return_audit + file declaration
         if mode == "dev_strict":
             # Solo aplica si status=completado (fallido no requiere audit — el agente fallo)
             if response.get("status") == "completado":
+                # 1A.15: re-verificar pre_return_audit
                 audit_errores = self.verify_pre_return_audit(response)
                 errores.extend(audit_errores)
+
+                # 1A.16: verificar que archivos sea superset real de cambios git
+                decl_errores, decl_warnings = self.verify_declared_files(response)
+                errores.extend(decl_errores)
+                # Warnings (soft-fail) NO bloquean — solo se exponen
+                if decl_warnings:
+                    response.setdefault("_dispatcher_warnings", []).extend(decl_warnings)
 
             # archivos debe ser lista (igual que standard)
             if not isinstance(response.get("archivos", []), list):
