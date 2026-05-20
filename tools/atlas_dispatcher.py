@@ -5,6 +5,7 @@ Ejecuta el pipeline de 5 fases con enforcement de gates, QA obligatorio, y Retur
 NO hace trabajo real — solo coordina y valida.
 """
 
+import os
 import sys
 import json
 import subprocess
@@ -67,16 +68,57 @@ class ReturnEnvelope:
 class ATLASDispatcher:
     """Orquestador central del pipeline vibecoding"""
 
-    def __init__(self, project_root: Path):
+    def __init__(
+        self,
+        project_root: Path,
+        auto_enable_mcp: Optional[bool] = None,
+    ):
+        """
+        Args:
+            project_root: Raiz del proyecto ATLAS.
+            auto_enable_mcp: Si True (default), intenta activar Engram MCP
+                             automaticamente al construir (Bloque 1B.5).
+                             - True: intenta auto-enable (binary detection)
+                             - False: queda con DiskFallbackStrategy puro
+                             - None: respeta env var ATLAS_DISABLE_ENGRAM_MCP
+                                     (=1 fuerza off, sino True)
+        """
         self.project_root = Path(project_root)
         self.phase_playbook = self._load_phase_playbook()
         self.config_dir = self.project_root / "config"
         # Anti-loop tracking (Bloque 1A.12): contador de re-intentos por cajon
         # Formato: {"{proyecto}/{cajon}": count}
         self.phase_gate_retries: Dict[str, int] = {}
-        # Bloque 1B.1: Engram Strategy (default = disk_fallback, NO es Engram real)
-        # Llamar set_engram_callback() para inyectar implementacion MCP real (1B.2)
+        # Bloque 1B.1: Engram Strategy (default = disk_fallback)
         self._engram_strategy: EngramStrategy = DiskFallbackStrategy(self.project_root)
+
+        # Bloque 1B.5: status visible (sin logging ruidoso)
+        # Valores: "active" | "disabled_by_env" | "disabled_by_param" |
+        #          "unavailable: {reason}" | "disabled_default"
+        self.engram_mcp_status: str = "disabled_default"
+
+        # Bloque 1B.5: auto-enable de Engram MCP al construir.
+        # Decision matrix:
+        #   auto_enable_mcp=False -> opt-out explicito por param
+        #   ATLAS_DISABLE_ENGRAM_MCP=1 -> opt-out por env var
+        #   auto_enable_mcp=None y env no seteada -> auto-enable (default)
+        #   auto_enable_mcp=True -> forzar auto-enable
+        env_disabled = os.environ.get("ATLAS_DISABLE_ENGRAM_MCP", "").lower() in ("1", "true", "yes")
+
+        if auto_enable_mcp is False:
+            self.engram_mcp_status = "disabled_by_param"
+        elif env_disabled:
+            self.engram_mcp_status = "disabled_by_env"
+        else:
+            # Intentar auto-enable. Si falla, disk_fallback queda activo (graceful).
+            success, message = self.enable_engram_mcp()
+            if success:
+                self.engram_mcp_status = "active"
+            else:
+                # message tipo "Engram MCP no activado: EngramBinaryNotFound: ..."
+                # Lo normalizamos a "unavailable: {short_reason}"
+                short_reason = message.split(":", 2)[-1].strip() if ":" in message else message
+                self.engram_mcp_status = f"unavailable: {short_reason[:120]}"
 
     def enable_engram_mcp(
         self,
@@ -114,6 +156,9 @@ class ATLASDispatcher:
                 project_root=self.project_root,
             )
             self._engram_strategy = strategy
+            # Bloque 1B.5: actualizar status si se llama manualmente
+            if hasattr(self, "engram_mcp_status"):
+                self.engram_mcp_status = "active"
             return (True, f"Engram MCP real activado (timeout={timeout_s}s)")
 
         except Exception as e:
@@ -264,6 +309,96 @@ class ATLASDispatcher:
         Retorna dict con 'status': "found" | "not_found" | "timeout" + metadata.
         """
         return self._engram_strategy.check_cajon(proyecto, cajon)
+
+    def get_cajon_full(self, proyecto: str, cajon: str) -> Dict[str, Any]:
+        """
+        Bloque 1B.4: 2-step pattern real (search -> get_observation).
+
+        Retorna el CONTENIDO COMPLETO de un cajon (no preview truncado).
+
+        Flujo:
+        1. mem_search(cajon) -> obtiene observation_id
+        2. mem_get_observation(observation_id) -> contenido completo
+
+        Retorna dict con shape:
+        - {"status": "found", "content": "<texto completo>", "title": ...,
+           "type": ..., "topic_key": ..., "source": ..., ...}
+        - {"status": "not_found", ...} si el cajon no existe
+        - {"status": "timeout", ...} si error en cualquier paso
+        - {"status": "inconsistent", ...} si search dice found pero
+          get_observation dice not_found (race condition o stale state)
+
+        IMPORTANTE:
+        - timeout/error NUNCA se confunden con not_found
+        - Si la strategy no soporta get_observation (ej. disk_fallback),
+          intenta obtener contenido del disco directamente con el cajon
+        """
+        # Paso 1: search
+        search_result = self._engram_strategy.check_cajon(proyecto, cajon)
+
+        if search_result["status"] == "not_found":
+            return {
+                "status": "not_found",
+                "step": "search",
+                "topic_key": cajon,
+                "source": search_result.get("source"),
+            }
+
+        if search_result["status"] == "timeout":
+            return {
+                "status": "timeout",
+                "step": "search",
+                "topic_key": cajon,
+                "error": search_result.get("error"),
+                "source": search_result.get("source"),
+            }
+
+        # status == found: extraer observation_id
+        observation_id = search_result.get("observation_id")
+
+        # Paso 2: get_observation
+        # Pasamos tambien el cajon para que disk_fallback pueda resolverlo si toca
+        obs_result = self._engram_strategy.get_observation(
+            observation_id,
+            cajon=cajon,
+        )
+
+        if obs_result is None:
+            # Strategy no soporta get_observation y no hay fallback -> degradar
+            # Devolvemos lo que tenemos del search (con preview)
+            return {
+                "status": "found",
+                "step": "search_only",
+                "topic_key": cajon,
+                "observation_id": observation_id,
+                "content": search_result.get("raw_text_preview"),
+                "source": search_result.get("source"),
+                "note": "Strategy no soporta get_observation — solo preview disponible",
+            }
+
+        # Detectar inconsistencia: search found pero get_observation not_found
+        if obs_result.get("status") == "not_found":
+            return {
+                "status": "inconsistent",
+                "step": "get_observation",
+                "topic_key": cajon,
+                "observation_id": observation_id,
+                "note": "search retorno found pero get_observation retorno not_found (race condition o stale state)",
+                "source": obs_result.get("source"),
+            }
+
+        if obs_result.get("status") == "timeout":
+            return {
+                "status": "timeout",
+                "step": "get_observation",
+                "topic_key": cajon,
+                "observation_id": observation_id,
+                "error": obs_result.get("error"),
+                "source": obs_result.get("source"),
+            }
+
+        # found: contenido completo disponible
+        return obs_result
 
     def _check_disk_cajon(self, proyecto: str, cajon: str) -> bool:
         """

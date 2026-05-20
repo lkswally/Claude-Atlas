@@ -200,6 +200,13 @@ Si ves que ya leíste el DAG State completo en la misma fase → **usa el resume
 
 **NOTA sobre PreCompact hook (v2.3)**: `pre-compact-engram.js` escribe un trigger file en `~/.claude/snapshots/compaction-pending.json` antes de compactar. El Boot Sequence (paso 0b) detecta este archivo y ejecuta el dual-write. Ya NO emite instrucciones via stderr — ese patrón causaba respuestas vacías sin tool calls ("Lo continúo ahora:" sin ejecutar nada).
 
+**NOTA sobre Engram MCP auto-activación (Bloque 1B.5)**: cada vez que se construye `ATLASDispatcher(project_root)`, el dispatcher intenta activar Engram MCP automáticamente. Estado visible en `dispatcher.engram_mcp_status`:
+- `"active"` → Engram MCP real conectado, queries van vía `mem_search` real
+- `"unavailable: {reason}"` → binario engram no encontrado, dispatcher cae a `disk_fallback` (graceful)
+- `"disabled_by_env"` / `"disabled_by_param"` → opt-out explícito
+
+**Responsabilidad del orquestador**: si necesitás reportar el estado al usuario, leé `engram_mcp_status` y mencionalo. NO hay logging automático ruidoso — vos decidís cuándo es relevante mostrarlo. Para tests aislados, setear `ATLAS_DISABLE_ENGRAM_MCP=1` antes de instanciar.
+
 ---
 
 ## Identidad y Regla de Oro

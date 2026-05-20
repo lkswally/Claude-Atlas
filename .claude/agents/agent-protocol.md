@@ -102,27 +102,55 @@ Cuando se inyecta callback con `use_disk_fallback=True` (default):
 
 ---
 
-## 1.6. Engram MCP Real Connection (Bloque 1B.2)
+## 1.6. Engram MCP Real Connection (Bloque 1B.2 + 1B.5)
 
-**ESTADO**: Engram MCP real **operativo y opt-in** vía `dispatcher.enable_engram_mcp()`. El default sigue siendo `DiskFallbackStrategy` (1B.1) — para activar Engram real hay que llamarlo explícitamente.
+**ESTADO** (post-1B.5): Engram MCP real **operativo y auto-activado por default**. `ATLASDispatcher.__init__` intenta `enable_engram_mcp()` automáticamente. Si el binario `engram` está disponible, queda activo desde el boot. Si no, cae graceful a `DiskFallbackStrategy` sin romper nada.
 
-### Cómo activar
+### Status visible
+
+Cada dispatcher expone `dispatcher.engram_mcp_status`:
+
+| Valor | Significado |
+|-------|-------------|
+| `"active"` | Engram MCP real activado |
+| `"disabled_by_env"` | `ATLAS_DISABLE_ENGRAM_MCP=1` en entorno |
+| `"disabled_by_param"` | Construido con `auto_enable_mcp=False` |
+| `"unavailable: {reason}"` | Binary no encontrado u otro error |
+| `"disabled_default"` | Estado intermedio (no debería verse en runtime) |
+
+El orquestador puede leer este atributo para decidir si loguear el estado al usuario. No hay logging automático ruidoso.
+
+### Opt-out
+
+Para tests o entornos donde no se quiere Engram MCP:
+
+```python
+# Por parámetro
+d = ATLASDispatcher(project_root, auto_enable_mcp=False)
+
+# Por env var (afecta a todos los dispatchers en el proceso)
+os.environ["ATLAS_DISABLE_ENGRAM_MCP"] = "1"
+d = ATLASDispatcher(project_root)
+```
+
+### Cómo activar manualmente (post-init)
+
+A partir de 1B.5, el dispatcher activa auto. Si querés re-activar con parámetros distintos (ej. timeout custom):
 
 ```python
 from atlas_dispatcher import ATLASDispatcher
 
 dispatcher = ATLASDispatcher(project_root)
+# Engram MCP ya está auto-activado si binary disponible
+print(dispatcher.engram_mcp_status)  # "active" o "unavailable: ..."
 
-# Activación opt-in con auto-detección del binario
-success, message = dispatcher.enable_engram_mcp()
-
-# Con path explícito
+# Re-activar con path explícito
 success, message = dispatcher.enable_engram_mcp(binary_path="/usr/local/bin/engram")
 
-# Con timeout custom (default 5s)
+# Re-activar con timeout custom (default 5s)
 success, message = dispatcher.enable_engram_mcp(timeout_s=10.0)
 
-# Sin disk_fallback (modo estricto — para tests)
+# Re-activar sin disk_fallback (modo estricto — para tests)
 success, message = dispatcher.enable_engram_mcp(use_disk_fallback=False)
 ```
 
@@ -169,10 +197,33 @@ else:
 
 ### LO QUE NO HACE 1B.2 (gaps remanentes honestos)
 
-- ❌ NO maneja `mem_get_observation` (solo `mem_search`)
 - ❌ NO maneja `ambiguous_project` ni `recovery_token` (queda para 1B.3)
 - ❌ NO hace cross-machine sync activamente (Engram lo soporta nativo, pero ATLAS no lo invoca aún)
 - ❌ Heurística de parseo de output de Engram es text-based + `structuredContent` opcional — robusta pero no perfecta
+
+### Bloque 1B.4: 2-step pattern real (mem_search + mem_get_observation)
+
+A partir de 1B.4 el bridge expone también `mem_get_observation(observation_id)`, segundo paso del patrón canónico. El dispatcher provee el helper consolidado:
+
+```python
+full = dispatcher.get_cajon_full("atlas-audit", "atlas/bloque-1a16-file-declaration")
+# full["status"] in {"found", "not_found", "timeout", "inconsistent"}
+# full["content"] = texto completo (NO preview truncado)
+# full["title"], full["type"], full["topic_key"] cuando found
+# full["step"] indica en qué paso terminó (search | get_observation | search_only)
+```
+
+**Reglas operativas**:
+- `not_found` en step 1 → NO se invoca step 2 (skip optimization)
+- `timeout` o `error` en cualquier paso → NUNCA se confunde con `not_found` (status explícito)
+- Si search retorna `found` pero get_observation retorna `not_found` → status `inconsistent` (race condition / stale state, NO silenciado)
+- Strategies que no soportan get_observation (ej. `DiskFallbackStrategy` sin cajón) → degrada a preview de search con `step="search_only"`
+
+**LO QUE NO HACE 1B.4 (gaps que siguen abiertos)**:
+- ❌ NO integra `get_cajon_full()` automáticamente desde el orquestador (los agentes deben invocarlo cuando necesiten contenido completo)
+- ❌ NO expone `mem_save` / `mem_update` desde Python (los subagentes Claude escriben vía su runtime MCP)
+- ❌ NO resuelve `ambiguous_project` (sigue siendo 1B.3)
+- ❌ NO cachea resultados — cada `get_cajon_full()` hace 2 round-trips
 
 ---
 

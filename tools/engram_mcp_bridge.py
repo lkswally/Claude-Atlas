@@ -29,6 +29,7 @@ Activacion:
 import atexit
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -407,6 +408,26 @@ class EngramMCPBridge:
             }
 
     @staticmethod
+    def _extract_observation_id_from_text(text: str) -> Optional[int]:
+        """
+        Extrae el observation_id (entero) del texto de respuesta de mem_search.
+
+        Formato observado en Engram v1.15.10:
+            '[1] #33 (decision) — Title...'
+            '[1] #obs-xxx (decision) — Title...' (fallback hex)
+
+        Retorna el primer ID encontrado como int (preferido) o None si no parsea.
+        """
+        # Buscar #<entero> (formato actual de Engram)
+        m = re.search(r"#(\d+)\b", text)
+        if m:
+            try:
+                return int(m.group(1))
+            except (ValueError, OverflowError):
+                pass
+        return None
+
+    @staticmethod
     def _parse_search_result(
         result: Dict[str, Any],
         topic_key: str,
@@ -414,14 +435,13 @@ class EngramMCPBridge:
         """
         Parsea la respuesta de mem_search MCP a formato EngramStrategy.
 
-        MCP tools/call result tiene shape:
-        - {"content": [{"type": "text", "text": "..."}], "isError": bool}
-        - O con structuredContent si Engram lo expone
+        Bloque 1B.4: parser mejorado para extraer observation_id real (entero)
+        del preview text. Eso habilita el segundo paso del 2-step pattern.
 
-        Heuristica:
-        - Si content text contiene "No memories found" / "0 memorias" → not_found
-        - Si contiene "Found N memories" o tiene observation IDs → found
-        - Otherwise → not_found (conservador)
+        MCP tools/call result shape:
+        - {"content": [{"type": "text", "text": "<JSON-encoded string>"}], "isError": bool}
+        - El text es JSON con campos {project, result, ...}
+        - result es texto humano con preview + observation_ids como #<int>
         """
         if result.get("isError"):
             return {
@@ -430,7 +450,7 @@ class EngramMCPBridge:
                 "error": f"isError=true: {result}",
             }
 
-        # Intento 1: structuredContent (MCP 2025+)
+        # Intento 1: structuredContent (MCP 2025+, no usado por Engram v1.15.10 aun)
         sc = result.get("structuredContent")
         if isinstance(sc, dict):
             observations = sc.get("observations") or sc.get("results") or []
@@ -450,29 +470,42 @@ class EngramMCPBridge:
                     "topic_key": topic_key,
                 }
 
-        # Intento 2: parse content[].text
+        # Intento 2: parse content[].text (formato actual de Engram v1.15.10)
         content = result.get("content", [])
         if not isinstance(content, list):
             content = []
-        full_text = " ".join(
+        raw_text = " ".join(
             item.get("text", "") for item in content
             if isinstance(item, dict) and item.get("type") == "text"
-        ).lower()
+        )
+        # raw_text es JSON-encoded — intentar decodificar para extraer .result
+        result_text = raw_text
+        try:
+            inner = json.loads(raw_text)
+            if isinstance(inner, dict) and "result" in inner:
+                result_text = inner["result"]
+        except (json.JSONDecodeError, ValueError):
+            pass  # raw_text no es JSON, usar tal cual
 
-        if "no memories found" in full_text or "no observations" in full_text:
+        result_text_lower = result_text.lower()
+
+        if "no memories found" in result_text_lower or "no observations" in result_text_lower:
             return {
                 "status": "not_found",
                 "source": "engram_mcp_real",
                 "topic_key": topic_key,
             }
 
-        # Heuristica: si menciona "found" o tiene un ID-like pattern → found
-        if "found" in full_text or "#" in full_text:
+        # Found: extraer observation_id del preview
+        obs_id = EngramMCPBridge._extract_observation_id_from_text(result_text)
+
+        if "found" in result_text_lower or obs_id is not None:
             return {
                 "status": "found",
                 "source": "engram_mcp_real",
+                "observation_id": obs_id,
                 "topic_key": topic_key,
-                "raw_text_preview": full_text[:200],
+                "raw_text_preview": result_text[:200],
             }
 
         # Conservador: si no podemos parsear, asumir not_found pero anotar
@@ -481,6 +514,150 @@ class EngramMCPBridge:
             "source": "engram_mcp_real",
             "topic_key": topic_key,
             "note": "Respuesta MCP no clasificable, asumido not_found",
+        }
+
+    # --------------------------------------------------------
+    #  Bloque 1B.4: mem_get_observation (2-step pattern)
+    # --------------------------------------------------------
+
+    def mem_get_observation(
+        self,
+        observation_id: int,
+        retry_on_crash: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1B.4: Segundo paso del patron 2-step.
+
+        Llama al tool `mem_get_observation` de Engram MCP para obtener el
+        contenido COMPLETO (no truncado) de una observation previamente
+        ubicada via mem_search.
+
+        Args:
+            observation_id: ID entero retornado por mem_search.
+            retry_on_crash: Si True (default), reintenta UNA vez si el
+                            subprocess se cayo.
+
+        Retorna dict con shape:
+        - {"status": "found", "content": "<texto completo>", "id": int,
+           "raw_result": "...", "source": "engram_mcp_real", ...}
+        - {"status": "not_found", "id": int, ...} si observation no existe
+        - {"status": "timeout", "error": ..., ...} en timeout/error
+
+        IMPORTANTE: timeout y error NO se confunden con not_found.
+        """
+        try:
+            self._ensure_started()
+            result = self._call_tool(
+                "mem_get_observation",
+                {"id": observation_id},
+            )
+            return self._parse_get_observation_result(result, observation_id)
+
+        except EngramTimeout as e:
+            return {
+                "status": "timeout",
+                "source": "engram_mcp_real",
+                "id": observation_id,
+                "error": str(e),
+                "note": "mem_get_observation timeout",
+            }
+
+        except (EngramHandshakeError, EngramBridgeError) as e:
+            if retry_on_crash:
+                self._kill_subprocess()
+                try:
+                    return self.mem_get_observation(observation_id, retry_on_crash=False)
+                except Exception as retry_err:
+                    return {
+                        "status": "timeout",
+                        "source": "engram_mcp_real",
+                        "id": observation_id,
+                        "error": f"Retry fallo: {retry_err}",
+                    }
+            return {
+                "status": "timeout",
+                "source": "engram_mcp_real",
+                "id": observation_id,
+                "error": str(e),
+            }
+
+    @staticmethod
+    def _parse_get_observation_result(
+        result: Dict[str, Any],
+        observation_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Parsea respuesta de mem_get_observation MCP.
+
+        Formato observado en Engram v1.15.10:
+        - content[0].text es JSON-encoded
+        - inner JSON tiene {project, project_path, result}
+        - result es texto completo (~2-3KB para decisions)
+        - Empieza con "#<id> [<type>] <title>" seguido del content completo
+        """
+        if result.get("isError"):
+            return {
+                "status": "timeout",
+                "source": "engram_mcp_real",
+                "id": observation_id,
+                "error": f"isError=true: {result}",
+            }
+
+        content = result.get("content", [])
+        if not isinstance(content, list):
+            content = []
+        raw_text = " ".join(
+            item.get("text", "") for item in content
+            if isinstance(item, dict) and item.get("type") == "text"
+        )
+
+        # Intentar decodificar JSON envelope
+        result_text = raw_text
+        project = None
+        try:
+            inner = json.loads(raw_text)
+            if isinstance(inner, dict):
+                result_text = inner.get("result", raw_text)
+                project = inner.get("project")
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        if not result_text or not result_text.strip():
+            return {
+                "status": "not_found",
+                "source": "engram_mcp_real",
+                "id": observation_id,
+                "note": "Respuesta vacia — observation puede no existir",
+            }
+
+        # Detectar errores semanticos comunes
+        rt_lower = result_text.lower()
+        if "not found" in rt_lower or "no such observation" in rt_lower or "does not exist" in rt_lower:
+            return {
+                "status": "not_found",
+                "source": "engram_mcp_real",
+                "id": observation_id,
+            }
+
+        # Extraer metadata del result (formato Engram v1.15.10):
+        #   "#<id> [<type>] <title>\n<body>\n...Session:...\nTopic:...\n..."
+        type_match = re.match(r"#\d+\s*\[([^\]]+)\]\s*(.+?)(?:\n|$)", result_text)
+        obs_type = type_match.group(1).strip() if type_match else None
+        title = type_match.group(2).strip() if type_match else None
+
+        topic_match = re.search(r"^Topic:\s*(.+)$", result_text, re.MULTILINE)
+        topic_key = topic_match.group(1).strip() if topic_match else None
+
+        return {
+            "status": "found",
+            "source": "engram_mcp_real",
+            "id": observation_id,
+            "content": result_text,  # texto completo
+            "title": title,
+            "type": obs_type,
+            "topic_key": topic_key,
+            "project": project,
+            "raw_length": len(result_text),
         }
 
     # --------------------------------------------------------

@@ -5,11 +5,15 @@ Validacion real de Bloque 1A.16: File Change Declaration Verification
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
+
+# Bloque 1B.5: opt-out de auto-enable Engram MCP en tests
+os.environ["ATLAS_DISABLE_ENGRAM_MCP"] = "1"
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
