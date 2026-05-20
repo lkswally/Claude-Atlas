@@ -651,9 +651,11 @@ Paso 6 — Guardar descobrimiento
 
 ---
 
-## 9. Anti-Loop Tracking — Enforcement (Bloque 1A.12)
+## 9. Anti-Loop Tracking (Intra-Sesión) — Enforcement (Bloque 1A.12)
 
-**QUÉ ES**: Mecanismo para prevenir reintentos infinitos si un cajon falta persistentemente.
+**NIVEL**: Intra-sesión (previene loops dentro de la sesión actual). NO persiste entre sesiones aún.
+
+**QUÉ ES**: Mecanismo para prevenir reintentos infinitos si un cajon falta persistentemente durante una sesión.
 
 **CÓMO FUNCIONA**:
 - Dispatcher mantiene contador `phase_gate_retries` por cajon
@@ -686,3 +688,14 @@ FASE X ESCALACIÓN (Max reintentos alcanzado):
 - Dispatcher: mantiene contador y decide escalación
 - Orquestador: lee escalación_cajones y presenta opciones al usuario
 - Usuario: resuelve (ej: crear cajon manualmente, reasignar agente, diferir tarea)
+
+**LIMITACIÓN ACTUAL**:
+- Counter es session-local (memoria del dispatcher)
+- Si sesión termina → counter se pierde
+- Si usuario retoma proyecto en sesión nueva → counter = 0 (reinicia)
+
+**ANTI-LOOP ENTRE SESIONES** (futuro):
+- Persistir counter en Engram/DAG State
+- Cargar counter en Boot Sequence
+- Detectar si cajon ya falló 2+ veces en sesión anterior
+- Bloque 1A.13+: implementará persistencia entre sesiones
