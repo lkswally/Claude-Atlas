@@ -694,6 +694,8 @@ class ATLASDispatcher:
         - "standard": validación suave (para creativos, utilidades, etc.)
         - "qa_strict": validación estricta para evidence-collector (QA obligatorio)
         - "dev_strict": validación para dev-agents — requiere pre_return_audit (Bloque 1A.15)
+        - "design_strict": validación para ux-architect / ui-designer —
+                           requiere design_intelligence consultado (Bloque 1C.1)
         """
         errores = []
 
@@ -713,6 +715,11 @@ class ATLASDispatcher:
             valid_status = {"completado", "fallido"}
             if response.get("status") not in valid_status:
                 errores.append(f"STATUS inválido: {response.get('status')}. Para dev_strict esperado: completado o fallido")
+        elif mode == "design_strict":
+            # Bloque 1C.1: ux-architect / ui-designer devuelven completado o fallido
+            valid_status = {"completado", "fallido"}
+            if response.get("status") not in valid_status:
+                errores.append(f"STATUS inválido: {response.get('status')}. Para design_strict esperado: completado o fallido")
         else:
             valid_status = {"completado", "fallido", "PASS", "FAIL", "CERTIFIED", "NEEDS WORK"}
             if response.get("status") not in valid_status:
@@ -784,7 +791,125 @@ class ATLASDispatcher:
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("bloqueadores debe ser lista o null")
 
+        # Bloque 1C.1: design_strict requiere design_intelligence consultado
+        if mode == "design_strict":
+            if response.get("status") == "completado":
+                design_errores, design_warnings = self.verify_design_intelligence(response)
+                errores.extend(design_errores)
+                if design_warnings:
+                    response.setdefault("_dispatcher_warnings", []).extend(design_warnings)
+
+            if not isinstance(response.get("archivos", []), list):
+                errores.append("archivos debe ser lista")
+            if not isinstance(response.get("bloqueadores"), (list, type(None))):
+                errores.append("bloqueadores debe ser lista o null")
+
         return len(errores) == 0, errores
+
+    def verify_design_intelligence(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1C.1: Verifica que el envelope incluya evidencia de consulta
+        real a ui-ux-pro-max-skill (design intelligence).
+
+        Retorna (errores, warnings):
+        - errores: bloquean el envelope (campos faltantes, queried=false)
+        - warnings: no bloquean (anti_generic_validated=false, etc.)
+
+        Campos esperados en response["design_intelligence"]:
+        - queried: bool (OBLIGATORIO True)
+        - industry: str (recomendado)
+        - style: str (recomendado)
+        - verified_against: list[str] (recomendado)
+        - anti_generic_validated: bool (recomendado True)
+        """
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        di = response.get("design_intelligence")
+        if di is None:
+            errores.append(
+                "design_intelligence obligatorio (Bloque 1C.1): el agente debe "
+                "consultar ui-ux-pro-max-skill y declarar la consulta. Ver "
+                "tools/skills_invocation.py o agent-protocol.md § 5."
+            )
+            return errores, warnings
+
+        if not isinstance(di, dict):
+            errores.append(
+                f"design_intelligence debe ser objeto, recibido {type(di).__name__}"
+            )
+            return errores, warnings
+
+        if "queried" not in di:
+            errores.append("design_intelligence.queried obligatorio (bool)")
+            return errores, warnings
+
+        if not isinstance(di.get("queried"), bool):
+            errores.append(
+                f"design_intelligence.queried debe ser bool, recibido {type(di.get('queried')).__name__}"
+            )
+            return errores, warnings
+
+        if di["queried"] is False:
+            errores.append(
+                "design_intelligence.queried=false: el agente DEBE consultar "
+                "ui-ux-pro-max-skill antes de emitir output de diseño"
+            )
+            return errores, warnings
+
+        # Campos recomendados (warnings, no errors)
+        if not di.get("industry"):
+            warnings.append("design_intelligence.industry recomendado (string)")
+        if not di.get("style"):
+            warnings.append("design_intelligence.style recomendado (string)")
+
+        verified = di.get("verified_against")
+        if verified is None:
+            warnings.append("design_intelligence.verified_against recomendado (lista de CSVs/domains consultados)")
+        elif not isinstance(verified, list):
+            warnings.append(
+                f"design_intelligence.verified_against debe ser lista, recibido {type(verified).__name__}"
+            )
+        elif len(verified) == 0:
+            warnings.append("design_intelligence.verified_against esta vacio")
+
+        agv = di.get("anti_generic_validated")
+        if agv is None:
+            warnings.append("design_intelligence.anti_generic_validated recomendado (bool)")
+        elif agv is False:
+            warnings.append("design_intelligence.anti_generic_validated=false (output puede ser generico)")
+
+        return errores, warnings
+
+    def consult_design_intelligence(
+        self,
+        query: str,
+        domain: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1C.1: Helper para que ux-architect / ui-designer consulten la
+        skill desde el dispatcher.
+
+        Retorna el resultado del SkillsInvocation.query() (ver
+        tools/skills_invocation.py).
+
+        Si la skill no esta disponible, retorna status="unavailable" — el
+        caller decide si emitir envelope con `queried=false` (sera rechazado
+        en design_strict) o si abortar.
+        """
+        try:
+            from skills_invocation import SkillsInvocation
+        except ImportError as e:
+            return {
+                "status": "unavailable",
+                "reason": f"skills_invocation no importable: {e}",
+            }
+
+        inv = SkillsInvocation()
+        return inv.query(query, domain=domain)
 
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """

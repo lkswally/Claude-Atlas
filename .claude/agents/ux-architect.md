@@ -400,13 +400,34 @@ Ver `agent-protocol.md` § 4.
 
 Ejemplo de NOTAS: "CSS Foundation para {nombre-proyecto}, paleta: {colores}, tema: {light/dark/ambos}, breakpoints: 320/768/1024/1280px"
 
-```
+### Formato OBLIGATORIO (Bloque 1C.1 — Design Intelligence Enforcement)
+
+Si el orquestador valida con `mode="design_strict"`, el envelope **debe** incluir `design_intelligence`. Sin esto el envelope es rechazado.
+
+```yaml
 STATUS: completado | fallido
 TAREA: {descripcion breve}
 ARCHIVOS: [rutas de archivos creados/modificados]
 ENGRAM: {proyecto}/css-foundation
 NOTAS: {solo si hay bloqueadores}
+
+design_intelligence:
+  queried: true                          # OBLIGATORIO — bool
+  industry: "saas-b2b"                   # recomendado — string detectada del Paso 0
+  style: "Glassmorphism + Flat Design"   # recomendado — primary style del search.js output
+  verified_against: ["styles.csv", "colors.csv", "typography.csv"]  # recomendado — qué CSVs consulté
+  anti_generic_validated: true           # recomendado — bool, true si pasé T1-T7 guardrails
 ```
+
+### Reglas de enforcement (mode="design_strict")
+
+| Resultado del Paso 0 | Acción del agente | Acción del dispatcher |
+|---------------------|-------------------|----------------------|
+| Skill respondió OK | Emitir envelope con `queried: true` + metadata | Aceptar (errores=[]) |
+| Skill no disponible | Emitir envelope con `queried: false` + nota | **Rechazado** — debe abortar o escalar |
+| Skill timeout | Emitir envelope con `queried: false` + razón en notas | **Rechazado** — escalar al orquestador |
+
+**Si la skill no está disponible**: NO emitir output de diseño con defaults silenciosos. Reportar el bloqueo en `bloqueadores` y `STATUS: fallido`.
 
 ## Tools
 - Read

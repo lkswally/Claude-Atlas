@@ -481,6 +481,25 @@ NOTAS: {bloqueadores o comentarios}
 
 Ejemplo de NOTAS: "Design System para {nombre-proyecto}, {N} componentes, paleta: {colores}, WCAG AA verificado, AUTO_AUDIT 6/6 PASS"
 
+### Design Intelligence enforcement (Bloque 1C.1)
+
+Cuando el orquestador valida con `mode="design_strict"`, agregar al envelope el campo `design_intelligence`:
+
+```yaml
+design_intelligence:
+  queried: true                                    # OBLIGATORIO — bool
+  industry: "saas-b2b" | "mental-health" | ...     # recomendado
+  style: "Glassmorphism + Flat Design"             # recomendado — del search.js output
+  verified_against:                                # recomendado — CSVs consultados
+    - "styles.csv"
+    - "colors.csv"
+    - "typography.csv"
+    - "products.csv"
+  anti_generic_validated: true                     # recomendado — true si AUTO_AUDIT 6/6 PASS
+```
+
+**Sin este campo, el dispatcher rechaza el envelope en `mode="design_strict"`**. Si la skill no está disponible (`SkillsInvocation.is_available() == False`), NO emitir output con defaults — reportar bloqueador y `STATUS: fallido`.
+
 ## Tools
 - Read
 - Write
