@@ -62,6 +62,40 @@ class EngramTimeout(EngramBridgeError):
     pass
 
 
+class EngramAmbiguousProject(EngramBridgeError):
+    """
+    Bloque 1B.3: Engram no pudo resolver el proyecto del query.
+
+    Sucede cuando:
+    - El proyecto especificado no existe ("unknown_project")
+    - No se puede determinar el proyecto del directorio ("ambiguous_project")
+    - El proyecto no esta enrolled
+
+    Atributos:
+    - available_projects: lista de proyectos validos disponibles
+    - recovery_token: token para retry (si Engram lo provee)
+    - engram_error_code: codigo original de Engram ("unknown_project",
+                        "ambiguous_project", etc.)
+    - hint: mensaje de Engram con sugerencia de accion
+    - message: descripcion del error
+    """
+
+    def __init__(
+        self,
+        message: str,
+        available_projects: Optional[list] = None,
+        recovery_token: Optional[str] = None,
+        engram_error_code: Optional[str] = None,
+        hint: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.available_projects = available_projects or []
+        self.recovery_token = recovery_token
+        self.engram_error_code = engram_error_code
+        self.hint = hint
+        self.message = message
+
+
 # ============================================================
 #  BRIDGE
 # ============================================================
@@ -337,7 +371,13 @@ class EngramMCPBridge:
         tool_name: str,
         arguments: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Llama un MCP tool y retorna el result envelope."""
+        """
+        Llama un MCP tool y retorna el result envelope.
+
+        Bloque 1B.3: Si la respuesta es isError=true y el contenido indica
+        un problema de proyecto (ambiguous_project / unknown_project /
+        not_enrolled), raisea EngramAmbiguousProject con metadata.
+        """
         response = self._send_request_raw(
             "tools/call",
             {"name": tool_name, "arguments": arguments},
@@ -352,7 +392,86 @@ class EngramMCPBridge:
         if "result" not in response:
             raise EngramBridgeError(f"Response sin result: {response}")
 
-        return response["result"]
+        result = response["result"]
+
+        # Bloque 1B.3: detectar ambiguous_project en isError responses
+        if isinstance(result, dict) and result.get("isError"):
+            ambiguous = self._try_parse_ambiguous_project(result)
+            if ambiguous is not None:
+                raise ambiguous
+
+        return result
+
+    @staticmethod
+    def _try_parse_ambiguous_project(
+        result: Dict[str, Any],
+    ) -> Optional["EngramAmbiguousProject"]:
+        """
+        Intenta detectar y parsear un error de proyecto ambiguo / desconocido
+        en una respuesta isError=true.
+
+        Formato real observado (Engram v1.15.10):
+        - content[0].text es JSON-encoded
+        - inner JSON: {error_code, available_projects, recovery_token?,
+                       hint, message}
+        - error_code en {"unknown_project", "ambiguous_project",
+                         "not_enrolled"}
+
+        Retorna EngramAmbiguousProject si matchea, None si no.
+        """
+        content = result.get("content", [])
+        if not isinstance(content, list):
+            return None
+
+        raw_text = " ".join(
+            item.get("text", "") for item in content
+            if isinstance(item, dict) and item.get("type") == "text"
+        )
+
+        # Intentar parsear como JSON envelope
+        inner: Dict[str, Any] = {}
+        try:
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, dict):
+                inner = parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Detectar via error_code (path canonico)
+        AMBIGUOUS_CODES = {
+            "unknown_project",
+            "ambiguous_project",
+            "not_enrolled",
+            "project_not_found",
+        }
+        error_code = inner.get("error_code")
+        if error_code in AMBIGUOUS_CODES:
+            return EngramAmbiguousProject(
+                message=inner.get("message", raw_text[:200]),
+                available_projects=inner.get("available_projects") or [],
+                recovery_token=inner.get("recovery_token"),
+                engram_error_code=error_code,
+                hint=inner.get("hint"),
+            )
+
+        # Detectar via message text (fallback heuristico)
+        text_lower = raw_text.lower()
+        ambiguous_phrases = (
+            "not backed by known context",
+            "ambiguous project",
+            "not found in store",
+            "project not enrolled",
+        )
+        if any(phrase in text_lower for phrase in ambiguous_phrases):
+            return EngramAmbiguousProject(
+                message=inner.get("message", raw_text[:200]),
+                available_projects=inner.get("available_projects") or [],
+                recovery_token=inner.get("recovery_token"),
+                engram_error_code=error_code or "ambiguous_project_inferred",
+                hint=inner.get("hint"),
+            )
+
+        return None
 
     def mem_search(
         self,
@@ -367,6 +486,9 @@ class EngramMCPBridge:
         - {"status": "found", "observation_id": ..., "source": "engram_mcp_real"}
         - {"status": "not_found", "source": "engram_mcp_real"}
         - {"status": "timeout", "error": ..., "source": "engram_mcp_real"}
+        - {"status": "ambiguous_project", "available_projects": [...],
+           "recovery_token": ..., "engram_error_code": ..., "hint": ...,
+           "source": "engram_mcp_real"} (Bloque 1B.3)
         """
         try:
             self._ensure_started()
@@ -379,6 +501,25 @@ class EngramMCPBridge:
                 },
             )
             return self._parse_search_result(result, topic_key)
+
+        except EngramAmbiguousProject as e:
+            # Bloque 1B.3: NO confundir con not_found
+            return {
+                "status": "ambiguous_project",
+                "source": "engram_mcp_real",
+                "topic_key": topic_key,
+                "project_attempted": project,
+                "available_projects": e.available_projects,
+                "recovery_token": e.recovery_token,
+                "engram_error_code": e.engram_error_code,
+                "hint": e.hint,
+                "message": e.message,
+                "note": (
+                    "Engram no pudo resolver el proyecto. "
+                    "Reintentar con un valor de available_projects, "
+                    "o usar dispatcher.resolve_ambiguous_project() con recovery_token."
+                ),
+            }
 
         except EngramTimeout as e:
             return {
@@ -406,6 +547,35 @@ class EngramMCPBridge:
                 "source": "engram_mcp_real",
                 "error": str(e),
             }
+
+    def mem_search_with_recovery(
+        self,
+        topic_key: str,
+        chosen_project: str,
+        recovery_token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1B.3: Reintenta mem_search despues de un ambiguous_project.
+
+        Para el read path de Engram v1.15.10, el "recovery" es simplemente
+        reintentar con un proyecto explicito de la lista available_projects.
+        recovery_token se acepta pero no se envia a Engram (es solo para
+        compatibilidad con APIs futuras y para que el caller pueda trackear
+        el reintento).
+
+        Args:
+            topic_key: cajon a buscar
+            chosen_project: proyecto elegido (debe estar en available_projects)
+            recovery_token: opcional, para trackear el reintento
+
+        Retorna mismo shape que mem_search.
+        """
+        result = self.mem_search(project=chosen_project, topic_key=topic_key)
+        # Anotar que esto fue un recovery
+        result["recovered_from_ambiguous"] = True
+        if recovery_token:
+            result["recovery_token_used"] = recovery_token
+        return result
 
     @staticmethod
     def _extract_observation_id_from_text(text: str) -> Optional[int]:
@@ -552,6 +722,19 @@ class EngramMCPBridge:
                 {"id": observation_id},
             )
             return self._parse_get_observation_result(result, observation_id)
+
+        except EngramAmbiguousProject as e:
+            # Bloque 1B.3: mem_get_observation tambien puede hitear ambiguous_project
+            return {
+                "status": "ambiguous_project",
+                "source": "engram_mcp_real",
+                "id": observation_id,
+                "available_projects": e.available_projects,
+                "recovery_token": e.recovery_token,
+                "engram_error_code": e.engram_error_code,
+                "hint": e.hint,
+                "message": e.message,
+            }
 
         except EngramTimeout as e:
             return {

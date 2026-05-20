@@ -187,12 +187,16 @@ class CallbackStrategy(EngramStrategy):
         fallback: Optional[EngramStrategy] = None,
         name: str = "callback",
         get_observation_callback: Optional[Callable[[Any], Dict[str, Any]]] = None,
+        disk_fallback_on_ambiguous: bool = False,
     ):
         self._callback = callback
         self._fallback = fallback
         self._name = name
         # Bloque 1B.4: callback opcional para mem_get_observation
         self._get_observation_callback = get_observation_callback
+        # Bloque 1B.3: por default NO cae a fallback ante ambiguous_project
+        # (seria un parche silencioso falso). Opt-in explicito si se necesita.
+        self._disk_fallback_on_ambiguous = disk_fallback_on_ambiguous
 
     @property
     def name(self) -> str:
@@ -229,12 +233,31 @@ class CallbackStrategy(EngramStrategy):
                 "error": f"Callback returned invalid format: {result!r}",
             }
 
-        # Status timeout / ambiguous_project / etc → intentar fallback si hay
-        if result["status"] in {"timeout", "ambiguous_project"} and self._fallback is not None:
+        # Bloque 1B.3: ambiguous_project se propaga LIMPIO por default.
+        # No caemos a fallback automaticamente — seria silenciar el problema.
+        # Solo si disk_fallback_on_ambiguous=True hacemos fallback opt-in.
+        if result["status"] == "ambiguous_project":
+            if self._disk_fallback_on_ambiguous and self._fallback is not None:
+                fb_result = self._fallback.check_cajon(proyecto, cajon)
+                if fb_result["status"] == "found":
+                    fb_result["fallback_used"] = True
+                    fb_result["callback_status"] = "ambiguous_project"
+                    fb_result["ambiguous_project_metadata"] = {
+                        "available_projects": result.get("available_projects"),
+                        "recovery_token": result.get("recovery_token"),
+                        "engram_error_code": result.get("engram_error_code"),
+                    }
+                    return fb_result
+            # Propagar el status limpio (caller decide)
+            result.setdefault("source", self._name)
+            return result
+
+        # Status timeout → intentar fallback (mantener comportamiento previo)
+        if result["status"] == "timeout" and self._fallback is not None:
             fb_result = self._fallback.check_cajon(proyecto, cajon)
             if fb_result["status"] == "found":
                 fb_result["fallback_used"] = True
-                fb_result["callback_status"] = result["status"]
+                fb_result["callback_status"] = "timeout"
                 return fb_result
 
         # Status normal (found / not_found) o sin fallback configurado
@@ -307,6 +330,7 @@ def make_mcp_bridge_strategy(
     timeout_s: float = 5.0,
     use_disk_fallback: bool = True,
     project_root: Optional[Path] = None,
+    disk_fallback_on_ambiguous: bool = False,
 ) -> EngramStrategy:
     """
     Factory para Engram MCP Real Strategy (Bloque 1B.2).
@@ -364,6 +388,7 @@ def make_mcp_bridge_strategy(
         fallback=fallback,
         name="engram_mcp_real",
         get_observation_callback=get_obs_callback,
+        disk_fallback_on_ambiguous=disk_fallback_on_ambiguous,
     )
     # Mantener referencia al bridge para cleanup explicito si se necesita
     strategy._bridge = bridge  # type: ignore
