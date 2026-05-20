@@ -222,8 +222,55 @@ full = dispatcher.get_cajon_full("atlas-audit", "atlas/bloque-1a16-file-declarat
 **LO QUE NO HACE 1B.4 (gaps que siguen abiertos)**:
 - ❌ NO integra `get_cajon_full()` automáticamente desde el orquestador (los agentes deben invocarlo cuando necesiten contenido completo)
 - ❌ NO expone `mem_save` / `mem_update` desde Python (los subagentes Claude escriben vía su runtime MCP)
-- ❌ NO resuelve `ambiguous_project` (sigue siendo 1B.3)
 - ❌ NO cachea resultados — cada `get_cajon_full()` hace 2 round-trips
+
+### Bloque 1B.3: ambiguous_project / Project Enrollment Handling
+
+A partir de 1B.3, el bridge detecta y propaga el caso en que Engram no puede resolver el proyecto del query (proyecto inexistente, ambiguo, o no enrolled). NO se confunde con `not_found` ni con `timeout`.
+
+**Status nuevo**: `"ambiguous_project"` con metadata:
+
+```python
+result = dispatcher._check_engram_cajon("proyecto-x", "atlas/tareas")
+# {
+#   "status": "ambiguous_project",
+#   "source": "engram_mcp_real",
+#   "topic_key": "atlas/tareas",
+#   "project_attempted": "proyecto-x",
+#   "available_projects": ["atlas-audit", "claude-atlas", ...],
+#   "recovery_token": "rt-abc123",  # si Engram lo provee
+#   "engram_error_code": "unknown_project" | "ambiguous_project" | "not_enrolled",
+#   "hint": "Use one of the available_projects values...",
+#   "message": "Project '...' not found in store",
+#   "note": "Engram no pudo resolver el proyecto..."
+# }
+```
+
+**Resolución explícita** (`dispatcher.resolve_ambiguous_project`):
+
+```python
+# Tras recibir ambiguous_project, el caller elige un proyecto y reintenta
+resolved = dispatcher.resolve_ambiguous_project(
+    cajon="atlas/tareas",
+    chosen_project="atlas-audit",  # de available_projects
+    recovery_token="rt-abc123",    # opcional
+)
+# resolved["recovered_from_ambiguous"] = True
+# resolved["chosen_project"] = "atlas-audit"
+# resolved["status"] in {"found", "not_found", ...}  # ya resuelto
+```
+
+**Reglas operativas**:
+- `ambiguous_project` se propaga **LIMPIO** por default — la `CallbackStrategy` NO cae a disk_fallback automáticamente (sería un parche silencioso falso). El caller decide qué hacer.
+- Opt-in: `make_mcp_bridge_strategy(disk_fallback_on_ambiguous=True)` activa fallback en ese caso (la metadata original queda preservada en `ambiguous_project_metadata`).
+- El parser detecta vía `error_code` canónico (`unknown_project`, `ambiguous_project`, `not_enrolled`, `project_not_found`) o vía heurística de texto (`"not backed by known context"`, `"ambiguous project"`, etc.).
+- Otros `isError: true` NO se confunden con ambiguous (ej. `internal_error` se propaga como `EngramBridgeError → timeout`).
+
+**LO QUE NO HACE 1B.3 (gaps que siguen abiertos)**:
+- ❌ NO enrola proyectos nuevos automáticamente (sigue requiriendo intervención manual del usuario o de un bloque futuro 1B.6)
+- ❌ NO resuelve proactivamente el warning del doctor (`session_project_directory_mismatch`) — solo detecta y propaga
+- ❌ NO conecta el nuevo status con el flujo del orquestador agente (capability disponible pero los agentes no la consumen todavía)
+- ❌ NO cambia comportamiento ante queries con proyecto explícito y enrolled (que es el caso mayoritario hoy)
 
 ---
 

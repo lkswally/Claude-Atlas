@@ -353,6 +353,22 @@ class ATLASDispatcher:
                 "source": search_result.get("source"),
             }
 
+        # Bloque 1B.3: ambiguous_project se propaga sin step 2
+        if search_result["status"] == "ambiguous_project":
+            return {
+                "status": "ambiguous_project",
+                "step": "search",
+                "topic_key": cajon,
+                "project_attempted": search_result.get("project_attempted", proyecto),
+                "available_projects": search_result.get("available_projects", []),
+                "recovery_token": search_result.get("recovery_token"),
+                "engram_error_code": search_result.get("engram_error_code"),
+                "hint": search_result.get("hint"),
+                "message": search_result.get("message"),
+                "source": search_result.get("source"),
+                "note": search_result.get("note"),
+            }
+
         # status == found: extraer observation_id
         observation_id = search_result.get("observation_id")
 
@@ -399,6 +415,54 @@ class ATLASDispatcher:
 
         # found: contenido completo disponible
         return obs_result
+
+    def resolve_ambiguous_project(
+        self,
+        cajon: str,
+        chosen_project: str,
+        recovery_token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1B.3: Reintenta un query despues de un ambiguous_project.
+
+        El caller debe haber recibido previamente un status="ambiguous_project"
+        con available_projects. Esta funcion reintenta la query usando un
+        proyecto explicito de esa lista.
+
+        Args:
+            cajon: topic_key a buscar
+            chosen_project: proyecto a usar (deberia estar en available_projects)
+            recovery_token: opcional, para trackear el reintento
+
+        Retorna mismo shape que _check_engram_cajon, con flags adicionales:
+        - "recovered_from_ambiguous": True
+        - "recovery_token_used": el token si se paso
+        - "chosen_project": chosen_project (para trazabilidad)
+
+        Si la strategy actual no es CallbackStrategy con bridge MCP (ej.
+        DiskFallbackStrategy puro), retorna {"status": "timeout"} con error
+        explicito.
+        """
+        # Caso preferido: bridge MCP soporta mem_search_with_recovery
+        bridge = getattr(self._engram_strategy, "_bridge", None)
+        if bridge is not None and hasattr(bridge, "mem_search_with_recovery"):
+            result = bridge.mem_search_with_recovery(
+                topic_key=cajon,
+                chosen_project=chosen_project,
+                recovery_token=recovery_token,
+            )
+            result["chosen_project"] = chosen_project
+            return result
+
+        # Fallback: query directa con proyecto explicito via strategy normal.
+        # Esto cubre el caso donde la strategy no es CallbackStrategy o el
+        # bridge no esta accesible (ej. tests con mocks).
+        result = self._engram_strategy.check_cajon(chosen_project, cajon)
+        result["recovered_from_ambiguous"] = True
+        result["chosen_project"] = chosen_project
+        if recovery_token:
+            result["recovery_token_used"] = recovery_token
+        return result
 
     def _check_disk_cajon(self, proyecto: str, cajon: str) -> bool:
         """
