@@ -383,13 +383,22 @@ Evidence-collector es invocado por el orquestador en Paso 5 del loop Fase 3 (ver
 
 ---
 
-## 3.7. Pre-Return Audit — OBLIGATORIO + ENFORCED (Bloque 1A.14 + 1A.15)
+## 3.7. Pre-Return Audit — OBLIGATORIO + ENFORCED (Bloque 1A.14 + 1A.15 + 1A.16)
 
 Todo dev-agent (frontend-developer, backend-architect, rapid-prototyper, mobile-developer, xr-immersive-developer, build-resolver) DEBE:
 
 1. Ejecutar `tools/pre_return_audit.py` sobre los archivos modificados ANTES de emitir el Return Envelope (Bloque 1A.14)
 2. Incluir el resultado del audit como campo `pre_return_audit` en el Return Envelope (Bloque 1A.15)
 3. El dispatcher re-verifica independientemente — si el agente miente o salta el audit, el envelope es rechazado (Bloque 1A.15)
+4. **El campo `archivos` debe ser un SUPERSET real de los archivos modificados según git** (Bloque 1A.16): el dispatcher ejecuta `git diff --name-only HEAD` + untracked files y exige que cada archivo modificado (post-exclusiones) esté declarado. Over-declaration permitida; under-declaration rechazada.
+
+### Reglas para `archivos` (Bloque 1A.16)
+
+- **Listar TODO archivo modificado**: incluso si solo agregaste un import, debe estar en la lista
+- **Untracked files cuentan**: archivos nuevos no committed también deben declararse
+- **Paths excluidos automáticamente**: `.pipeline/`, `_qa/temp/`, `node_modules/`, `dist/`, `build/`, `.claude/worktrees/`, `.next/`, `.cache/` — estos NO necesitan declararse
+- **Over-declaration OK**: si declarás un archivo que no modificaste, no falla
+- **Sin git → soft-fail**: si el entorno no es repo git, la verificación se omite con WARN (no BLOCK)
 
 ### Qué hace
 
