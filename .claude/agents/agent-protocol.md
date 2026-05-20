@@ -709,6 +709,59 @@ Con este audit ejecutado ANTES del envelope:
 
 ---
 
+## 3.8. Delegation Stop Rules (Bloque 1D.1)
+
+ATLAS tiene un tracker advisory que cuenta tool calls del agente y activa flags cuando se exceden thresholds. **No bloquea** — emite WARN por stderr y persiste flags en `.pipeline/delegation-state.json`.
+
+### Thresholds
+
+| Threshold | Flag | Sugerencia |
+|-----------|------|-----------|
+| 5+ Reads consecutivas | `escalation_needed` | Considerar Explore agent o cambio de enfoque |
+| 20+ tool calls sin Agent spawn | `pause_recommended` | Considerar delegar a subagente |
+| 2+ archivos no-triviales modificados | `fresh_review_recommended` | Re-leer dependencias |
+
+### Comportamiento
+
+- **Sticky flags**: una vez activado, queda `True` hasta el próximo `Agent`/`Task` spawn (que resetea todos los flags y contadores)
+- **Tools de lectura**: `Read`, `Glob`, `Grep` cuentan para `consecutive_reads`. Otras tools resetean el contador.
+- **Tools de spawn**: `Agent`, `Task` resetean todo
+- **Paths triviales excluidos** del conteo de archivos modificados: `.pipeline/`, `_qa/temp/`, `node_modules/`, `dist/`, `build/`, `.claude/worktrees/`, `.next/`, `.cache/`, `*.md`, `*.json`, `*.yml`, `*.txt`, `*.log`, `*.lock`
+- **Path absoluto vs relativo**: el tracker normaliza paths absolutos contra `project_root` antes de chequear exclusiones
+- **Fail-open**: si el tracker falla (state corrupto, subprocess error), NO rompe el flujo del agente
+
+### Cómo leer el estado
+
+```bash
+# Status actual
+python tools/delegation_tracker.py status
+
+# Reset manual (uso en debugging)
+python tools/delegation_tracker.py reset
+```
+
+O programáticamente:
+```python
+from delegation_tracker import DelegationTracker
+tracker = DelegationTracker(project_root)
+state = tracker.get_state()
+if state["flags"]["escalation_needed"]:
+    # ... reaccionar
+warnings = tracker.active_warnings()
+```
+
+### Hook PostToolUse
+
+Registrado en `.claude/settings.json` como `node .claude/hooks/delegation-tracker.js` con `async: true`. Se ejecuta tras cada tool call. **Fail-open por diseño** — si el subprocess Python falla o tarda >3s, no bloquea.
+
+### LO QUE 1D.1 NO HACE
+
+- ❌ NO bloquea tool calls (es advisory, emite WARN no error)
+- ❌ NO integra con el orquestador agente automáticamente para reaccionar a los flags (capability disponible, falta wirear lectura desde el prompt)
+- ❌ NO persiste contadores entre sesiones de manera intencional (`.pipeline/delegation-state.json` se sobrevive pero el spawn de Agent resetea, así que típicamente arranca en 0 cada sesión)
+
+---
+
 ## 4. Proactive Saves (descubrimientos)
 
 Si durante tu trabajo descubres algo no obvio (gotcha, incompatibilidad, patrón útil), guárdalo inmediatamente:

@@ -45,6 +45,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node .claude/hooks/delegation-tracker.js",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "node /c/Users/Lucas/.claude/hooks/cost-tracker.js",
             "timeout": 10,
             "async": true
