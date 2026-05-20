@@ -22,6 +22,17 @@ try:
 except ImportError:
     _audit_files = None  # disponible solo si pre_return_audit.py esta presente
 
+# Bloque 1B.1: Engram Strategy Pattern (preparacion para MCP real en 1B.2)
+# Por defecto se usa DiskFallbackStrategy — NO es Engram real, es disk fallback.
+# El orquestador puede inyectar un callback (CallbackStrategy) que conecte
+# Engram MCP real cuando 1B.2 este implementado.
+from engram_strategy import (
+    EngramStrategy,
+    DiskFallbackStrategy,
+    CallbackStrategy,
+    ProtocolError,
+)
+
 # ============================================================
 #  DATA MODELS
 # ============================================================
@@ -63,6 +74,39 @@ class ATLASDispatcher:
         # Anti-loop tracking (Bloque 1A.12): contador de re-intentos por cajon
         # Formato: {"{proyecto}/{cajon}": count}
         self.phase_gate_retries: Dict[str, int] = {}
+        # Bloque 1B.1: Engram Strategy (default = disk_fallback, NO es Engram real)
+        # Llamar set_engram_callback() para inyectar implementacion MCP real (1B.2)
+        self._engram_strategy: EngramStrategy = DiskFallbackStrategy(self.project_root)
+
+    def set_engram_callback(
+        self,
+        callback: Optional[callable] = None,
+        name: str = "engram_callback",
+        use_disk_fallback: bool = True,
+    ) -> None:
+        """
+        Bloque 1B.1: Inyecta una estrategia de Engram custom.
+
+        El callback recibe (proyecto, cajon) y debe retornar dict con 'status'.
+        Si use_disk_fallback=True (default), se usa DiskFallbackStrategy como
+        secundario cuando el callback retorna timeout/error.
+
+        IMPORTANTE: 1B.1 NO conecta MCP real — solo provee el plugin point.
+        La implementacion MCP real es responsabilidad de 1B.2 (orquestador o
+        Python MCP client).
+
+        Llamar sin callback (None) restaura DiskFallbackStrategy pura.
+        """
+        if callback is None:
+            self._engram_strategy = DiskFallbackStrategy(self.project_root)
+            return
+
+        fallback = DiskFallbackStrategy(self.project_root) if use_disk_fallback else None
+        self._engram_strategy = CallbackStrategy(
+            callback=callback,
+            fallback=fallback,
+            name=name,
+        )
 
     def _load_phase_playbook(self) -> Dict[str, Any]:
         """Cargar la definición de fases y E2E flows"""
@@ -160,50 +204,19 @@ class ATLASDispatcher:
 
     def _check_engram_cajon(self, proyecto: str, cajon: str) -> Dict[str, str]:
         """
-        REAL Engram search (Bloque 1A.11) — llama mem_search() con manejo de timeout.
+        Verifica existencia del cajon delegando en la EngramStrategy configurada.
 
-        En producción: mem_search(cajon) via MCP Engram
-        En staging/test: busca en disco como proxy (Engram está backed por disk)
+        Bloque 1B.1: Refactor a strategy pattern.
+        - Default strategy: DiskFallbackStrategy (NO es Engram real, es disk fallback)
+        - Custom strategy: inyectada via set_engram_callback() — pluggable para 1B.2
 
-        Retorna:
-        - {"status": "found"} si cajon existe en Engram
-        - {"status": "not_found"} si cajon no existe
-        - {"status": "timeout"} si Engram timeout/error (requiere fallback disco)
+        IMPORTANTE: el default sigue siendo lectura de disco. Esto NO es
+        "Engram MCP Real Integration" — es preparacion arquitectonica.
+        La integracion MCP real es responsabilidad de 1B.2.
+
+        Retorna dict con 'status': "found" | "not_found" | "timeout" + metadata.
         """
-        try:
-            # En producción real, esto sería:
-            # result = mem_search(cajon, project=proyecto)
-            # if result.observation_id: return {"status": "found"}
-            # else: return {"status": "not_found"}
-
-            # Para staging/test, usar disco como fuente de verdad
-            # (Engram está backed por disk en arquitectura real)
-            cajon_name = cajon.split("/")[-1]
-            disk_path = self.project_root / ".pipeline" / f"{cajon_name}.md"
-
-            if disk_path.exists():
-                # Cajon existe en disco → existe en Engram
-                return {
-                    "status": "found",
-                    "cajon": cajon,
-                    "source": "disk (Engram proxy)"
-                }
-            else:
-                # Cajon no existe en disco → no existe en Engram
-                return {
-                    "status": "not_found",
-                    "cajon": cajon,
-                    "source": "disk (Engram proxy)"
-                }
-
-        except (OSError, IOError, TimeoutError) as e:
-            # Engram timeout o error de lectura → requiere fallback disco
-            return {
-                "status": "timeout",
-                "cajon": cajon,
-                "error": str(e),
-                "note": "Engram timeout — fallback a disco requerido"
-            }
+        return self._engram_strategy.check_cajon(proyecto, cajon)
 
     def _check_disk_cajon(self, proyecto: str, cajon: str) -> bool:
         """
