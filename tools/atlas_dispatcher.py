@@ -51,6 +51,9 @@ class ATLASDispatcher:
         self.project_root = Path(project_root)
         self.phase_playbook = self._load_phase_playbook()
         self.config_dir = self.project_root / "config"
+        # Anti-loop tracking (Bloque 1A.12): contador de re-intentos por cajon
+        # Formato: {"{proyecto}/{cajon}": count}
+        self.phase_gate_retries: Dict[str, int] = {}
 
     def _load_phase_playbook(self) -> Dict[str, Any]:
         """Cargar la definición de fases y E2E flows"""
@@ -65,6 +68,7 @@ class ATLASDispatcher:
         """
         ENFORCE (bloquea de verdad) — Valida que TODOS los cajones requeridos existen.
         Maneja Engram errors separado de missing cajones.
+        Implementa anti-loop tracking (Bloque 1A.12).
 
         Retorna: (can_proceed: bool, message: str, missing_cajones: List[str])
 
@@ -72,6 +76,7 @@ class ATLASDispatcher:
         - Si cajon falta EN ENGRAM Y DISCO → missing (bloquea)
         - Si Engram timeout pero disco existe → OK (fallback)
         - Si Engram timeout Y disco falta → PENDING (user manual)
+        - Anti-loop: si cajon falta 2+ veces → escalar usuario (no re-delegar)
         """
         if phase not in self.phase_playbook:
             return False, f"FASE DESCONOCIDA: {phase}", []
@@ -82,31 +87,57 @@ class ATLASDispatcher:
 
         missing_cajones = []
         engram_errors = []
+        escalation_cajones = []  # Cajones que alcanzan max reintentos
 
         for cajon in required_cajones:
-            # Simulación: En producción, llamaría a mem_search(cajon)
-            # Para esta validación, asumimos que Engram responde correctamente
             engram_response = self._check_engram_cajon(proyecto, cajon)
 
             if engram_response["status"] == "found":
                 # Cajon existe en Engram, OK
+                # Reset counter si estaba siendo reintentado
+                if cajon in self.phase_gate_retries:
+                    del self.phase_gate_retries[cajon]
                 continue
+
             elif engram_response["status"] == "timeout":
                 # Engram error — intenta fallback disco
                 disk_exists = self._check_disk_cajon(proyecto, cajon)
                 if disk_exists:
                     # Fallback exitoso
+                    if cajon in self.phase_gate_retries:
+                        del self.phase_gate_retries[cajon]
                     continue
                 else:
                     # Engram timeout AND disco falta — PENDING
                     engram_errors.append(f"Engram timeout para {cajon} (disco también falta)")
+
             elif engram_response["status"] == "not_found":
                 # Cajon no existe en Engram ni disco
                 disk_exists = self._check_disk_cajon(proyecto, cajon)
                 if not disk_exists:
-                    missing_cajones.append(cajon)
+                    # Cajon realmente falta — implementar anti-loop tracking
+                    retry_count = self.phase_gate_retries.get(cajon, 0)
+
+                    if retry_count >= 2:
+                        # Ya se reintentó 2 veces → escalar usuario
+                        escalation_cajones.append(f"{cajon} (intento {retry_count + 1}/max 2)")
+                    else:
+                        # Primer o segundo intento → agregar a missing para re-delegar
+                        missing_cajones.append(cajon)
+                        # Incrementar contador
+                        self.phase_gate_retries[cajon] = retry_count + 1
 
         # Decisión: bloquea o permite avance
+        # Prioridad: escalation > missing > engram_errors > OK
+
+        if escalation_cajones:
+            message = (
+                f"FASE {phase.upper()} ESCALACIÓN (Max reintentos alcanzado):\n"
+                f"  Cajones bloqueados tras 2+ intentos: {', '.join(escalation_cajones)}\n"
+                f"  Acción requerida: Usuario debe resolver manualmente o reasignar agente"
+            )
+            return False, message, escalation_cajones
+
         if missing_cajones:
             message = f"FASE {phase.upper()} BLOQUEADA:\n  Cajones requeridos faltantes: {', '.join(missing_cajones)}"
             return False, message, missing_cajones
