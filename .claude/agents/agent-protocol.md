@@ -888,6 +888,68 @@ Si la skill NO está disponible (binary/node missing, env path inválido):
 
 ---
 
+## 4.6. Reality-Checker Random Re-Runs (Bloque 1E.1)
+
+**Alcance**: SOLO `reality-checker` (Fase 4 — certificación). NO afecta otros agentes. SOLO cubre random re-runs sobre QA PASS — NO cubre QA multi-capa visual ni network inspection multi-layer.
+
+### Qué exige
+
+Antes de emitir `CERTIFIED`, reality-checker debe invocar el helper:
+
+```python
+verdict = dispatcher.run_certification_re_runs(
+    qa_results=all_qa_pass_from_engram,
+    rerun_callback=my_rerun_function,
+    sample_size=3,    # default; override env ATLAS_REALITY_SAMPLE_SIZE
+    seed=None,        # None = aleatorio; int = reproducible
+)
+```
+
+E incluir el verdict en el envelope:
+
+```yaml
+re_runs_performed:
+  sample_size: 3
+  total_qa_pass: 12
+  seed: null | 42
+  verdict: "CONFIRMED" | "DISCREPANCY" | "INCONCLUSIVE"
+  rerun_results: [...]
+  discrepancies: [...]
+```
+
+### Reglas operativas
+
+| Verdict | Acción del reality-checker |
+|---------|----------------------------|
+| `CONFIRMED` | Puede emitir `CERTIFIED` (con Paso 2 manual también OK) |
+| `DISCREPANCY` | **NO certificar**. Emitir `NEEDS WORK` con la lista de discrepancias |
+| `INCONCLUSIVE` | NO certificar automáticamente. Escalar al usuario |
+
+### Fallback controlado
+
+- Si `qa_results` está vacío → verdict `INCONCLUSIVE` (no rompe, advierte)
+- Si `rerun_callback` raisea excepción → ese rerun se marca `INCONCLUSIVE` (no se confunde con `DISCREPANCY`)
+- Si `reality_check_runner` no se puede importar → helper retorna `INCONCLUSIVE` con error en `note`. Pipeline sigue.
+- Sample_size mayor que QA disponibles → se ajusta sin romper
+
+### Reproducibilidad
+
+Con `seed=int` fija, el sampler retorna los mismos índices siempre. Útil para:
+- Tests deterministas
+- Investigar discrepancias retroactivas (volver a samplear los mismos)
+- Debugging cuando un verdict no convence
+
+### LO QUE 1E.1 NO HACE
+
+- ❌ NO cubre QA multi-capa visual (LLM-as-judge, visual fidelity) — sería 1F.x
+- ❌ NO cubre network inspection multi-layer — sería 1F.x
+- ❌ NO fuerza al reality-checker agente a invocar el helper automáticamente. El agente debe leer su md actualizado y llamarlo
+- ❌ NO modifica `evidence-collector` ni su contrato — su QA Fase 3 sigue igual
+- ❌ 3 muestras de N tareas sigue siendo bajo coverage. Es mejora incremental honesta sobre confianza ciega, no cobertura total
+- ❌ El `rerun_callback` lo define el agente o el caller — el runner es genérico
+
+---
+
 ## 5. Reglas universales (todos los subagentes)
 
 1. **No arrancar servidores con Bash** → usar `preview_start` (solo aplica en Windows/Claude Desktop; en Linux/Claude Code CLI, usar Bash normalmente)

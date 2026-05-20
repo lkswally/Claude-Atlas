@@ -104,6 +104,66 @@ Para cada tarea seleccionada:
 
 Esto es la defensa concreta contra el caso VetConnect (auth roto pero QA pasó).
 
+### Paso 2.5 — Random Re-Runs Helper (Bloque 1E.1, OBLIGATORIO)
+
+Antes de emitir CERTIFIED, además del Paso 2 manual de 2-3 tareas críticas (landing/auth/CRUD), debes invocar el helper Python que ejecuta un sampling **aleatorio y reproducible** sobre TODAS las tareas QA PASS. Esto detecta falsos positivos que no caen en las 2-3 críticas elegidas a mano.
+
+**Cómo invocar**:
+
+```python
+# El runner es generico — defines un callback que sabe re-ejecutar UNA tarea
+def my_rerun(qa_result):
+    # qa_result tiene {"tarea": str, "status": "PASS", "archivos": [...], ...}
+    # Vuelvo a ejecutar lo minimo necesario (Playwright snapshot + network)
+    # Retorno {"status": "PASS"|"FAIL"|"INCONCLUSIVE", "details": str}
+    ...
+
+# Llamar al dispatcher
+verdict = dispatcher.run_certification_re_runs(
+    qa_results=all_qa_pass_results,  # de mem_search/mem_get_observation
+    rerun_callback=my_rerun,
+    sample_size=3,                    # default 3, override env ATLAS_REALITY_SAMPLE_SIZE
+    seed=None,                        # None = aleatorio; int = reproducible
+)
+```
+
+**Verdict global**:
+- `CONFIRMED` → todos los reruns coinciden con el PASS original → puedes proceder a certificar
+- `DISCREPANCY` → al menos 1 rerun reveló un falso PASS → **certificación BLOQUEADA**, escalar con detalle
+- `INCONCLUSIVE` → no se pudo revalidar (sin QA PASS, todos los reruns timeout) → escalar al usuario, no certificar automáticamente
+
+**Campos obligatorios en el envelope de certificación** cuando uses re-runs:
+
+```yaml
+re_runs_performed:
+  sample_size: 3                          # cuantas tareas muestreaste
+  total_qa_pass: 12                       # total disponibles
+  seed: null | 42                         # reproducibilidad
+  verdict: "CONFIRMED" | "DISCREPANCY" | "INCONCLUSIVE"
+  rerun_results:
+    - tarea: "Header component"
+      original: "PASS"
+      rerun: "PASS"
+      verdict: "CONFIRMED"
+      details: "rerun OK"
+    - tarea: "Login form"
+      original: "PASS"
+      rerun: "FAIL"
+      verdict: "DISCREPANCY"
+      details: "screenshot diff detected en boton submit"
+  discrepancies:
+    - {tarea: "Login form", original: "PASS", rerun: "FAIL", details: "..."}
+```
+
+**Si DISCREPANCY**: NO emitir `CERTIFIED`. Emitir `NEEDS WORK` con la lista de discrepancias y forzar re-trabajo de esas tareas.
+
+**Si INCONCLUSIVE** (todos los reruns timeout o sin QA PASS): NO certificar automáticamente. Escalar al usuario con explicación clara.
+
+**Por qué este paso es necesario aunque ya tengas el Paso 2 manual**:
+- Paso 2 cubre 2-3 tareas elegidas por importancia. Random re-runs muestrea **otras** tareas que pueden tener falsos positivos no obvios.
+- El sampler es reproducible con seed → útil para investigar discrepancias retroactivas.
+- El verdict CONFIRMED es una garantía adicional, no una sustitución del Paso 2.
+
 ### Paso 3 — Validación End-to-End
 Leo los resultados de api-tester, performance-benchmarker y seo-discovery:
 ```
