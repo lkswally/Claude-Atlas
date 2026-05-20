@@ -279,21 +279,52 @@ Los demás agentes adoptarán progresivamente en reintentos o siguientes tareas.
 
 ---
 
-## 3.6. Return Envelope QA — Estándar para evidence-collector
+## 3.6. Return Envelope QA — Estándar para evidence-collector (Bloque 1A.10)
 
-Evidence-collector (agente de QA) usa una variante del Return Envelope Standard optimizada para validación. Obligatorio a partir de Phase 0.6B.
+Evidence-collector (agente de QA) usa una variante del Return Envelope Standard optimizada para validación. **STRICT MODE OBLIGATORIO** — el orquestador rechaza envelopes malformados.
 
-### Formato OBLIGATORIO (evidence-collector)
+### Formato OBLIGATORIO (evidence-collector, modo strict QA)
 
 ```
 STATUS: PASS | FAIL
 TAREA: Validé tarea {N}: {título corto}
-ARCHIVOS: {lista de rutas a screenshots: /tmp/qa/tarea-{N}-desktop.png, /tmp/qa/tarea-{N}-mobile.png, ...}
 ENGRAM: {proyecto}/qa-{N}
+ARCHIVOS: {lista de rutas a screenshots: /tmp/qa/tarea-{N}-desktop.png, ...} [OBLIGATORIO si PASS; OPCIONAL si FAIL]
+BLOQUEADORES: [lista de issues encontrados] [OBLIGATORIO si FAIL; PROHIBIDO si PASS]
 VERIFICACION: layout
-BLOQUEADORES: [lista de issues encontrados] (solo si STATUS=FAIL)
 NOTAS: {resumen ejecutivo: qué pasó y qué no}
 ```
+
+### Reglas estrictas (ENFORCEMENT)
+
+**Si STATUS = PASS:**
+- ✅ OBLIGATORIO: `status = "PASS"` (exacto)
+- ✅ OBLIGATORIO: `tarea` (string)
+- ✅ OBLIGATORIO: `engram` (string, formato `{proyecto}/qa-{N}`)
+- ✅ OBLIGATORIO: `archivos` (lista NO VACÍA — al menos 1 screenshot)
+- ❌ PROHIBIDO: `bloqueadores` (no incluir, o [] = ERROR)
+- ⚠️ OPCIONAL: `verificacion`, `notas`
+
+**Si STATUS = FAIL:**
+- ✅ OBLIGATORIO: `status = "FAIL"` (exacto)
+- ✅ OBLIGATORIO: `tarea` (string)
+- ✅ OBLIGATORIO: `engram` (string, formato `{proyecto}/qa-{N}`)
+- ✅ OBLIGATORIO: `bloqueadores` (lista NO VACÍA — al menos 1 issue)
+- ⚠️ OPCIONAL: `archivos` (puede estar vacío)
+- ⚠️ OPCIONAL: `verificacion`, `notas`
+
+### Validación (qué sucede si hay error)
+
+| Condición | Error exacto | Acción |
+|-----------|------|--------|
+| PASS sin `archivos` | "Return Envelope QA inválido: PASS requiere archivos (lista no vacía)" | Redel evidence-collector |
+| PASS con `archivos: []` | "Return Envelope QA inválido: PASS requiere archivos (lista no vacía)" | Redel evidence-collector |
+| PASS con `bloqueadores` ≠ null | "Return Envelope QA inválido: PASS prohibe bloqueadores" | Redel evidence-collector |
+| FAIL sin `bloqueadores` | "Return Envelope QA inválido: FAIL requiere bloqueadores (lista no vacía)" | Redel evidence-collector |
+| FAIL con `bloqueadores: []` | "Return Envelope QA inválido: FAIL requiere bloqueadores (lista no vacía)" | Redel evidence-collector |
+| `status` ∉ {PASS, FAIL} | "Return Envelope QA inválido: status inválido: {valor}, esperado PASS o FAIL" | Redel evidence-collector |
+| `archivos` no es lista | "Return Envelope QA inválido: archivos debe ser lista, recibido {type}" | Redel evidence-collector |
+| `bloqueadores` no es lista | "Return Envelope QA inválido: bloqueadores debe ser lista, recibido {type}" | Redel evidence-collector |
 
 **Campos obligatorios para evidence-collector**:
 - **STATUS**: PASS o FAIL solamente. Nada de "CERTIFIED", "PENDING", etc. PASS = todas las validaciones pasaron. FAIL = al menos un criterio de aceptación falló.

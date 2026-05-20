@@ -1,0 +1,6 @@
+{
+  "name": "boot-sequence-real",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Minimal real project for Boot Sequence integration test"
+}

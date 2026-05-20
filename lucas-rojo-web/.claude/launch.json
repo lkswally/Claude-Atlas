@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lucas-rojo-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd D:\\ProyectosIA\\ProyectosClaude\\lucas-rojo-web\\web && npm run dev"],
+      "port": 3000
+    }
+  ]
+}

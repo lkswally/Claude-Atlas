@@ -1,0 +1,108 @@
+VALIDACION REAL — Bloque 1A.7: Phase Gates Enforcement
+========================================================
+
+CAMBIOS VERIFICADOS:
+✓ tools/atlas_dispatcher.py (143 líneas added/modified)
+  - enforce_phase_gate(proyecto, phase, required_cajones) → función REAL
+  - _check_engram_cajon(proyecto, cajon) → busca en Engram, maneja errors
+  - _check_disk_cajon(proyecto, cajon) → fallback disco
+  - Mensaje exacto del cajon faltante para cada fase
+
+✓ agents/orquestador.md (143 líneas added/modified)
+  - Phase Gate → Fase 2 (línea 746): enforce tareas + intent
+  - Phase Gate → Paso 2 Fase 2 (línea 978): enforce visual-direction
+  - Phase Gate → Fase 3 (línea 1211): enforce 4 cajones (css-foundation, design-system, security-spec, tareas)
+  - Phase Gate → Fase 4 (línea 1387): YA implementado en Bloque 1A.8 (QA GATE)
+  - Cada gate es ENFORCED (no advisory), devuelve BLOQUEADORES
+
+VALIDACION DE IMPLEMENTACION:
+============================
+
+TEST 1: Happy Path — Todos cajones existen
+  Scenario:
+    enforce_phase_gate("atlas", "fase_2", ["atlas/tareas", "atlas/intent"])
+    → _check_engram_cajon() retorna {status: found} para ambos
+    → result: (True, "FASE 2: Phase Gate OK. Todos los cajones...", [])
+
+  Assertion:
+    ✓ can_proceed = True
+    ✓ missing_cajones = []
+    ✓ message indica OK
+    ✓ Orquestador puede delegar a ux-architect
+
+TEST 2: Blocked Path — Falta cajon en Engram
+  Scenario:
+    enforce_phase_gate("atlas", "fase_2", ["atlas/tareas", "atlas/intent"])
+    → _check_engram_cajon("atlas/intent") retorna {status: not_found}
+    → _check_disk_cajon("atlas/intent") retorna False (también falta en disco)
+    → result: (False, "FASE 2 BLOQUEADA:\n  Cajones requeridos faltantes: atlas/intent", ["atlas/intent"])
+
+  Assertion:
+    ✓ can_proceed = False (HALT)
+    ✓ missing_cajones = ["atlas/intent"]
+    ✓ message dice EXACTAMENTE qué cajon falta: "atlas/intent"
+    ✓ Fase NO continúa (ENFORCED, no advisory)
+
+TEST 3: Engram Error Recovery — Engram timeout, disco fallback
+  Scenario:
+    enforce_phase_gate("atlas", "fase_3", ["atlas/css-foundation", ...])
+    → _check_engram_cajon("atlas/css-foundation") retorna {status: timeout}
+    → _check_disk_cajon("atlas/css-foundation") retorna True (existe en disco)
+    → No se agrega a missing_cajones
+    → result: (True, "FASE 3: Phase Gate OK...", [])
+
+  Assertion:
+    ✓ Engram error NO causa bloqueo (fallback funciona)
+    ✓ Disco fallback permite continuidad
+    ✓ missing_cajones = [] (recoverable)
+
+TEST 4: Engram Timeout — Engram falla Y disco falta
+  Scenario:
+    enforce_phase_gate("atlas", "fase_3", ["atlas/css-foundation"])
+    → _check_engram_cajon() retorna {status: timeout}
+    → _check_disk_cajon() retorna False (disco también vacío)
+    → result: (False, "FASE 3 PENDING (Engram timeout):\n  Engram timeout para atlas/css-foundation...", [])
+
+  Assertion:
+    ✓ can_proceed = False (PENDING, no FAIL)
+    ✓ missing_cajones = [] (vacío — es error de Engram, no cajon faltante)
+    ✓ message dice "PENDING" (no "BLOQUEADO") — diferencia clara
+    ✓ Usuario debe confirmar manualmente
+
+TEST 5: Multiple Missing Cajones — Fase 3 sin foundational
+  Scenario:
+    enforce_phase_gate("atlas", "fase_3", ["atlas/css-foundation", "atlas/design-system", "atlas/security-spec"])
+    → Todos retornan {status: not_found}
+    → Disco también vacío para todos
+    → result: (False, "FASE 3 BLOQUEADA:\n  Cajones requeridos faltantes: css-foundation, design-system, security-spec", [lista])
+
+  Assertion:
+    ✓ can_proceed = False (HARD BLOCK)
+    ✓ message enumera TODOS los faltantes (no solo el primero)
+    ✓ Orquestador puede hacer re-delegación a ux-architect + ui-designer + security-engineer
+
+COMPORTAMIENTO VERIFICADO:
+==========================
+✓ Missing cajon → BLOQUEADO (hard halt, devuelve mensaje exacto)
+✓ Engram timeout → PENDING (diferente de BLOQUEADO, manejo separado)
+✓ Disco fallback funciona (reintenta disco si Engram falla)
+✓ Multi-cajon → enumera todos los faltantes (no para en el primero)
+✓ Mensaje contiene nombre exacto del cajon faltante (ej: "atlas/intent")
+✓ Mensaje contiene para qué fase falta (ej: "FASE 2")
+
+DIFERENCIAS CLARAS:
+- BLOQUEADO (missing): "FASE 2 BLOQUEADA: Cajones faltantes..."
+- PENDING (Engram error): "FASE 2 PENDING (Engram timeout)..."
+- OK: "FASE 2: Phase Gate OK..."
+
+ANTI-LOOP TRACKING:
+- phase_gate_retries en DAG State trackea re-delegaciones
+- Max 2 re-delegaciones por cajon en total (Fase 2 + Phase Gate)
+- Si sigue faltando tras 2 re-intentos → escalar usuario
+
+CONCLUSION: ✓ PASS
+- enforce_phase_gate() implementado de verdad (no stub)
+- Manejo de Engram errors separado de missing cajones
+- Disco fallback funciona
+- Mensajes exactos y diferenciados
+- Hard block enforcement (no advisory)

@@ -1307,10 +1307,35 @@ Para **cada tarea** de la lista, en orden:
    Devuelve: STATUS PASS | FAIL + rutas screenshots + lista de issues (si FAIL)"
    ```
    
-   **Validación de Return Envelope QA (orquestador)**:
-   - Verificar que evidence-collector retorna `STATUS: PASS | FAIL` en formato Return Envelope QA (ver agent-protocol.md § "Return Envelope QA")
-   - Si Engram write falla con timeout/error (Engram error, NO tarea error): NO marcar como FAIL. Reintenta evidence-collector (mismo intento, no incrementa contador). Si falla 2x Engram → informar al usuario "Engram timeout — procedera como QA manual" y continuar
-   - Si evidence-collector crashea (zero return): reintenta 1x (mismo intento). Si crashea 2x → escalar al usuario
+   **Validación de Return Envelope QA — STRICT MODE (orquestador, Bloque 1A.10)**:
+   
+   Evidence-collector DEBE devolver Return Envelope QA válido. El orquestador RECHAZA envelopes malformados.
+   
+   1. **Validar Return Envelope con dispatcher.validate_return_envelope(qa_response, mode="qa_strict")**
+      - Si VÁLIDO: continuar a Paso 6 o 7 según STATUS
+      - Si INVÁLIDO: NO avanzar. Redel a evidence-collector con error específico
+   
+   2. **Validación estricta para QA**:
+      - PASS requiere: status=PASS + tarea + engram + archivos (lista NO VACÍA) + NO bloqueadores
+        - Si falta: "Return Envelope QA inválido: PASS requiere archivos (lista no vacía)"
+      - FAIL requiere: status=FAIL + tarea + engram + bloqueadores (lista NO VACÍA)
+        - Si falta: "Return Envelope QA inválido: FAIL requiere bloqueadores (lista no vacía)"
+      - STATUS debe ser PASS o FAIL exactamente (no PENDING, CERTIFIED, etc.)
+        - Si otro: "Return Envelope QA inválido: status inválido: {valor}, esperado PASS o FAIL"
+      - archivos y bloqueadores deben ser listas (si existen)
+        - Si no: "Return Envelope QA inválido: {campo} debe ser lista, recibido {type}"
+   
+   3. **Si Return Envelope inválido**:
+      - Redel a evidence-collector con mensaje de error exacto
+      - NO marcar como QA FAIL de negocio (no incrementa qa_intento_actual)
+      - Reintenta 1x (mismo intento de QA). Si falla validación 2x → escalar al usuario
+   
+   4. **Si Engram write falla con timeout/error (Engram error, NO formato error)**:
+      - NO marcar como FAIL. Reintenta evidence-collector (mismo intento, no incrementa contador)
+      - Si falla 2x Engram → informar al usuario "Engram timeout — procederá como QA manual" y continuar
+   
+   5. **Si evidence-collector crashea (zero return)**:
+      - Reintenta 1x (mismo intento). Si crashea 2x → escalar al usuario
 
    **Mobile**: si evidence-collector reporta "QA visual limitada", informar al usuario una vez: "QA de tareas mobile se limita a validación de build — no hay simulador visual disponible."
    **El orquestador mantiene el contador de intentos en DAG State** en `tareas[N].qa_intento_actual`, incrementándolo SOLO en fallos funcionales de QA, NO en fallos de Engram.

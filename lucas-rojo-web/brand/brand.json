@@ -1,0 +1,342 @@
+{
+  "project": "lucas-rojo-web",
+  "version": 1,
+  "schema_version": 2,
+  "created_at": "2026-05-11",
+
+  "identity": {
+    "name": "Lucas Rojo",
+    "slogan": "Operaciones que escalan. Decisiones que importan.",
+    "slogan_en": "Operations that scale. Decisions that matter.",
+    "tone": "direct, calm, authoritative, precise",
+    "personality": ["rigorous", "trustworthy", "strategic", "grounded", "systems-minded"],
+    "target_primary": "CEOs, founders, VP Engineering — empresas tech B2B que buscan COO fractional o estandarización de procesos",
+    "target_secondary": "Reclutadores tech senior buscando liderazgo operacional senior",
+    "voice": {
+      "formality": 2,
+      "complexity": 3,
+      "character": 2,
+      "emotion": 2,
+      "rationale": "Profesional pero accesible. Técnico sin ser denso. Serio sin ser frío. Reservado — la confianza se gana con sustancia, no con entusiasmo."
+    }
+  },
+
+  "colors": {
+    "background_base": {
+      "hex": "#0A0A0F",
+      "token": "--color-bg-base",
+      "use": "Fondo principal del sitio — negro azulado profundo, no negro puro para evitar harshness"
+    },
+    "background_surface": {
+      "hex": "#111118",
+      "token": "--color-bg-surface",
+      "use": "Cards, paneles, sidebar — una capa sobre el base"
+    },
+    "background_elevated": {
+      "hex": "#18181F",
+      "token": "--color-bg-elevated",
+      "use": "Dropdowns, modals, tooltips — elemento flotante sobre surface"
+    },
+    "border_subtle": {
+      "hex": "#1E1E2A",
+      "token": "--color-border-subtle",
+      "use": "Bordes por defecto, divisores, separadores de sección"
+    },
+    "border_default": {
+      "hex": "#2A2A38",
+      "token": "--color-border-default",
+      "use": "Bordes en hover, inputs, cards con énfasis"
+    },
+    "text_primary": {
+      "hex": "#F0F0F5",
+      "token": "--color-text-primary",
+      "use": "Titulares, texto principal — blanco ligeramente azulado para coherencia con el tono frío"
+    },
+    "text_secondary": {
+      "hex": "#A0A0B8",
+      "token": "--color-text-secondary",
+      "use": "Subtítulos, labels, texto de soporte"
+    },
+    "text_muted": {
+      "hex": "#60607A",
+      "token": "--color-text-muted",
+      "use": "Metadatos, timestamps, placeholders, texto terciario"
+    },
+    "accent": {
+      "hex": "#00D4FF",
+      "token": "--color-accent",
+      "use": "CTA primario, links activos, highlights de código, indicadores de estado activo — cian eléctrico elegido sobre verde lima por: (1) legibilidad superior sobre negro azulado, (2) asociación directa con tech/data sin connotación de 'fintech verde', (3) coherencia con el universo Vercel/Linear que inspira la pieza"
+    },
+    "accent_hover": {
+      "hex": "#33DDFF",
+      "token": "--color-accent-hover",
+      "use": "Estado hover del acento — 15% más brillante"
+    },
+    "accent_muted": {
+      "hex": "#00D4FF1A",
+      "token": "--color-accent-muted",
+      "use": "Fondos de badges activos, highlight sutil de filas, glow rings"
+    },
+    "primary": {
+      "hex": "#00D4FF",
+      "token": "--color-primary",
+      "use": "Alias semántico del accent para compatibilidad con brand-schema"
+    },
+    "secondary": {
+      "hex": "#A0A0B8",
+      "token": "--color-secondary",
+      "use": "Alias semántico del text_secondary"
+    },
+    "neutral": {
+      "hex": "#111118",
+      "token": "--color-neutral",
+      "use": "Alias semántico del background_surface"
+    },
+    "text_dark": {
+      "hex": "#0A0A0F",
+      "token": "--color-text-dark",
+      "use": "Texto sobre fondo claro (botones accent rellenos) — contrast ratio > 7:1 sobre #00D4FF"
+    },
+    "text_light": {
+      "hex": "#F0F0F5",
+      "token": "--color-text-light",
+      "use": "Texto sobre fondo oscuro — contrast ratio > 9:1 sobre #0A0A0F"
+    },
+    "success": {
+      "hex": "#22C55E",
+      "token": "--color-success",
+      "use": "Confirmaciones, métricas positivas, indicadores OK"
+    },
+    "warning": {
+      "hex": "#F59E0B",
+      "token": "--color-warning",
+      "use": "Alertas no críticas, métricas en riesgo"
+    },
+    "error": {
+      "hex": "#EF4444",
+      "token": "--color-error",
+      "use": "Errores, métricas críticas, estados de fallo"
+    }
+  },
+
+  "typography": {
+    "display": {
+      "family": "Instrument Serif",
+      "fallbacks": ["Georgia", "Times New Roman", "serif"],
+      "weights": ["400", "400i"],
+      "source": "google_fonts",
+      "url": "https://fonts.google.com/specimen/Instrument+Serif",
+      "use": "Titulares hero (h1), quote marks grandes, taglines — da temperatura humana y editorial al sitio; contrapunto orgánico al sans-tech",
+      "size_scale": {
+        "hero": "72px / 4.5rem",
+        "display": "56px / 3.5rem",
+        "h1": "40px / 2.5rem"
+      }
+    },
+    "sans": {
+      "family": "Geist",
+      "fallbacks": ["system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+      "weights": ["300", "400", "500", "600"],
+      "source": "google_fonts",
+      "url": "https://fonts.google.com/specimen/Geist",
+      "use": "Todo el cuerpo del sitio: nav, subtítulos (h2-h5), párrafos, labels, botones, UI en general — máxima legibilidad en pantallas retina",
+      "size_scale": {
+        "h2": "28px / 1.75rem",
+        "h3": "22px / 1.375rem",
+        "body_lg": "18px / 1.125rem",
+        "body": "16px / 1rem",
+        "sm": "14px / 0.875rem",
+        "xs": "12px / 0.75rem"
+      }
+    },
+    "mono": {
+      "family": "Geist Mono",
+      "fallbacks": ["JetBrains Mono", "Fira Code", "Menlo", "Consolas", "monospace"],
+      "weights": ["400", "500"],
+      "source": "google_fonts",
+      "url": "https://fonts.google.com/specimen/Geist+Mono",
+      "use": "Bloques de código, stats numéricos (MRR, churn rate, team size), timestamps, IDs — refuerza identidad técnica sin decoración"
+    },
+    "heading": {
+      "family": "Instrument Serif",
+      "weights": ["400"],
+      "source": "google_fonts",
+      "url": "https://fonts.google.com/specimen/Instrument+Serif"
+    },
+    "body": {
+      "family": "Geist",
+      "weights": ["300", "400", "500"],
+      "source": "google_fonts",
+      "url": "https://fonts.google.com/specimen/Geist"
+    },
+    "accent": {
+      "family": "Geist Mono",
+      "weights": ["400"],
+      "source": "google_fonts",
+      "url": "https://fonts.google.com/specimen/Geist+Mono",
+      "use": "stats, code snippets, labels técnicos"
+    }
+  },
+
+  "typography_pair": {
+    "heading": "Instrument Serif",
+    "body": "Geist",
+    "accent": "Geist Mono",
+    "rationale": "Instrument Serif aporta calidez editorial serif en los momentos de mayor impacto (hero, citas, secciones de liderazgo) — evita que el sitio se sienta como documentación técnica. Geist (la tipografía de Vercel) es el sans ideal para audiencia tech: legibilidad extrema, sin fricciones. Geist Mono refuerza el perfil cuantitativo de un COO (métricas, procesos, datos) sin sobre-decorar. La tensión serif/sans dentro de la misma familia Vercel produce coherencia sin monotonía."
+  },
+
+  "spacing_scale": {
+    "base": "4px",
+    "scale": [4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192],
+    "tokens": {
+      "--space-1": "4px",
+      "--space-2": "8px",
+      "--space-3": "12px",
+      "--space-4": "16px",
+      "--space-6": "24px",
+      "--space-8": "32px",
+      "--space-12": "48px",
+      "--space-16": "64px",
+      "--space-24": "96px",
+      "--space-32": "128px",
+      "--space-48": "192px"
+    }
+  },
+
+  "border_radius": {
+    "sm": "4px",
+    "md": "6px",
+    "lg": "8px",
+    "xl": "12px",
+    "full": "9999px",
+    "rationale": "Radios contenidos — el sitio es tech editorial, no SaaS consumer. Nada > 12px en elementos de contenido."
+  },
+
+  "motion": {
+    "duration_fast": "120ms",
+    "duration_default": "200ms",
+    "duration_slow": "400ms",
+    "easing_default": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "easing_in": "cubic-bezier(0.4, 0, 1, 1)",
+    "easing_out": "cubic-bezier(0, 0, 0.2, 1)",
+    "rationale": "Motion calmo y preciso — inspirado en Linear.app. Nada de bounce, nada de spring excesivo. Las transiciones confirman acciones, no las anuncian."
+  },
+
+  "mood_vector": {
+    "editorial": 8,
+    "minimal": 7,
+    "luxury": 4,
+    "brutalist": 1,
+    "immersive": 3,
+    "playful": 0,
+    "retro": 0,
+    "industrial": 5
+  },
+
+  "reference_ids": ["linear", "vercel", "stripe"],
+
+  "anti_patterns_HIGH": [
+    "NO gradientes purpura/violeta — asociación consumer/SaaS genérico",
+    "NO border-radius > 12px en elementos de contenido — evitar look consumer-app",
+    "NO tipografía Inter, Roboto, Open Sans como heading — demasiado genérico para audiencia C-level",
+    "NO colores neón saturados en múltiples partes simultáneas — el acento cian es único y puntual",
+    "NO backgrounds blancos ni off-white — el universo es oscuro, sin excepciones en páginas principales",
+    "NO ilustraciones coloridas, emojis decorativos ni iconos outline multicolor",
+    "NO copy entusiasta o startup-loud ('¡Revolucioná tu empresa!') — tono directo y denso",
+    "NO animaciones de bounce o spring excesivo — motion es sutil y funcional",
+    "NO grid asimétrico extremo o layouts 'artísticos' que sacrifiquen jerarquía de información",
+    "NO fotos de stock con personas sonriendo a cámara"
+  ],
+
+  "do_dont": {
+    "do": [
+      "Usar espacio en blanco (negro) generosamente — el silencio es autoridad",
+      "Métricas concretas en tipografía mono: '3 empresas escaladas en 18 meses'",
+      "Titulares en Instrument Serif en italic para citas y momentos de liderazgo",
+      "Líneas y bordes sutiles (#1E1E2A) para estructurar sin decorar",
+      "El acento cian SOLO en el elemento más importante de cada sección",
+      "Fotografía de Lucas: iluminación dramática lateral, fondo oscuro, NO studio blanco",
+      "Copy en primera persona directa: 'Trabajo con fundadores que...' no 'Lucas ayuda a...'"
+    ],
+    "dont": [
+      "No combinar más de 2 pesos tipográficos en una misma sección",
+      "No usar el acento cian en más de 1-2 elementos por viewport",
+      "No centrar bloques largos de texto — izquierda alineada para lectura densa",
+      "No usar sombras coloridas (color shadows) — solo sombras oscuras si se usan",
+      "No agregar patrones de fondo, texturas o noise visibles — flat dark",
+      "No incluir testimonios con fotos de avatar circulares en grid 3x3 — cliché SaaS"
+    ]
+  },
+
+  "extraction_metadata": {
+    "source": "brand_textual",
+    "confidence": 90,
+    "figma_raster_detected": false,
+    "palette_hex_raw": [],
+    "typography_inferred_confidence": 95,
+    "awesome_design_md_consulted": ["linear", "vercel", "stripe"],
+    "accent_decision": "cian_electrico_vs_verde_lima",
+    "accent_rationale": "Cian #00D4FF elegido sobre verde lima (#A3E635): (1) Contraste WCAG AAA sobre #0A0A0F (ratio ~12:1 vs ~9:1 del lima); (2) El verde lima tiene connotación 'monitoring/alerts/fintech' más que liderazgo ejecutivo; (3) El cian es el acento tonal de Linear y Vercel — referencias explícitas del brief — sin ser una copia directa; (4) Audiencia C-level percibe el cian como tech-sophisticated, el lima como developer-tool. Riesgo del cian: puede acercarse a cyan de IBM/Salesforce en paletas más saturadas — mitigado eligiendo #00D4FF (más brillante y eléctrico que el IBM #1192E8)."
+  },
+
+  "asset_specs": {
+    "hero_image": {
+      "width": 1920,
+      "height": 1080,
+      "format": "PNG",
+      "variants": ["desktop_1920x1080", "tablet_1024x768", "mobile_390x844"],
+      "art_direction": "Abstracto dark-tech: geometría de líneas finas cian sobre negro profundo, sin rostros ni UI screenshots. Puede evocar networks, procesos, sistemas — nunca machinery física o circuitos literales.",
+      "bg_color": "#0A0A0F"
+    },
+    "og_image": {
+      "width": 1200,
+      "height": 630,
+      "format": "PNG",
+      "variants": ["standard_1200x630"],
+      "art_direction": "Composición tipográfica: nombre + tagline en Instrument Serif italic sobre fondo #0A0A0F. Línea de acento cian horizontal. Minimal, legible en thumbnail."
+    },
+    "favicon": {
+      "sizes": ["16x16", "32x32", "180x180", "512x512"],
+      "formats": ["ICO", "PNG", "SVG"],
+      "concept": "Monograma 'LR' en Geist weight 600, o símbolo abstracto de un nodo de proceso. Monocromo cian sobre negro. Sin serifs en favicon pequeño.",
+      "bg": "transparent"
+    },
+    "foto_lucas_placeholder": {
+      "width": 800,
+      "height": 1000,
+      "format": "PNG",
+      "aspect_ratio": "4:5",
+      "art_direction": "Portrait profesional: iluminación lateral dramatic key light frío (5600K), fondo oscuro #111118, traje o ropa oscura. Post: ligero color grading frío, NO filtro cálido. Sin sonrisa forzada. Expresión: concentrado, confiado. Cropping: desde clavículas hacia arriba con espacio de respiración.",
+      "placeholder_bg": "#111118"
+    },
+    "logo": {
+      "width": 400,
+      "height": 120,
+      "bg": "transparent",
+      "formats": ["SVG", "PNG"],
+      "concept": "Logotipo wordmark: 'Lucas Rojo' en Geist weight 500, tracking normal. Opcionalmente acompañado de un separador cian y el descriptor 'COO & Operations' en Geist Mono xs muted. Sin iconos complejos."
+    }
+  },
+
+  "prompt_ingredients": {
+    "style_tags": [
+      "dark tech editorial",
+      "deep black background",
+      "electric cyan accent",
+      "minimal grid",
+      "high contrast typography",
+      "professional B2B",
+      "geometric line art",
+      "Linear.app aesthetic",
+      "Vercel design language",
+      "cold key lighting",
+      "systems thinking visual",
+      "executive presence",
+      "monochrome with single accent"
+    ],
+    "photo_style": "Dark editorial photography, cold dramatic side lighting, deep black background #0A0A0F, high contrast, desaturated color grading with cyan channel lift, professional executive portrait, sharp focus, no studio white backgrounds, cinematic quality",
+    "logo_style": "Minimal wordmark, Geist typeface, electric cyan #00D4FF on transparent background, clean sans-serif, no decorative elements, professional tech executive identity",
+    "hero_style": "Abstract dark tech geometry, thin electric cyan lines on deep black, network nodes, process flow abstraction, no literal tech iconography, editorial negative space",
+    "avoid_global": "watermark, text overlay, colorful gradients, purple tones, neon green, cartoon, 3D render, illustration style, stock photo smile, white background, rounded bubbles, emoji, confetti, shadows colored, glassmorphism excess, blur background bokeh excessive"
+  }
+}

@@ -165,27 +165,76 @@ class ATLASDispatcher:
         }
         return cajon_map.get(phase, [])
 
-    def validate_return_envelope(self, response: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    def validate_return_envelope(self, response: Dict[str, Any], mode: str = "standard") -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
         Retorna: (is_valid, errores)
+
+        Modos:
+        - "standard": validación suave (para dev agents, creativos, etc.)
+        - "qa_strict": validación estricta para evidence-collector (QA obligatorio)
         """
-        required_fields = {"status", "tarea", "archivos", "engram"}
         errores = []
 
-        missing = required_fields - set(response.keys())
+        # CAMPOS OBLIGATORIOS en ambos modos
+        required_always = {"status", "tarea", "engram"}
+        missing = required_always - set(response.keys())
         if missing:
             errores.append(f"Campos requeridos faltantes: {missing}")
 
-        valid_status = {"completado", "fallido", "PASS", "FAIL", "CERTIFIED", "NEEDS WORK"}
-        if response.get("status") not in valid_status:
-            errores.append(f"STATUS inválido: {response.get('status')}. Esperado: {valid_status}")
+        # VALIDACIÓN DE STATUS
+        if mode == "qa_strict":
+            valid_status = {"PASS", "FAIL"}
+            if response.get("status") not in valid_status:
+                errores.append(f"STATUS inválido: {response.get('status')}. Para QA esperado: PASS o FAIL")
+        else:
+            valid_status = {"completado", "fallido", "PASS", "FAIL", "CERTIFIED", "NEEDS WORK"}
+            if response.get("status") not in valid_status:
+                errores.append(f"STATUS inválido: {response.get('status')}. Esperado: {valid_status}")
 
-        if not isinstance(response.get("archivos"), list):
-            errores.append("ARCHIVOS debe ser lista")
+        # VALIDACIONES ESPECÍFICAS PARA QA STRICT
+        if mode == "qa_strict":
+            status = response.get("status")
 
-        if not isinstance(response.get("bloqueadores"), (list, type(None))):
-            errores.append("BLOQUEADORES debe ser lista o null")
+            # PASS requiere: status=PASS, archivos (NO VACÍO), NO bloqueadores
+            if status == "PASS":
+                # archivos es OBLIGATORIO y DEBE tener al menos 1 elemento
+                archivos = response.get("archivos")
+                if archivos is None:
+                    errores.append("PASS requiere archivos (lista no vacía)")
+                elif not isinstance(archivos, list):
+                    errores.append(f"PASS: archivos debe ser lista, recibido {type(archivos).__name__}")
+                elif len(archivos) == 0:
+                    errores.append("PASS requiere archivos (lista no vacía)")
+
+                # bloqueadores PROHIBIDO si status=PASS
+                bloqueadores = response.get("bloqueadores")
+                if bloqueadores is not None and len(bloqueadores) > 0:
+                    errores.append("PASS prohibe bloqueadores (debe ser [] o null)")
+
+            # FAIL requiere: status=FAIL, bloqueadores (NO VACÍO)
+            elif status == "FAIL":
+                # bloqueadores es OBLIGATORIO y DEBE tener al menos 1 elemento
+                bloqueadores = response.get("bloqueadores")
+                if bloqueadores is None:
+                    errores.append("FAIL requiere bloqueadores (lista no vacía)")
+                elif not isinstance(bloqueadores, list):
+                    errores.append(f"FAIL: bloqueadores debe ser lista, recibido {type(bloqueadores).__name__}")
+                elif len(bloqueadores) == 0:
+                    errores.append("FAIL requiere bloqueadores (lista no vacía)")
+
+                # archivos es OPCIONAL para FAIL
+                archivos = response.get("archivos")
+                if archivos is not None and not isinstance(archivos, list):
+                    errores.append(f"FAIL: archivos debe ser lista, recibido {type(archivos).__name__}")
+
+        # VALIDACIONES STANDARD (ambos modos)
+        else:
+            if not isinstance(response.get("archivos", []), list):
+                errores.append("ARCHIVOS debe ser lista")
+
+            if not isinstance(response.get("bloqueadores"), (list, type(None))):
+                errores.append("BLOQUEADORES debe ser lista o null")
 
         return len(errores) == 0, errores
 
