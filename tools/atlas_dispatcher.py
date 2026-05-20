@@ -78,6 +78,53 @@ class ATLASDispatcher:
         # Llamar set_engram_callback() para inyectar implementacion MCP real (1B.2)
         self._engram_strategy: EngramStrategy = DiskFallbackStrategy(self.project_root)
 
+    def enable_engram_mcp(
+        self,
+        binary_path: Optional[str] = None,
+        timeout_s: float = 5.0,
+        use_disk_fallback: bool = True,
+    ) -> Tuple[bool, str]:
+        """
+        Bloque 1B.2: Activa Engram MCP Real Connection.
+
+        OPT-IN EXPLICITO. Si no se llama, dispatcher sigue usando DiskFallbackStrategy.
+
+        Comportamiento:
+        - Resuelve el binario (param > ENGRAM_MCP_BINARY > PATH)
+        - Si encuentra binario: lanza subprocess lazy en primer query
+        - Si NO encuentra: mantiene disk_fallback como strategy activa
+          (NO rompe el dispatcher, devuelve (False, error_msg))
+
+        Args:
+            binary_path: Ruta al binario engram (opcional)
+            timeout_s: Timeout por query MCP (default 5s)
+            use_disk_fallback: disk_fallback como red de seguridad (default True)
+
+        Returns:
+            (success: bool, message: str)
+            - (True, "Engram MCP activado") si bridge OK
+            - (False, "razon") si binary missing — disk_fallback queda activo
+        """
+        try:
+            from engram_strategy import make_mcp_bridge_strategy
+            strategy = make_mcp_bridge_strategy(
+                binary_path=binary_path,
+                timeout_s=timeout_s,
+                use_disk_fallback=use_disk_fallback,
+                project_root=self.project_root,
+            )
+            self._engram_strategy = strategy
+            return (True, f"Engram MCP real activado (timeout={timeout_s}s)")
+
+        except Exception as e:
+            # Binary missing u otro error → MANTENER disk_fallback activo
+            # (no romper backward compat)
+            return (
+                False,
+                f"Engram MCP no activado: {type(e).__name__}: {e}. "
+                f"Manteniendo DiskFallbackStrategy."
+            )
+
     def set_engram_callback(
         self,
         callback: Optional[callable] = None,
