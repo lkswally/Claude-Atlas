@@ -829,6 +829,65 @@ No esperes al final de la tarea. Guarda al momento.
 
 ---
 
+## 4.5. Design Intelligence Enforcement (Bloque 1C.1)
+
+**Alcance**: SOLO `ux-architect` y `ui-designer`. NO afecta otros agentes. SOLO cubre `ui-ux-pro-max-skill` (motor BM25 en `~/.claude/design-data/`). NO cubre otros skills.
+
+### Qué exige
+
+Cuando el orquestador llama `validate_return_envelope(mode="design_strict")`, el envelope debe incluir:
+
+```yaml
+design_intelligence:
+  queried: true                # OBLIGATORIO — bool
+  industry: "..."              # recomendado
+  style: "..."                 # recomendado
+  verified_against: [...]      # recomendado — CSVs/domains consultados
+  anti_generic_validated: bool # recomendado
+```
+
+### Reglas operativas
+
+| Caso | Acción del dispatcher |
+|------|----------------------|
+| `design_intelligence` ausente | **Rechazado** con error explícito |
+| `queried` no es bool | **Rechazado** |
+| `queried: false` | **Rechazado** ("el agente DEBE consultar antes de emitir output") |
+| `queried: true` + todo el metadata | Aceptado |
+| `queried: true` + campos opcionales faltantes (industry, style, verified_against, anti_generic_validated) | **Aceptado con warnings** en `_dispatcher_warnings` |
+
+### Cómo invocan los agentes la skill
+
+Cada agente (ux-architect, ui-designer) ejecuta en su Paso 0:
+
+```bash
+node ~/.claude/design-data/search.js "{tipo de producto}" --domain=product
+```
+
+O desde Python, vía el dispatcher:
+
+```python
+result = dispatcher.consult_design_intelligence("saas b2b", domain="product")
+# {"status": "ok"|"unavailable"|"error", "results": [...], "count": N, ...}
+```
+
+### Fallback controlado
+
+Si la skill NO está disponible (binary/node missing, env path inválido):
+- `SkillsInvocation.is_available() → False`
+- `consult_design_intelligence()` retorna `status="unavailable"` con razón
+- El agente DEBE emitir `STATUS: fallido` con bloqueador explícito — NO defaults silenciosos
+- El dispatcher NO rompe ni falla — la decisión queda en el agente
+
+### LO QUE 1C.1 NO HACE
+
+- ❌ NO cubre otros skills (creative-coding-reference, scroll-storytelling-reference, reactive-audio-reference, advanced-effects-reference) — siguen sub-utilizados
+- ❌ NO valida el CONTENIDO del output de diseño contra anti-generic guardrails (eso es 1A.3 / T1-T7 dentro del agente)
+- ❌ NO fuerza al orquestador a invocar `mode="design_strict"` — el orquestador agente debe decidirlo
+- ❌ NO cachea queries — cada `consult_design_intelligence` invoca subprocess Node
+
+---
+
 ## 5. Reglas universales (todos los subagentes)
 
 1. **No arrancar servidores con Bash** → usar `preview_start` (solo aplica en Windows/Claude Desktop; en Linux/Claude Code CLI, usar Bash normalmente)
