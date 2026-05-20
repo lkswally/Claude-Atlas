@@ -9,7 +9,11 @@
       "Bash(ls /c/ProyectosClaude/ClaudeAtlas/claude-vibecoding/hooks/*.js)",
       "Bash(xargs -I{} basename {})",
       "Skill(update-config)",
-      "Bash(echo \"Exit: $?\")"
+      "Bash(echo \"Exit: $?\")",
+      "Read(//c/Proyectos/Codex-Atlas/**)",
+      "Bash(python tools/atlas_dispatcher.py audit-repo)",
+      "Bash(cd \"C:\\\\\\\\Proyectos\\\\\\\\Codex-Atlas\")",
+      "Bash(python tools/atlas_dispatcher.py --project \"C:\\\\\\\\Proyectos\\\\\\\\Codex-Atlas\" certify-project)"
     ]
   }
 }
