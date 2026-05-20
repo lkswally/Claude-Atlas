@@ -46,6 +46,62 @@ Si `mem_search` no retorna observation_id → el cajón no existe. Manejo univer
 
 ---
 
+## 1.5. Engram Strategy en Dispatcher (Bloque 1B.1)
+
+**ESTADO HONESTO**: El dispatcher (`tools/atlas_dispatcher.py`) usa un **strategy pattern** para verificar cajones. **El default es `DiskFallbackStrategy` — NO es Engram MCP real**, es lectura directa de `.pipeline/{cajon}.md`.
+
+Esta es **preparación arquitectónica** para la integración MCP real que llegará en Bloque 1B.2. NO confundir con "Engram operativo".
+
+### Strategies disponibles
+
+| Strategy | Real Engram | Cuándo se usa |
+|----------|-------------|---------------|
+| `DiskFallbackStrategy` | ❌ Lee `.pipeline/{cajon}.md` | Default — backward compat con 1A.11 |
+| `CallbackStrategy` | 🟡 Depende del callback | Cuando el orquestador inyecta uno (futuro 1B.2) |
+
+### Cómo inyectar un callback (preparación para 1B.2)
+
+```python
+from atlas_dispatcher import ATLASDispatcher
+
+dispatcher = ATLASDispatcher(project_root)
+
+def mi_callback_mcp(proyecto: str, cajon: str) -> dict:
+    # En 1B.2: llamar mem_search() real via MCP
+    result = mem_search(cajon, project=proyecto)
+    if result.observation_id:
+        return {"status": "found", "observation_id": result.observation_id}
+    return {"status": "not_found"}
+
+dispatcher.set_engram_callback(mi_callback_mcp, name="engram_mcp_real")
+```
+
+### Contrato del callback
+
+- Recibe `(proyecto: str, cajon: str)`
+- Retorna `dict` con `status`: `"found"` | `"not_found"` | `"timeout"`
+- Puede agregar metadata: `observation_id`, `topic_key`, `error`, etc.
+- Si el callback raisea excepción → dispatcher captura, mapea a `timeout`, hace fallback a disco con WARN
+
+### Manejo de fallback
+
+Cuando se inyecta callback con `use_disk_fallback=True` (default):
+- Callback retorna `found` → se usa directamente
+- Callback retorna `not_found` → se respeta (sin fallback)
+- Callback retorna `timeout` o `ambiguous_project` → fallback a disco
+- Callback raisea Exception → captura + fallback a disco
+
+### LO QUE NO HACE 1B.1 (responsabilidad de 1B.2)
+
+- ❌ NO conecta el MCP de Engram realmente
+- ❌ NO valida cajones cross-machine
+- ❌ NO maneja `observation_id` para `mem_get_observation`
+- ❌ NO detecta `ambiguous_project` activamente
+
+1B.1 solo prepara el plugin point. La integración real es 1B.2.
+
+---
+
 ## 2. Engram — Escritura (SIEMPRE con topic_key)
 
 ### Primera vez (crear observación):
