@@ -37,7 +37,9 @@ def make_dispatcher(tmpdir: str) -> ATLASDispatcher:
         json.dumps({"fase_1": {"e2e_required": []}, "fase_2": {"e2e_required": []}})
     )
     (root / ".pipeline").mkdir(exist_ok=True)
-    return ATLASDispatcher(root)
+    # Bloque 1B.5: opt-out explicito — estos tests validan activacion MANUAL via enable_engram_mcp()
+    # No queremos auto-enable porque enmascararia los tests de comportamiento
+    return ATLASDispatcher(root, auto_enable_mcp=False)
 
 
 # ============================================================

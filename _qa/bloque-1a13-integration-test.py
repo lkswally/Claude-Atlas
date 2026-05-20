@@ -12,10 +12,14 @@ NOT aislado — flujo completo Fase 1 -> 5 simulado
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 import sys
+
+# Bloque 1B.5: opt-out de auto-enable Engram MCP en tests para preservar aislamiento + velocidad
+os.environ["ATLAS_DISABLE_ENGRAM_MCP"] = "1"
 
 # Agregar tools/ al path para importar dispatcher
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))

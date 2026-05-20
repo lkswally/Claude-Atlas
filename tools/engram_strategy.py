@@ -57,6 +57,26 @@ class EngramStrategy(ABC):
         """Identificador honesto de la estrategia (logging + debugging)."""
         raise NotImplementedError
 
+    def get_observation(
+        self,
+        observation_id: Any,
+        cajon: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Bloque 1B.4: segundo paso del 2-step pattern.
+
+        Obtiene el contenido COMPLETO de una observation. Retorna:
+        - dict con shape {"status": "found", "content": str, ...} si existe
+        - dict con shape {"status": "not_found", ...} si no existe
+        - dict con shape {"status": "timeout", ...} si error
+        - None si la estrategia NO soporta get_observation (interfaz opcional)
+
+        Default: None (subclase debe implementar si soporta el 2-step).
+        Implementaciones que no soportan get_observation deben retornar None
+        para que el caller pueda decidir fallback.
+        """
+        return None
+
 
 class DiskFallbackStrategy(EngramStrategy):
     """
@@ -105,6 +125,49 @@ class DiskFallbackStrategy(EngramStrategy):
                 "note": "Disk I/O error — tratado como timeout",
             }
 
+    def get_observation(
+        self,
+        observation_id: Any,
+        cajon: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Bloque 1B.4: Para disk_fallback, observation_id no aplica directamente
+        (los archivos no tienen IDs numericos). Si se pasa el cajon, retornamos
+        el contenido del archivo .pipeline/{cajon}.md completo.
+
+        Si solo se pasa observation_id sin cajon -> None (no podemos resolver).
+        """
+        if cajon is None:
+            return None
+        try:
+            cajon_name = cajon.split("/")[-1]
+            disk_path = self.project_root / ".pipeline" / f"{cajon_name}.md"
+            if not disk_path.exists():
+                return {
+                    "status": "not_found",
+                    "source": "disk_fallback",
+                    "cajon": cajon,
+                }
+            content = disk_path.read_text(encoding="utf-8", errors="replace")
+            return {
+                "status": "found",
+                "source": "disk_fallback",
+                "cajon": cajon,
+                "content": content,
+                "raw_length": len(content),
+                "path": str(disk_path),
+                "title": None,  # disk_fallback no expone metadata estructurada
+                "type": None,
+                "topic_key": cajon,
+            }
+        except (OSError, IOError) as e:
+            return {
+                "status": "timeout",
+                "source": "disk_fallback",
+                "cajon": cajon,
+                "error": str(e),
+            }
+
 
 class CallbackStrategy(EngramStrategy):
     """
@@ -123,10 +186,13 @@ class CallbackStrategy(EngramStrategy):
         callback: Callable[[str, str], Dict[str, Any]],
         fallback: Optional[EngramStrategy] = None,
         name: str = "callback",
+        get_observation_callback: Optional[Callable[[Any], Dict[str, Any]]] = None,
     ):
         self._callback = callback
         self._fallback = fallback
         self._name = name
+        # Bloque 1B.4: callback opcional para mem_get_observation
+        self._get_observation_callback = get_observation_callback
 
     @property
     def name(self) -> str:
@@ -172,6 +238,62 @@ class CallbackStrategy(EngramStrategy):
                 return fb_result
 
         # Status normal (found / not_found) o sin fallback configurado
+        result.setdefault("source", self._name)
+        return result
+
+    def get_observation(
+        self,
+        observation_id: Any,
+        cajon: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Bloque 1B.4: 2-step pattern — segundo paso.
+
+        Si hay get_observation_callback configurado, lo invoca. Si falla o no
+        existe, intenta fallback.get_observation(observation_id, cajon).
+        timeout/error NUNCA se confunden con not_found.
+        """
+        if self._get_observation_callback is None:
+            # Sin callback de get_observation -> delegate a fallback si soporta
+            if self._fallback is not None:
+                fb = self._fallback.get_observation(observation_id, cajon)
+                if fb is not None:
+                    return fb
+            return None
+
+        try:
+            result = self._get_observation_callback(observation_id)
+        except Exception as e:
+            err_result = {
+                "status": "timeout",
+                "source": self._name,
+                "id": observation_id,
+                "error": f"get_observation callback raised: {type(e).__name__}: {e}",
+            }
+            if self._fallback is not None and cajon is not None:
+                fb = self._fallback.get_observation(observation_id, cajon)
+                if fb is not None and fb.get("status") == "found":
+                    fb["fallback_used"] = True
+                    fb["callback_error"] = err_result["error"]
+                    return fb
+            return err_result
+
+        if not isinstance(result, dict) or "status" not in result:
+            return {
+                "status": "timeout",
+                "source": self._name,
+                "id": observation_id,
+                "error": f"get_observation returned invalid format: {result!r}",
+            }
+
+        # timeout del callback → intentar fallback
+        if result["status"] == "timeout" and self._fallback is not None and cajon is not None:
+            fb = self._fallback.get_observation(observation_id, cajon)
+            if fb is not None and fb.get("status") == "found":
+                fb["fallback_used"] = True
+                fb["callback_status"] = "timeout"
+                return fb
+
         result.setdefault("source", self._name)
         return result
 
@@ -224,10 +346,24 @@ def make_mcp_bridge_strategy(
     def callback(proyecto: str, cajon: str) -> Dict[str, Any]:
         return bridge.mem_search(project=proyecto, topic_key=cajon)
 
+    def get_obs_callback(observation_id: Any) -> Dict[str, Any]:
+        # Bloque 1B.4: segundo paso del 2-step pattern
+        if not isinstance(observation_id, int):
+            try:
+                observation_id = int(observation_id)
+            except (ValueError, TypeError):
+                return {
+                    "status": "timeout",
+                    "id": observation_id,
+                    "error": f"observation_id debe ser entero, recibido {type(observation_id).__name__}",
+                }
+        return bridge.mem_get_observation(observation_id)
+
     strategy = CallbackStrategy(
         callback=callback,
         fallback=fallback,
         name="engram_mcp_real",
+        get_observation_callback=get_obs_callback,
     )
     # Mantener referencia al bridge para cleanup explicito si se necesita
     strategy._bridge = bridge  # type: ignore

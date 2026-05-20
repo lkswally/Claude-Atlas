@@ -26,7 +26,8 @@ def make_dispatcher(tmpdir: str) -> ATLASDispatcher:
         json.dumps({"fase_1": {"e2e_required": []}, "fase_2": {"e2e_required": []}})
     )
     (root / ".pipeline").mkdir(exist_ok=True)
-    return ATLASDispatcher(root)
+    # Bloque 1B.5: opt-out explicito para preservar semantica disk_fallback de estos tests
+    return ATLASDispatcher(root, auto_enable_mcp=False)
 
 
 def write_cajon(root: Path, cajon_name: str, content: str = "data") -> None:
