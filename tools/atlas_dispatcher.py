@@ -911,6 +911,52 @@ class ATLASDispatcher:
         inv = SkillsInvocation()
         return inv.query(query, domain=domain)
 
+    def run_certification_re_runs(
+        self,
+        qa_results: List[Dict[str, Any]],
+        rerun_callback: callable,
+        sample_size: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1E.1: Helper para que reality-checker invoque random re-runs
+        antes de certificar.
+
+        Toma muestra aleatoria reproducible de QA PASS, invoca rerun_callback
+        para cada uno, agrega resultado.
+
+        Args:
+            qa_results: lista de QA results de Fase 3 (con campo "status")
+            rerun_callback: funcion (qa_result) -> {"status": str, "details": str}
+            sample_size: override (default 3 o ATLAS_REALITY_SAMPLE_SIZE)
+            seed: para reproducibilidad (default None o ATLAS_REALITY_SEED)
+
+        Retorna el verdict del runner (ver tools/reality_check_runner.py).
+
+        Reglas operativas:
+        - verdict "CONFIRMED" -> reality-checker puede certificar
+        - verdict "DISCREPANCY" -> certificacion debe bloquearse
+        - verdict "INCONCLUSIVE" -> no bloquea pero advierte (escalar al usuario)
+
+        Fallback controlado: si reality_check_runner no se puede importar,
+        retorna verdict "INCONCLUSIVE" con error en note. NO rompe el pipeline.
+        """
+        try:
+            from reality_check_runner import RealityCheckRunner
+        except ImportError as e:
+            return {
+                "verdict": "INCONCLUSIVE",
+                "sample_size": 0,
+                "total_qa_pass": len([r for r in qa_results if isinstance(r, dict) and r.get("status") == "PASS"]),
+                "rerun_results": [],
+                "discrepancies": [],
+                "seed": seed,
+                "note": f"reality_check_runner no importable: {e}",
+            }
+
+        runner = RealityCheckRunner(seed=seed, sample_size=sample_size)
+        return runner.run_re_runs(qa_results, rerun_callback)
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.
