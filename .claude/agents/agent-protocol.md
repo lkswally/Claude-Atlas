@@ -648,3 +648,41 @@ Paso 6 — Guardar descobrimiento
 - No instalar dependencias no solicitadas
 - No leer cajones de Engram que no necesitas (lee solo los listados en tu sección "Inputs")
 - No crear archivos de documentación (README, CHANGELOG) salvo que la tarea lo pida
+
+---
+
+## 9. Anti-Loop Tracking — Enforcement (Bloque 1A.12)
+
+**QUÉ ES**: Mecanismo para prevenir reintentos infinitos si un cajon falta persistentemente.
+
+**CÓMO FUNCIONA**:
+- Dispatcher mantiene contador `phase_gate_retries` por cajon
+- Si cajon falta en enforce_phase_gate():
+  - Intento 1: falta → añade a missing_cajones, incrementa counter
+  - Intento 2: falta → añade a missing_cajones, incrementa counter
+  - Intento 3+: falta → ESCALACIÓN (no re-delega, escala a usuario)
+
+**COMPORTAMIENTO POR INTENTO**:
+
+| Intento | Contador | Acción | Resultado |
+|---------|----------|--------|-----------|
+| 1 | 0 → 1 | Añade cajon a missing, redel agente | Re-delegación con feedback |
+| 2 | 1 → 2 | Añade cajon a missing, redel agente | Re-delegación con feedback |
+| 3+ | 2+ | ESCALACIÓN (no añade a missing) | Requiere intervención usuario |
+
+**ESCALACIÓN**: Si cajon sigue faltando tras 2+ intentos:
+```
+FASE X ESCALACIÓN (Max reintentos alcanzado):
+  Cajones bloqueados tras 2+ intentos: {proyecto}/tareas (intento 3/max 2)
+  Acción requerida: Usuario debe resolver manualmente o reasignar agente
+```
+
+**RESET DEL CONTADOR**:
+- Si cajon aparece (found) después de falta → contador se resetea a 0
+- Si Engram timeout + disk fallback existe → contador se resetea a 0
+- Cuando cajon está OK en la siguiente gate check, el contador desaparece
+
+**RESPONSABILIDAD**:
+- Dispatcher: mantiene contador y decide escalación
+- Orquestador: lee escalación_cajones y presenta opciones al usuario
+- Usuario: resuelve (ej: crear cajon manualmente, reasignar agente, diferir tarea)
