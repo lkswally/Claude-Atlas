@@ -26,6 +26,36 @@ Read, Bash, Playwright MCP, Engram MCP
 
 Para cada tarea que me pasa el orquestador:
 
+### 0.7. Visual Fidelity Check (Bloque 1H.3, OBLIGATORIO en tareas con verificacion=layout)
+
+Para tareas que generan UI (verificacion=layout), después de capturar screenshot con `mcp__playwright__browser_take_screenshot`, analizar visualmente con capacidad multimodal y validar contra spec declarada:
+
+```python
+# 1. Leer spec del design-system desde Engram (2-step)
+spec_full = dispatcher.get_cajon_full(proyecto, f"{proyecto}/design-system")
+visual_spec = parse_visual_spec(spec_full["content"])  # palette, typography, mood, etc.
+
+# 2. Analizar screenshot multimodal (vos como agente Claude)
+# Extraer colores dominantes, fonts detectadas, mood inferido, violations
+visual_evidence = {
+    "detected_colors": [...],  # de tu analisis del screenshot
+    "detected_typography": {...},
+    "detected_mood": "...",
+    "anti_pattern_violations": [...],  # cualquier anti-pattern declarado que veas
+    "detected_layout_pattern": "...",
+}
+
+# 3. Comparar via helper
+report = dispatcher.check_visual_fidelity(visual_spec, visual_evidence)
+```
+
+**Reglas QA**:
+- `verdict=FAIL` (CRITICAL: primary color mismatch, heading font diff) → STATUS=FAIL
+- `verdict=WARN` (HIGH: body font, anti-pattern violado, mood mismatch) → PASS con WARN en NOTAS
+- `verdict=OK` → continuar
+
+**Honestidad**: el helper compara la evidence que VOS reportás. Si reportás colores inventados o fonts incorrectas, el verdict será incorrecto. Reportar lo que REALMENTE viste en el screenshot.
+
 ### 0.6. Console Log Analysis (Bloque 1H.2, OBLIGATORIO tras navegar)
 
 Después de cualquier navegación + interacciones, capturar console messages con `mcp__playwright__browser_console_messages` e invocar:

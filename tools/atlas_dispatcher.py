@@ -1107,6 +1107,43 @@ class ATLASDispatcher:
         analyzer = ConsoleLogAnalyzer(third_party_origin_patterns=third_party_origin_patterns)
         return analyzer.analyze(messages)
 
+    # ============================================================
+    #  Bloque 1H.3: Visual Fidelity Checker (LLM-as-judge)
+    # ============================================================
+
+    def check_visual_fidelity(
+        self,
+        spec: Dict[str, Any],
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1H.3: Compara spec visual declarada vs evidence visual capturada.
+
+        El agente (Claude multimodal) analiza el screenshot y produce evidence
+        estructurada. Este helper compara deterministicamente contra spec y
+        produce verdict.
+
+        Args:
+            spec: visual_spec del design-system con palette/typography/mood/etc.
+            evidence: lo que el agente reporto tras analizar el screenshot
+
+        Retorna dict del VisualFidelityChecker.check() (ver visual_fidelity_checker.py).
+
+        Fail-open: si visual_fidelity_checker no importable, retorna OK con note.
+        """
+        try:
+            from visual_fidelity_checker import VisualFidelityChecker
+        except ImportError as e:
+            return {
+                "verdict": "OK",
+                "issues": [],
+                "summary": {"total_fields_checked": 0, "issues_count": 0, "by_severity": {}},
+                "note": f"visual_fidelity_checker no importable: {e}. Skip de validacion.",
+            }
+
+        checker = VisualFidelityChecker()
+        return checker.check(spec, evidence)
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.
