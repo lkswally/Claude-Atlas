@@ -1097,6 +1097,74 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.16. Hard Enforcement Escalation (Bloque 1K.3)
+
+**Alcance**: cierra el gap "audit advisory pero el agente puede ignorarlo". Convierte la auditoría de invocaciones (1G.2 + 1K.1 advisory) en **rechazo activo de envelope** para agentes críticos cuando faltan helpers obligatorios.
+
+**Diferencia con 1K.1**:
+- 1K.1: hook PostToolUse emite WARN en stderr (advisory, agente puede ignorar)
+- 1K.3: `validate_return_envelope(enforce_helpers=True, agent_name=...)` retorna `is_valid=False` con error explícito + marca el envelope con `_dispatcher_enforcement`
+
+### Agentes críticos (CRITICAL_AGENTS)
+
+`ATLASDispatcher.CRITICAL_AGENTS` set hardcoded:
+- `evidence-collector` (QA Fase 3)
+- `reality-checker` (Certificación Fase 4)
+- `ux-architect` (Design Fase 2)
+- `ui-designer` (Design Fase 2)
+
+### API
+
+```python
+# Backward compat (default):
+is_valid, errores = dispatcher.validate_return_envelope(envelope, mode="qa_strict")
+# Comportamiento idéntico a pre-1K.3
+
+# Hard Enforcement (opt-in):
+is_valid, errores = dispatcher.validate_return_envelope(
+    envelope,
+    mode="qa_strict",
+    enforce_helpers=True,
+    agent_name="evidence-collector",
+)
+# Si evidence-collector NO invocó helpers obligatorios:
+#   is_valid=False
+#   envelope["_dispatcher_enforcement"] = {
+#     "verdict": "incomplete", "is_critical": True,
+#     "missing_helpers": [...], "severity": "HARD_BLOCK",
+#     "audit": {required_for_agent, invoked, missing, ...},
+#   }
+```
+
+### Matriz de comportamiento
+
+| enforce_helpers | agent_name | Resultado |
+|----------------|------------|-----------|
+| False (default) | Cualquiera | Backward compat pre-1K.3 |
+| True | None | Sin enforcement (no aplicable) |
+| True | NO en CRITICAL_AGENTS | Skipped, validación normal |
+| True | En CRITICAL_AGENTS + helpers OK | ACCEPT |
+| True | En CRITICAL_AGENTS + helpers faltantes | **REJECT** + envelope marcado |
+
+### Helper directo
+
+```python
+result = dispatcher.enforce_helpers_for_agent(envelope, agent_name="reality-checker")
+# {"verdict": "passed"|"incomplete"|"skipped", "is_critical": bool,
+#  "missing_helpers": [...], "severity": "HARD_BLOCK"|None}
+```
+
+### LO QUE 1K.3 NO HACE
+
+- ❌ NO ejecuta helpers faltantes automáticamente — solo bloquea aceptación
+- ❌ NO obliga al orquestador a usar `enforce_helpers=True` (opt-in)
+- ❌ NO cubre agentes fuera de CRITICAL_AGENTS
+- ❌ NO genera retry automático — solo señala "envelope no aceptable"
+- ❌ NO modifica `qa-auto-audit.js` hook (sigue advisory, complementa)
+- ❌ Honestidad de `agent_name` supuesta — caller debe pasar nombre correcto
+
+---
+
 ## 4.15. Screenshot Hash Verification (Bloque 1J.2)
 
 **Alcance**: cierra el último gap de evidencia visual sin verificación independiente. Verifica que la `visual_evidence` reportada por el agente tenga:
