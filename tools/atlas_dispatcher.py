@@ -1144,6 +1144,75 @@ class ATLASDispatcher:
         checker = VisualFidelityChecker()
         return checker.check(spec, evidence)
 
+    # ============================================================
+    #  Bloque 1I.1: Anti-Loop INTER-Sesion
+    # ============================================================
+
+    def record_session_summary(
+        self,
+        session_id: str,
+        task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1I.1: Snapshot del delegation state al history log para
+        deteccion de loops cross-session.
+
+        Invocar al cerrar trabajo sobre una task o al cerrar sesion.
+        Fail-open: errores de I/O no rompen el pipeline.
+        """
+        try:
+            from delegation_tracker import DelegationTracker
+        except ImportError as e:
+            return {"ok": False, "error": f"delegation_tracker no importable: {e}"}
+        try:
+            tracker = DelegationTracker(self.project_root)
+            return tracker.record_session_summary(session_id, task_id)
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    def check_cross_session_loops(
+        self,
+        task_id: str,
+        recent_sessions: int = 3,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1I.1: Consulta history de las ultimas N sesiones para detectar
+        si una task_id viene loopeando.
+
+        Si una flag (escalation_needed / pause_recommended / fresh_review_recommended)
+        aparece en mayoria de las ultimas sesiones para esta task -> sticky=True.
+
+        Retorna dict con verdict ("ok" | "loop_detected") + flags_sticky.
+
+        Fail-open: si delegation_tracker no importable, retorna verdict=ok
+        con error en note. NO rompe pipeline.
+        """
+        try:
+            from delegation_tracker import DelegationTracker
+        except ImportError as e:
+            return {
+                "task_id": task_id,
+                "sessions_analyzed": 0,
+                "flags_sticky": {},
+                "verdict": "ok",
+                "loop_count": {},
+                "note": f"delegation_tracker no importable: {e}",
+                "history_entries": [],
+            }
+        try:
+            tracker = DelegationTracker(self.project_root)
+            return tracker.cross_session_flags(task_id, recent_sessions=recent_sessions)
+        except Exception as e:
+            return {
+                "task_id": task_id,
+                "sessions_analyzed": 0,
+                "flags_sticky": {},
+                "verdict": "ok",
+                "loop_count": {},
+                "note": f"Error en cross-session check: {type(e).__name__}: {e}",
+                "history_entries": [],
+            }
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.

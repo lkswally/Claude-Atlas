@@ -139,6 +139,8 @@ class DelegationTracker:
         self.project_root = Path(project_root)
         self.state_dir = self.project_root / ".pipeline"
         self.state_path = self.state_dir / "delegation-state.json"
+        # Bloque 1I.1: append-only log para anti-loop INTER-sesion
+        self.history_path = self.state_dir / "delegation-history.jsonl"
 
     # ----------------------------------------------------------
     #  Persistencia
@@ -277,6 +279,198 @@ class DelegationTracker:
                 "error": f"DelegationTracker failed: {type(e).__name__}: {e}",
                 "tool_name": tool_name,
             }
+
+    # ----------------------------------------------------------
+    #  Bloque 1I.1: Anti-Loop INTER-sesion (persistencia historica)
+    # ----------------------------------------------------------
+
+    def record_session_summary(
+        self,
+        session_id: str,
+        task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1I.1: Append-only snapshot del state actual al history log.
+
+        Llamar al cerrar una sesion o al cerrar trabajo sobre una task_id
+        especifica. La entry queda en `.pipeline/delegation-history.jsonl`
+        para consulta cross-session.
+
+        Args:
+            session_id: identificador de la sesion (ej. ISO timestamp o UUID)
+            task_id: opcional, task especifica que se cierra (ej. "atlas/tarea-3")
+
+        Retorna dict con la entry escrita + ok/error status.
+
+        Fail-open: si I/O falla, retorna {"ok": False, "error": ...} sin
+        romper. La caller decide si actuar sobre el error.
+        """
+        try:
+            state = self._load_state()
+            entry = {
+                "session_id": session_id,
+                "task_id": task_id,
+                "timestamp": _now_iso(),
+                "flags": dict(state.get("flags", {})),
+                "consecutive_reads": state.get("consecutive_reads", 0),
+                "total_tool_calls_since_spawn": state.get("total_tool_calls_since_spawn", 0),
+                "files_modified_count": len(state.get("files_modified", [])),
+                "files_modified": list(state.get("files_modified", []))[:20],  # cap para no inflar log
+                "last_tool": state.get("last_tool"),
+                "version": 1,
+            }
+
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            # Append-only: simple append en jsonl (atomic enough para append corto)
+            with open(self.history_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            return {"ok": True, "entry": entry, "path": str(self.history_path)}
+        except (OSError, IOError) as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}", "session_id": session_id}
+
+    def _read_history(self, max_lines: int = 1000) -> List[Dict[str, Any]]:
+        """Lee history log con max_lines de seguridad. Saltea entries malformadas."""
+        if not self.history_path.exists():
+            return []
+        entries: List[Dict[str, Any]] = []
+        try:
+            with open(self.history_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            # Tomar las ultimas max_lines
+            for line in lines[-max_lines:]:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except (json.JSONDecodeError, ValueError):
+                    continue  # skip malformed
+        except (OSError, IOError):
+            return []
+        return entries
+
+    def cross_session_flags(
+        self,
+        task_id: str,
+        recent_sessions: int = 3,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1I.1: Analiza historial de las ultimas N sesiones para detectar
+        loops persistentes en una task_id especifica.
+
+        Si una flag (escalation_needed / pause_recommended / fresh_review_recommended)
+        aparece en >= 2 de las ultimas `recent_sessions` entries de esta task_id,
+        se marca como sticky cross-session.
+
+        Args:
+            task_id: identificador de tarea para filtrar history
+            recent_sessions: cuantas sesiones recientes considerar (default 3)
+
+        Retorna dict:
+        {
+          "task_id": str,
+          "sessions_analyzed": N,
+          "flags_sticky": {
+            "escalation_needed_sticky": bool,
+            "pause_recommended_sticky": bool,
+            "fresh_review_recommended_sticky": bool,
+          },
+          "verdict": "ok" | "loop_detected",
+          "loop_count": {flag_name: count_across_sessions},
+          "note": str,
+          "history_entries": [...],
+        }
+
+        Reglas:
+        - Si task_id NO aparece en history -> verdict=ok, sin flags
+        - Si task_id aparece pero ninguna flag dispara -> verdict=ok
+        - Si una flag aparece >= 2 veces en las ultimas N sesiones -> sticky=True
+        - Si cualquier flag es sticky -> verdict=loop_detected
+        """
+        if not task_id:
+            return {
+                "task_id": task_id,
+                "sessions_analyzed": 0,
+                "flags_sticky": {
+                    "escalation_needed_sticky": False,
+                    "pause_recommended_sticky": False,
+                    "fresh_review_recommended_sticky": False,
+                },
+                "verdict": "ok",
+                "loop_count": {},
+                "note": "task_id vacio — no se puede analizar",
+                "history_entries": [],
+            }
+
+        all_entries = self._read_history()
+        # Filtrar por task_id, ordenar por timestamp descendente
+        task_entries = [
+            e for e in all_entries
+            if isinstance(e, dict) and e.get("task_id") == task_id
+        ]
+        # Las ultimas N (asumimos que el log ya esta cronologico — append-only)
+        recent = task_entries[-recent_sessions:]
+
+        loop_count = {
+            "escalation_needed": 0,
+            "pause_recommended": 0,
+            "fresh_review_recommended": 0,
+        }
+        for entry in recent:
+            flags = entry.get("flags", {})
+            for flag_name in loop_count.keys():
+                if flags.get(flag_name):
+                    loop_count[flag_name] += 1
+
+        # Sticky si aparece >= 2 veces (mayoria en 3 sesiones)
+        stickiness_threshold = max(2, len(recent) // 2 + 1) if len(recent) >= 2 else 99
+        flags_sticky = {
+            f"{name}_sticky": (count >= stickiness_threshold)
+            for name, count in loop_count.items()
+        }
+
+        any_sticky = any(flags_sticky.values())
+        verdict = "loop_detected" if any_sticky else "ok"
+
+        if any_sticky:
+            sticky_names = [k for k, v in flags_sticky.items() if v]
+            note = (
+                f"LOOP cross-session detectado en task '{task_id}': flags {sticky_names} "
+                f"presentes en >= {stickiness_threshold} de las ultimas {len(recent)} sesiones. "
+                f"Escalar inmediatamente — no esperar nuevos triggers intra-sesion."
+            )
+        elif len(recent) == 0:
+            note = f"task '{task_id}' no tiene entries en history. Primera vez vista."
+        else:
+            note = (
+                f"task '{task_id}' analizada en {len(recent)} sesiones recientes. "
+                f"Sin flags persistentes — operacion normal."
+            )
+
+        return {
+            "task_id": task_id,
+            "sessions_analyzed": len(recent),
+            "flags_sticky": flags_sticky,
+            "verdict": verdict,
+            "loop_count": loop_count,
+            "note": note,
+            "history_entries": recent,
+        }
+
+    def history_stats(self) -> Dict[str, Any]:
+        """Estadisticas del history log (para debugging / observabilidad ligera)."""
+        entries = self._read_history()
+        task_ids = sorted(set(e.get("task_id") for e in entries if e.get("task_id")))
+        sessions = sorted(set(e.get("session_id") for e in entries if e.get("session_id")))
+        return {
+            "total_entries": len(entries),
+            "unique_task_ids": len(task_ids),
+            "unique_sessions": len(sessions),
+            "history_path": str(self.history_path),
+            "exists": self.history_path.exists(),
+        }
 
     def active_warnings(self) -> List[str]:
         """Retorna lista de warnings activos (para reportar al usuario/agente)."""
