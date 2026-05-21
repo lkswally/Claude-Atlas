@@ -6,6 +6,7 @@ NO hace trabajo real — solo coordina y valida.
 """
 
 import os
+import re
 import sys
 import json
 import subprocess
@@ -1291,6 +1292,237 @@ class ATLASDispatcher:
                 "window_seconds": since_seconds,
                 "note": f"Audit error (fail-open): {type(e).__name__}: {e}",
             }
+
+    # ============================================================
+    #  Bloque 1J.1: Visual Evidence Independent Verification
+    # ============================================================
+
+    def verify_design_intelligence_real(
+        self,
+        envelope: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1J.1: Re-verificacion INDEPENDIENTE del campo design_intelligence
+        declarado por el agente. Cierra el gap de "honestidad supuesta".
+
+        Patron analogo a verify_pre_return_audit (Bloque 1A.15) pero para
+        design intelligence: el dispatcher re-invoca skills_invocation con
+        la misma industry/query que el agente declaro y verifica que el
+        style declarado realmente aparezca en los resultados del skill.
+
+        Args:
+            envelope: Return Envelope con campo design_intelligence
+
+        Retorna dict:
+        {
+          "verdict": "match" | "mismatch" | "unverifiable",
+          "checks": [{"field": str, "status": str, "details": str}],
+          "discrepancies": [...],   # subset de checks con problemas
+          "skill_query_result": dict | None,
+          "note": str,
+        }
+
+        Reglas de severidad:
+        - Skill unavailable -> verdict=unverifiable (no rompe pipeline)
+        - design_intelligence ausente o queried=false -> verdict=unverifiable
+          (eso ya lo cubre verify_design_intelligence de 1C.1)
+        - industry declarada NO retorna resultados del skill -> mismatch CRITICAL
+          (agente declaro industria inexistente en catalogo)
+        - style declarado NO aparece en results para esa industry -> mismatch HIGH
+          (agente posiblemente invento el style)
+        - Todo coincide -> verdict=match
+        """
+        self._record_invocation("verify_design_intelligence_real")
+        checks: List[Dict[str, Any]] = []
+        discrepancies: List[Dict[str, Any]] = []
+
+        di = envelope.get("design_intelligence")
+        if not isinstance(di, dict):
+            return {
+                "verdict": "unverifiable",
+                "checks": [],
+                "discrepancies": [],
+                "skill_query_result": None,
+                "note": (
+                    "design_intelligence ausente o no es dict. Esto ya es "
+                    "responsabilidad de validate_return_envelope(mode='design_strict') "
+                    "via verify_design_intelligence (1C.1)."
+                ),
+            }
+
+        if not di.get("queried", False):
+            return {
+                "verdict": "unverifiable",
+                "checks": [],
+                "discrepancies": [],
+                "skill_query_result": None,
+                "note": "design_intelligence.queried=false. Nada que re-verificar.",
+            }
+
+        industry = (di.get("industry") or "").strip()
+        style = (di.get("style") or "").strip()
+
+        if not industry:
+            checks.append({
+                "field": "design_intelligence.industry",
+                "status": "missing",
+                "details": "Agente no declaro industry. No se puede re-verificar.",
+            })
+            return {
+                "verdict": "unverifiable",
+                "checks": checks,
+                "discrepancies": [],
+                "skill_query_result": None,
+                "note": "Sin industry declarada no es posible re-invocar skill.",
+            }
+
+        # Re-invocar skill con los mismos args
+        try:
+            from skills_invocation import SkillsInvocation
+            inv = SkillsInvocation()
+            if not inv.is_available():
+                return {
+                    "verdict": "unverifiable",
+                    "checks": checks,
+                    "discrepancies": [],
+                    "skill_query_result": None,
+                    "note": "ui-ux-pro-max-skill no disponible para re-verificacion. Skip.",
+                }
+            skill_result = inv.query(industry, domain="product")
+        except Exception as e:
+            return {
+                "verdict": "unverifiable",
+                "checks": checks,
+                "discrepancies": [],
+                "skill_query_result": None,
+                "note": f"Error invocando skill: {type(e).__name__}: {e}",
+            }
+
+        if skill_result.get("status") != "ok":
+            return {
+                "verdict": "unverifiable",
+                "checks": checks,
+                "discrepancies": [],
+                "skill_query_result": skill_result,
+                "note": f"Skill retorno status={skill_result.get('status')}. Skip.",
+            }
+
+        # Check 1: industria devuelve resultados
+        results = skill_result.get("results", [])
+        count = skill_result.get("count", len(results) if isinstance(results, list) else 0)
+
+        industry_check = {
+            "field": "design_intelligence.industry",
+            "declared": industry,
+            "results_count": count,
+        }
+        if count == 0:
+            industry_check["status"] = "mismatch_critical"
+            industry_check["severity"] = "CRITICAL"
+            industry_check["details"] = (
+                f"Agente declaro industry='{industry}' pero el skill no retorno "
+                f"resultados. La industria puede no existir en el catalogo "
+                f"(161 industrias). Posible invencion."
+            )
+            discrepancies.append(industry_check)
+        else:
+            industry_check["status"] = "ok"
+            industry_check["details"] = f"Skill encontro {count} resultado(s) para '{industry}'."
+        checks.append(industry_check)
+
+        # Check 2: style declarado aparece en resultados
+        if style and count > 0:
+            # Buscar style en los resultados (en Primary Style Recommendation o Secondary Styles)
+            style_normalized = style.lower().strip()
+            style_found = False
+            matching_result = None
+            for r in results:
+                if not isinstance(r, dict):
+                    continue
+                primary = (r.get("Primary Style Recommendation") or "").lower()
+                secondary = (r.get("Secondary Styles") or "").lower()
+                if style_normalized in primary or style_normalized in secondary:
+                    style_found = True
+                    matching_result = r
+                    break
+                # Tambien aceptar match parcial (cada token del style declarado)
+                # Esto cubre casos donde declarado="Glassmorphism" y skill dice "Glassmorphism + Flat Design"
+                style_tokens = [t.strip() for t in re.split(r"[+,]", style_normalized) if t.strip()]
+                if style_tokens:
+                    primary_tokens = primary
+                    secondary_tokens = secondary
+                    if any(tok in primary_tokens or tok in secondary_tokens for tok in style_tokens):
+                        style_found = True
+                        matching_result = r
+                        break
+
+            style_check = {
+                "field": "design_intelligence.style",
+                "declared": style,
+            }
+            if style_found:
+                style_check["status"] = "ok"
+                style_check["matched_product"] = matching_result.get("Product Type") if matching_result else None
+                style_check["details"] = (
+                    f"Style '{style}' confirmado en resultados de skill para industry '{industry}'."
+                )
+            else:
+                style_check["status"] = "mismatch_high"
+                style_check["severity"] = "HIGH"
+                style_check["available_styles"] = [
+                    r.get("Primary Style Recommendation")
+                    for r in results
+                    if isinstance(r, dict) and r.get("Primary Style Recommendation")
+                ][:5]
+                style_check["details"] = (
+                    f"Agente declaro style='{style}' para industry='{industry}', "
+                    f"pero el skill NO lo recomienda. Posible style inventado/incorrecto."
+                )
+                discrepancies.append(style_check)
+            checks.append(style_check)
+
+        # Check 3: verified_against (informativo, no critico)
+        verified_against = di.get("verified_against")
+        if isinstance(verified_against, list):
+            valid_csvs = {"styles.csv", "colors.csv", "typography.csv", "charts.csv",
+                          "landing.csv", "products.csv", "ui-reasoning.csv", "ux-guidelines.csv"}
+            invalid = [c for c in verified_against if c not in valid_csvs]
+            if invalid:
+                checks.append({
+                    "field": "design_intelligence.verified_against",
+                    "status": "warning",
+                    "severity": "LOW",
+                    "details": f"CSVs declarados que no existen en el skill: {invalid}",
+                })
+
+        # Verdict global
+        has_critical_or_high = any(
+            d.get("severity") in ("CRITICAL", "HIGH") for d in discrepancies
+        )
+        if has_critical_or_high:
+            verdict = "mismatch"
+            note = (
+                f"MISMATCH: {len(discrepancies)} discrepancia(s) detectada(s) entre "
+                f"design_intelligence declarado y skill real. Re-delegar al agente."
+            )
+        else:
+            verdict = "match"
+            note = (
+                f"MATCH: design_intelligence verificado contra skill real. "
+                f"Industry '{industry}' y style '{style}' confirmados."
+            )
+
+        return {
+            "verdict": verdict,
+            "checks": checks,
+            "discrepancies": discrepancies,
+            "skill_query_result": {
+                "count": count,
+                "domain": skill_result.get("domain"),
+                "query": skill_result.get("query"),
+            },
+            "note": note,
+        }
 
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
