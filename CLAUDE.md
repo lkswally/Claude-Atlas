@@ -41,6 +41,70 @@ Cada agente tiene `model:` en su frontmatter YAML. El orquestador lo respeta al 
 ### Regla de oro
 El orquestador **NUNCA** hace trabajo real (no lee código, no escribe código, no analiza arquitectura). Solo coordina. Cada token inline es contexto perdido.
 
+## Capacidades operativas post-1K.2 (paridad ~92-97% con benchmark)
+
+ATLAS pasó por 23 bloques de mejora consolidados en `main` el 2026-05-21. Capabilities reales operativas:
+
+### Pipeline + Enforcement (serie 1A)
+- **Phase Gates operativos** (1A.7) con anti-loop intra-sesión (1A.12)
+- **Pre-Return Audit** (1A.14) con 6 reglas auto-ejecutables (debugger, breakpoint, .only/.skip, secrets, console.*, TODO/FIXME)
+- **Audit Enforcement** (1A.15) — dispatcher re-ejecuta audit y rechaza envelopes que mienten
+- **File Change Declaration** (1A.16) — `archivos` declarado debe ser superset real de `git diff`
+
+### Engram MCP real (serie 1B)
+- **Strategy Pattern** (1B.1) con `disk_fallback` honesto
+- **MCP Real Connection** (1B.2) — JSON-RPC stdio inline, sin dependencia externa SDK
+- **Auto-boot en dispatcher** (1B.5) — Engram MCP activa al construir el dispatcher
+- **2-step pattern real** (1B.4) — `mem_search` + `mem_get_observation` para contenido completo
+- **ambiguous_project handling** (1B.3) — detecta y propaga `unknown_project`/`ambiguous_project` con `available_projects` + `recovery_token`
+
+### Skills + Design (serie 1C)
+- **UI-UX Pro Max Skill Enforcement** (1C.1) — `mode="design_strict"` exige `design_intelligence.queried=true` en envelope
+
+### Anti-Loop Coordination (serie 1D + 1I)
+- **Delegation Stop Rules** (1D.1) — flags `escalation_needed` / `pause_recommended` / `fresh_review_recommended`
+- **Anti-Loop INTER-Sesión** (1I.1) — append-only history detecta loops persistentes 3+ sesiones
+
+### Certificación + QA Loop (serie 1E)
+- **Reality-Checker Random Re-runs** (1E.1) — sampler reproducible con seed, detecta falsos PASS
+
+### Performance + Tokens (serie 1F)
+- **File Hash Caching para QA** (1F.1) — SHA256 + mtime + atomic write, ~70-80% token savings
+
+### Runtime Wiring + Enforcement (serie 1G)
+- **Documental** (1G.1) — runtime helpers wiring documentado en orquestador.md
+- **Runtime Invocation Tracking** (1G.2) — 15 helpers instrumentados con `_record_invocation()`, audit via `audit_invocations()`
+
+### Multi-Layer QA (serie 1H)
+- **Network Inspection** (1H.1) — detecta 5xx, mixed content, redirects >3, 4xx en assets críticos
+- **Console Log Analysis** (1H.2) — Uncaught, CORS, CSP, hydration mismatch, null access
+- **Visual Fidelity Checker** (1H.3) — compara palette/typography/mood/anti-patterns con tolerancia RGB
+
+### Visual Evidence Verification (serie 1J)
+- **Design Intelligence Re-verification** (1J.1) — re-invoca skill independientemente, detecta industrias/styles inventados
+- **Screenshot Hash Verification** (1J.2) — verifica archivo existente + SHA256 coincide, detecta evidencia fantasma y tampering
+
+### Auto-Audit Hook (serie 1K)
+- **QA Auto-Audit PostToolUse Hook** (1K.1) — al terminar subagent spawn, audita automáticamente helpers obligatorios y emite WARN si faltan
+
+### Tests operativos
+218+ tests en `_qa/` cubriendo todos los bloques. Regression sweep en main consolidado: **100% verde**.
+
+### Helpers públicos del dispatcher (16)
+`validate_return_envelope(mode)`, `verify_pre_return_audit`, `verify_declared_files`, `verify_design_intelligence`, `verify_design_intelligence_real`, `verify_screenshot_evidence`, `consult_design_intelligence`, `get_cajon_full`, `resolve_ambiguous_project`, `should_skip_qa`, `cache_qa_result`, `run_certification_re_runs`, `inspect_network_requests`, `analyze_console_messages`, `check_visual_fidelity`, `record_session_summary`, `check_cross_session_loops`, `audit_invocations`, `audit_helpers_for_agent`.
+
+### Modos de validate_return_envelope
+- `standard` — validación suave (creativos, utilidades)
+- `qa_strict` — evidence-collector con PASS/FAIL exclusivos + archivos no-vacíos
+- `dev_strict` — dev-agents con pre_return_audit + file declaration superset
+- `design_strict` — ux-architect/ui-designer con design_intelligence.queried=true
+
+### Hooks operativos
+13 hooks pre-existentes + 2 nuevos (1D.1 `delegation-tracker.js`, 1K.1 `qa-auto-audit.js`).
+
+### Tag de rollback de consolidación
+`pre-1K2-consolidation` (apunta a `c8f7b9c`, estado pre-merge). Permite revertir toda la cascada si surge regresión crítica.
+
 ## Dispatcher Operativo (Phase 0.6A+)
 
 El `tools/atlas_dispatcher.py` es el **motor de enforcement** que transforma la arquitectura documentada en sistema operativo. Automatiza:
