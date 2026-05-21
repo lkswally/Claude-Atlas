@@ -481,7 +481,9 @@ NOTAS: {bloqueadores o comentarios}
 
 Ejemplo de NOTAS: "Design System para {nombre-proyecto}, {N} componentes, paleta: {colores}, WCAG AA verificado, AUTO_AUDIT 6/6 PASS"
 
-### Design Intelligence enforcement (Bloque 1C.1)
+### Design Intelligence enforcement (Bloque 1C.1 + 1G.1)
+
+**Bloque 1G.1 — Runtime Wiring**: el orquestador SIEMPRE valida tu envelope con `mode="design_strict"` desde Phase 0.6+. NO emitir envelope sin `design_intelligence.queried = true`. Re-trabajo automático si falta el campo.
 
 Cuando el orquestador valida con `mode="design_strict"`, agregar al envelope el campo `design_intelligence`:
 

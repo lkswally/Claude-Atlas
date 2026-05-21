@@ -1018,6 +1018,85 @@ En proyectos con dev↔QA loops iterativos (típico Fase 3), donde la misma tare
 
 ---
 
+## 4.8. Runtime Wiring Contract (Bloque 1G.1)
+
+**Alcance**: documenta la matriz consolidada de helpers operativos del dispatcher que cada agente DEBE invocar en su flujo natural. Transforma capabilities disponibles en runtime real.
+
+### Matriz consolidada (helpers → agentes invocadores)
+
+| Helper | Bloque | Agente invocador | Cuándo |
+|--------|--------|------------------|--------|
+| `dispatcher.get_cajon_full(proyecto, cajon)` | 1B.4 | Orquestador (y cualquier agente leyendo cajón crítico) | Antes de tomar decisión basada en contenido del cajón |
+| `dispatcher.resolve_ambiguous_project(cajon, chosen, token)` | 1B.3 | Orquestador | Cuando recibe `status="ambiguous_project"` |
+| `dispatcher.validate_return_envelope(env, mode="design_strict")` | 1C.1 | Orquestador | Tras recibir envelope de `ux-architect` o `ui-designer` |
+| `dispatcher.validate_return_envelope(env, mode="dev_strict")` | 1A.15 + 1A.16 | Orquestador | Tras recibir envelope de cualquier dev-agent |
+| `dispatcher.validate_return_envelope(env, mode="qa_strict")` | 1A.10 | Orquestador | Tras recibir envelope de `evidence-collector` |
+| `dispatcher.should_skip_qa(task_id, archivos)` | 1F.1 | Evidence-collector (o orquestador como pre-filtro) | Antes de cualquier QA flow |
+| `dispatcher.cache_qa_result(task_id, archivos, qa_result)` | 1F.1 | Evidence-collector | Tras cada QA con status=PASS |
+| `dispatcher.run_certification_re_runs(qa_results, callback, sample_size)` | 1E.1 | Reality-checker | Antes de emitir CERTIFIED |
+| `dispatcher.consult_design_intelligence(query, domain)` | 1C.1 | Ux-architect / ui-designer | En Paso 0 de Fase 2, antes de generar specs |
+| `delegation-state.json` (escrito por hook) | 1D.1 | Orquestador | Lectura tras cada paso del pipeline para revisar flags |
+
+### Patrón general de invocación
+
+```python
+# 1. Antes de delegar al agente que va a producir el envelope
+preconditions = check_phase_gates(proyecto, fase)
+if not preconditions.can_proceed: ...
+
+# 2. Si necesitás leer cajón crítico para el handoff
+content = dispatcher.get_cajon_full(proyecto, f"{proyecto}/tareas")
+if content["status"] == "ambiguous_project":
+    content = dispatcher.resolve_ambiguous_project(...)
+
+# 3. Para tareas QA: pre-filtro de cache
+if fase == "fase_3":
+    cache_hit = dispatcher.should_skip_qa(task_id, archivos_estimados)
+    if cache_hit: return PASS_cacheado  # saltar delegación entera
+
+# 4. Delegar al agente con handoff
+envelope = delegate_agent(agent_name, handoff)
+
+# 5. Validar envelope según tipo
+mode = get_strict_mode_for(agent_name)  # dev_strict | qa_strict | design_strict | standard
+is_valid, errores = dispatcher.validate_return_envelope(envelope, mode=mode)
+if not is_valid:
+    re_delegate_with_errors(errores)
+
+# 6. Post-procesamiento (cachear QA PASS, propagar al pipeline)
+if envelope.get("status") == "PASS" and fase == "fase_3":
+    dispatcher.cache_qa_result(task_id, envelope["archivos"], envelope)
+
+# 7. Antes de avanzar fase: re-runs en Fase 4
+if avanzar_a == "fase_5":
+    verdict = dispatcher.run_certification_re_runs(qa_results, ...)
+    if verdict["verdict"] == "DISCREPANCY": block_certification()
+
+# 8. Check delegation stop rules
+flags = load_delegation_state()
+if flags.get("escalation_needed"): consider_explore_agent()
+```
+
+### Reglas operativas
+
+1. **OBLIGATORIO** invocar helpers documentados en cada bloque cuando se cumple la precondición
+2. **NO** asumir que un helper "se ejecutará después" — cada paso debe ser explícito
+3. **NO** degradar silenciosamente cuando un helper falla — propagar el error al usuario o re-delegar
+4. **SI** un helper retorna `fail-open` (None / cached=False), continuar con el flow normal sin caché/optimización pero NO romper
+
+### Anti-regresión documental
+
+El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las invocaciones obligatorias. Si en un futuro edit se pierde alguna, el test falla y se debe restaurar.
+
+### LO QUE 1G.1 NO HACE
+
+- ❌ NO garantiza que el LLM realmente ejecute las invocaciones en runtime — depende del comportamiento del modelo siguiendo el prompt
+- ❌ NO agrega tracing real de invocaciones (eso requiere instrumentación del runtime Claude, fuera de scope)
+- ❌ NO cambia código Python — solo documentación de prompts
+- ❌ NO fuerza invocación vía hook PostToolUse (sería 1G.2+ si querés esa capa)
+
+---
+
 ## 5. Reglas universales (todos los subagentes)
 
 1. **No arrancar servidores con Bash** → usar `preview_start` (solo aplica en Windows/Claude Desktop; en Linux/Claude Code CLI, usar Bash normalmente)

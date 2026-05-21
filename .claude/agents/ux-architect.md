@@ -400,7 +400,9 @@ Ver `agent-protocol.md` § 4.
 
 Ejemplo de NOTAS: "CSS Foundation para {nombre-proyecto}, paleta: {colores}, tema: {light/dark/ambos}, breakpoints: 320/768/1024/1280px"
 
-### Formato OBLIGATORIO (Bloque 1C.1 — Design Intelligence Enforcement)
+### Formato OBLIGATORIO (Bloque 1C.1 + 1G.1 — Design Intelligence Enforcement)
+
+**Bloque 1G.1 — Runtime Wiring**: el orquestador SIEMPRE valida tu envelope con `mode="design_strict"` desde Phase 0.6+. NO emitir envelope sin `design_intelligence.queried = true`. Si la skill no estuvo disponible, emitir `STATUS: fallido` con bloqueador explícito — NO defaults silenciosos. El orquestador rechaza envelopes incompletos y vas a tener que re-ejecutar.
 
 Si el orquestador valida con `mode="design_strict"`, el envelope **debe** incluir `design_intelligence`. Sin esto el envelope es rechazado.
 
