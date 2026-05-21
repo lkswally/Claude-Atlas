@@ -1097,6 +1097,84 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.11. Visual Fidelity Checker Contract (Bloque 1H.3)
+
+**Alcance**: TERCERA capa de multi-layer QA. Compara visual spec declarada vs evidence reportada por el agente (LLM-as-judge multimodal). Cierra el set de capas QA acordado (1H.1 network + 1H.2 console + 1H.3 visual).
+
+### Helper
+
+```python
+report = dispatcher.check_visual_fidelity(spec, evidence)
+# {"verdict": "OK"|"WARN"|"FAIL", "issues": [...], "summary": {...}}
+```
+
+### Inputs esperados
+
+**spec** (del design-system, declarada por ui-designer/ux-architect):
+```python
+{
+  "declared_palette": {"primary": "#hex", "accent": "#hex", ...},
+  "declared_typography": {"heading_font": str, "body_font": str},
+  "mood_preset": "brutalist" | "minimal" | "luxury" | ...,
+  "anti_patterns_obligatorios": ["no-gradient-overuse", ...],
+  "layout_pattern": "hero-asymmetric" | "hero-centered" | ...,
+}
+```
+
+**evidence** (el agente Claude multimodal analiza screenshot y reporta):
+```python
+{
+  "detected_colors": ["#hex", ...],   # dominantes del screenshot
+  "detected_typography": {"heading_font": str, "body_font": str},
+  "detected_mood": str,
+  "anti_pattern_violations": [str, ...],   # violaciones que el agente vio
+  "detected_layout_pattern": str,
+}
+```
+
+### Severidad y verdict
+
+| Severidad | Casos | Verdict |
+|-----------|-------|---------|
+| **CRITICAL** | Primary color hex distance > tolerancia (~30 ΔE RGB), heading font family difiere, evidence sin detected_colors | **FAIL** (bloquea PASS) |
+| **HIGH** | Secondary/accent color desviado, body font difiere, anti-pattern violado, mood mismatch | WARN |
+| **MEDIUM** | Layout pattern divergente | OK informativo |
+| **LOW** | Detalles menores | OK |
+
+### Cómo se invoca (en evidence-collector o reality-checker)
+
+El agente capta screenshot vía Playwright, lo analiza con su capacidad multimodal, produce evidence estructurada. El helper compara:
+
+```python
+# 1. Cargar spec del design-system desde Engram
+spec = dispatcher.get_cajon_full(proyecto, f"{proyecto}/design-system")["content"]
+
+# 2. Agente analiza screenshot multimodal y produce evidence
+evidence = {
+    "detected_colors": [...],  # extraidos del screenshot
+    "detected_typography": {...},
+    ...
+}
+
+# 3. Comparar
+report = dispatcher.check_visual_fidelity(spec, evidence)
+
+# 4. Aplicar verdict
+if report["verdict"] == "FAIL":
+    return {"status": "FAIL", "bloqueadores": [i["details"] for i in report["issues"]]}
+```
+
+### LO QUE 1H.3 NO HACE
+
+- ❌ NO analiza imágenes por sí mismo — el agente Claude multimodal lo hace y reporta evidence
+- ❌ NO pixel-perfect — usa tolerancias RGB (ΔE ~30 para primary, ~50 para secondary)
+- ❌ NO valida microcopy, spacing exacto, icon style, ornamentos
+- ❌ NO detecta jerarquía visual ni rythm — solo color/font/pattern
+- ❌ Evidence-collector / reality-checker deben leer su md y consultar
+- ❌ Honestidad del agente es supuesta (puede reportar evidence inventada)
+
+---
+
 ## 4.10. Console Log Analysis Contract (Bloque 1H.2)
 
 **Alcance**: SEGUNDA capa de multi-layer QA. SOLO cubre análisis de console messages. NO cubre network inspection (1H.1) ni visual fidelity (1H.3).
