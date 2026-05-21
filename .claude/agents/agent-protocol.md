@@ -950,6 +950,74 @@ Con `seed=int` fija, el sampler retorna los mismos índices siempre. Útil para:
 
 ---
 
+## 4.7. QA Cache Contract (Bloque 1F.1)
+
+**Alcance**: SOLO `evidence-collector` en Fase 3. NO afecta reality-checker ni otros agentes. SOLO cachea resultados PASS de QA layout/typo/config. NO cachea network responses, screenshots ni assets externos.
+
+### Qué exige
+
+Antes de re-ejecutar QA, evidence-collector debe consultar el cache:
+
+```python
+hit = dispatcher.should_skip_qa(task_id, archivos)
+if hit:
+    return {**hit["qa_result"], "from_cache": True, "cached_at": hit["cached_at"]}
+```
+
+Después de cada QA con `status="PASS"`, cachear el resultado:
+
+```python
+dispatcher.cache_qa_result(task_id, archivos, qa_result)
+```
+
+### Reglas operativas
+
+| Caso | Comportamiento |
+|------|---------------|
+| Hash coincide + mtime no es más nuevo | **HIT** → devolver PASS cacheado con `from_cache: true` |
+| Hash difiere | MISS → ejecutar QA fresh |
+| mtime más nuevo (paranoid) | MISS → invalida aunque hash coincida |
+| `qa_result.status == "FAIL"` | NO se cachea |
+| Cache corrupto o no importable | **Fail-open** → ejecutar QA fresh, no romper |
+| Archivo del envelope no existe | MISS → no podemos confirmar |
+| Entry > 14 días | MISS (expiró) — se prunea con `cache.prune_old()` |
+
+### Invalidación manual
+
+Si cambian deps externas (package.json, env vars, build config) sin tocar los archivos del envelope, el agente o usuario debe invalidar manualmente:
+
+```python
+from file_hash_cache import FileHashCache
+cache = FileHashCache(project_root)
+cache.invalidate(task_id)
+# o limpiar todo:
+cache.clear()
+```
+
+### Persistencia
+
+- Archivo: `{project_root}/.pipeline/qa-cache.json`
+- Versionado: `version: 1` (forward-compat preparado)
+- Atomic write (tmpfile + os.replace) — no se corrompe en crashes
+- Fail-open si JSON inválido (reset graceful con warning interno)
+
+### Ahorro esperado
+
+En proyectos con dev↔QA loops iterativos (típico Fase 3), donde la misma tarea se re-ejecuta múltiples veces y los archivos no siempre cambian:
+- ~50ms cache hit vs ~5-15s QA real
+- ~70-80% reducción de tokens consumidos por evidence-collector en re-runs
+
+### LO QUE 1F.1 NO HACE
+
+- ❌ NO trackea cambios externos: package.json/lock, env vars, build config, archivos no listados en envelope
+- ❌ NO valida que el PASS cacheado sigue siendo válido contra cambios fuera de los archivos trackeados
+- ❌ NO prunea automáticamente — `prune_old()` debe invocarse manualmente o desde un hook periódico
+- ❌ El agente `evidence-collector` debe leer su md actualizado para invocar el cache. Capability disponible pero NO auto-invocada
+- ❌ NO cachea network requests ni assets externos — solo el resultado QA
+- ❌ NO valida que `task_id` sea único entre proyectos — cada caller debe usar IDs consistentes (recomendación: `{proyecto}/tarea-{N}`)
+
+---
+
 ## 5. Reglas universales (todos los subagentes)
 
 1. **No arrancar servidores con Bash** → usar `preview_start` (solo aplica en Windows/Claude Desktop; en Linux/Claude Code CLI, usar Bash normalmente)
