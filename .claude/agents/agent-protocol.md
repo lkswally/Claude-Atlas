@@ -1097,6 +1097,60 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.13. Runtime Invocation Tracking + Enforcement (Bloque 1G.2)
+
+**Alcance**: convierte el wiring documental de 1G.1 en wiring **medible**. Cada helper obligatorio del dispatcher registra automáticamente su invocación en `.pipeline/invocation-log.jsonl`. El orquestador puede auditar en runtime qué helpers se invocaron — diferencia operativa real vs documental.
+
+### Cómo funciona
+
+- Cada método obligatorio del dispatcher (12 helpers) llama `_record_invocation()` al inicio
+- Log append-only en `.pipeline/invocation-log.jsonl` (atomic, fail-open)
+- Cada entry: `{helper, timestamp, context, outcome, version}`
+
+### API de audit
+
+```python
+audit = dispatcher.audit_invocations(
+    required_helpers=["validate_return_envelope", "should_skip_qa", "inspect_network_requests"],
+    since_seconds=300,  # ventana 5 min
+    context_filter={"mode": "dev_strict"},  # opcional
+)
+# {
+#   "verdict": "complete" | "incomplete",
+#   "required": [...], "invoked": [...], "missing": [...], "extra": [...],
+#   "total_invocations": N, "window_seconds": N, "note": str,
+# }
+```
+
+### Helpers trackeados automaticamente (15)
+
+`validate_return_envelope`, `verify_pre_return_audit`, `verify_declared_files`, `verify_design_intelligence`, `consult_design_intelligence`, `get_cajon_full`, `resolve_ambiguous_project`, `should_skip_qa`, `cache_qa_result`, `run_certification_re_runs`, `inspect_network_requests`, `analyze_console_messages`, `check_visual_fidelity`, `record_session_summary`, `check_cross_session_loops`.
+
+### Cuándo auditar (orquestador)
+
+| Momento | Required helpers esperados |
+|---------|---------------------------|
+| Cerrar tarea Fase 3 dev | `validate_return_envelope` (dev_strict) |
+| Cerrar tarea Fase 3 QA | `validate_return_envelope` (qa_strict), `should_skip_qa`, `cache_qa_result`, `inspect_network_requests`, `analyze_console_messages` |
+| Cerrar tarea Fase 2 ux/ui | `validate_return_envelope` (design_strict), `consult_design_intelligence` |
+| Antes de CERTIFIED Fase 4 | `run_certification_re_runs`, `check_visual_fidelity` |
+| Cierre de sesión | `record_session_summary` |
+
+### Diferencia con 1G.1
+
+- **1G.1** documenta en prompts (anti-regresión documental sin garantía runtime)
+- **1G.2** instrumenta el código Python: si el helper fue llamado, queda registro objetivo; si no, queda evidencia
+
+### LO QUE 1G.2 NO HACE
+
+- ❌ NO bloquea automáticamente — el audit produce verdict que el orquestador debe consumir y actuar
+- ❌ NO trackea tool calls Read/Edit/Write del agente (eso es `delegation_tracker` 1D.1)
+- ❌ Requiere que el dispatcher se invoque desde Python. Si el agente no pasa por el dispatcher (salta directo a tools), no hay log
+- ❌ Log crece append-only sin prune automático
+- ❌ Orquestador debe consultar `audit_invocations()` — el audit es opt-in
+
+---
+
 ## 4.12. Anti-Loop INTER-Sesion Contract (Bloque 1I.1)
 
 **Alcance**: extiende `delegation_tracker` (1D.1) con persistencia cross-session via append-only log. Detecta loops que persisten entre sesiones — flags que se "olvidaban" al cerrar sesion ahora se acumulan.
