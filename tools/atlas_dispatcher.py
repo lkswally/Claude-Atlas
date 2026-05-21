@@ -1066,6 +1066,47 @@ class ATLASDispatcher:
         inspector = NetworkInspector(page_origin=page_origin)
         return inspector.inspect(requests)
 
+    # ============================================================
+    #  Bloque 1H.2: Console Log Analysis
+    # ============================================================
+
+    def analyze_console_messages(
+        self,
+        messages: List[Dict[str, Any]],
+        third_party_origin_patterns: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1H.2: Analiza console messages capturados durante QA.
+
+        Clasifica issues por severidad:
+        - CRITICAL (Uncaught, CORS, CSP, hydration mismatch, null access) -> FAIL
+        - HIGH (console.error generico, React warnings criticos) -> WARN
+        - MEDIUM (console.warn generico) -> OK informativo
+        - LOW (console.log/info, third-party, noise) -> OK informativo
+
+        Args:
+            messages: lista de console messages con shape compatible con Playwright
+                      {"type": "error|warning|log|...", "text": str,
+                       "location": {"url": str, "lineNumber": int}}
+            third_party_origin_patterns: regex de URLs third-party a degradar a LOW
+
+        Retorna dict del ConsoleLogAnalyzer.analyze() (ver tools/console_log_analyzer.py).
+
+        Fail-open: si console_log_analyzer no importable, retorna OK con note.
+        """
+        try:
+            from console_log_analyzer import ConsoleLogAnalyzer
+        except ImportError as e:
+            return {
+                "verdict": "OK",
+                "issues": [],
+                "summary": {"total_messages": len(messages) if messages else 0},
+                "note": f"console_log_analyzer no importable: {e}. Skip de analisis.",
+            }
+
+        analyzer = ConsoleLogAnalyzer(third_party_origin_patterns=third_party_origin_patterns)
+        return analyzer.analyze(messages)
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.

@@ -26,6 +26,36 @@ Read, Bash, Playwright MCP, Engram MCP
 
 Para cada tarea que me pasa el orquestador:
 
+### 0.6. Console Log Analysis (Bloque 1H.2, OBLIGATORIO tras navegar)
+
+Después de cualquier navegación + interacciones, capturar console messages con `mcp__playwright__browser_console_messages` e invocar:
+
+```python
+report = dispatcher.analyze_console_messages(
+    messages=console_messages_list,
+    third_party_origin_patterns=[r"analytics", r"hotjar", r"sentry\.io"],
+)
+# report = {"verdict": "OK"|"WARN"|"FAIL", "issues": [...], "summary": {...}}
+```
+
+**Severidad y verdict**:
+- `CRITICAL` (Uncaught exceptions, CORS errors, CSP violations, React hydration mismatch, null/undefined access, ReferenceError) → **bloquea PASS**
+- `HIGH` (console.error genérico, React warnings críticos: missing key/Rules of Hooks, deprecation API) → WARN, reportar en NOTAS
+- `MEDIUM` (console.warn genérico) → OK informativo
+- `LOW` (console.log/info, third-party degradado, noise como DevTools/source maps) → OK
+
+**Filtros automáticos** (ignorados, no cuentan como issues):
+- `Download the React DevTools...`
+- Source map warnings
+- DevTools messages / chrome-extension://
+- Third-party origins (degradados a LOW si matchean los patterns)
+
+**Casos detectados que antes pasaban como QA PASS**:
+- `Uncaught TypeError: Cannot read properties of undefined` silencioso → ahora CRITICAL
+- CORS blocking API request → ahora CRITICAL
+- Next.js hydration mismatch → ahora CRITICAL
+- React `Each child in a list should have a unique key` → ahora HIGH
+
 ### 0.5. Network Inspection (Bloque 1H.1, OBLIGATORIO tras navegar)
 
 Después de cualquier `mcp__playwright__browser_navigate` o `browser_evaluate` que disparen requests, capturar el resumen de network requests con `browser_network_requests` e invocar:

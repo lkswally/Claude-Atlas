@@ -1097,6 +1097,49 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.10. Console Log Analysis Contract (Bloque 1H.2)
+
+**Alcance**: SEGUNDA capa de multi-layer QA. SOLO cubre análisis de console messages. NO cubre network inspection (1H.1) ni visual fidelity (1H.3).
+
+### Helper
+
+```python
+report = dispatcher.analyze_console_messages(
+    messages=playwright_console_messages,
+    third_party_origin_patterns=[r"analytics", r"hotjar"],  # opcional
+)
+# {"verdict": "OK"|"WARN"|"FAIL", "issues": [...], "summary": {...}}
+```
+
+### Patrones detectados por severidad
+
+| Severidad | Patrones | Tipo |
+|-----------|----------|------|
+| **CRITICAL** | `Uncaught\|Unhandled`, `CORS\|Access-Control-Allow-Origin`, `Content Security Policy\|Refused to (load\|execute)`, `Hydration failed\|Text content does not match`, `Cannot read properties of (null\|undefined)`, `is not a function`, `ReferenceError` | uncaught_exception, cors_error, csp_violation, hydration_mismatch, null_undefined_access, etc. |
+| **HIGH** | `Each child in a list should have a unique "?key"?`, `Invalid hook call\|Rules of Hooks`, `act\(\).*not wrapped`, `deprecated.*\(API\|method\)`, `memory leak\|leaked`, **`type=error` genérico** | react_missing_key, react_hooks_violation, deprecation, console_error_generic |
+| **MEDIUM** | `type=warning\|warn` genérico no matcheado | console_warning_generic |
+| **LOW** | `type=log\|info\|debug`, mensajes de **third-party origins**, **noise** (DevTools, source maps) | console_log, third-party degraded |
+
+### Filtros (ignorados, no cuentan como issues)
+
+- `Download the React DevTools for a better experience`
+- `Source map (not found|missing|invalid)`
+- `DevTools listening` / `chrome-extension://`
+- `Google Analytics not loaded`
+
+### Third-party degradation
+
+Si `third_party_origin_patterns` matchea el `location.url` del mensaje, su severidad se degrada automáticamente a LOW (con flag `third_party_degraded=true`). Útil para no fallar QA por errores en tracking scripts.
+
+### LO QUE 1H.2 NO HACE
+
+- ❌ NO ejecuta código de los mensajes — solo analiza texto
+- ❌ NO valida call stacks completos
+- ❌ NO cubre visual fidelity (1H.3)
+- ❌ Evidence-collector agente debe leer su md y consultar el helper
+
+---
+
 ## 4.9. Network Inspection Contract (Bloque 1H.1)
 
 **Alcance**: PRIMERA capa de multi-layer QA. SOLO cubre análisis de network requests capturados por Playwright. NO cubre console logs (1H.2) ni visual fidelity (1H.3).
