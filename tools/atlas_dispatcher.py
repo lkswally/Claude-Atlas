@@ -1779,6 +1779,127 @@ class ATLASDispatcher:
             "note": note,
         }
 
+    # ============================================================
+    #  Bloque 1K.1: Helper Requirements Map por Subagente
+    # ============================================================
+
+    # Mapping subagente -> helpers obligatorios que DEBERIAN haberse invocado
+    # cuando termina ese subagente. Usado por audit_helpers_for_agent().
+    AGENT_HELPER_REQUIREMENTS = {
+        # QA / Fase 3
+        "evidence-collector": [
+            "validate_return_envelope",   # qa_strict mode
+            "should_skip_qa",              # cache check antes de QA
+            "inspect_network_requests",    # capa 1 multi-layer QA
+            "analyze_console_messages",    # capa 2
+            "check_visual_fidelity",       # capa 3 (solo si verificacion=layout)
+            "verify_screenshot_evidence",  # evidencia visual real (1J.2)
+        ],
+
+        # Dev agents / Fase 3
+        "frontend-developer": ["validate_return_envelope", "verify_pre_return_audit", "verify_declared_files"],
+        "backend-architect": ["validate_return_envelope", "verify_pre_return_audit", "verify_declared_files"],
+        "rapid-prototyper": ["validate_return_envelope", "verify_pre_return_audit", "verify_declared_files"],
+        "mobile-developer": ["validate_return_envelope", "verify_pre_return_audit", "verify_declared_files"],
+        "xr-immersive-developer": ["validate_return_envelope", "verify_pre_return_audit", "verify_declared_files"],
+        "build-resolver": ["validate_return_envelope", "verify_pre_return_audit", "verify_declared_files"],
+
+        # Design / Fase 2
+        "ux-architect": [
+            "validate_return_envelope",            # design_strict
+            "consult_design_intelligence",
+            "verify_design_intelligence_real",     # 1J.1
+        ],
+        "ui-designer": [
+            "validate_return_envelope",
+            "consult_design_intelligence",
+            "verify_design_intelligence_real",
+        ],
+
+        # Certificacion / Fase 4
+        "reality-checker": [
+            "validate_return_envelope",
+            "run_certification_re_runs",
+        ],
+
+        # Sin requerimientos obligatorios (creativos, utilidades, etc.)
+        "project-manager-senior": [],
+        "security-engineer": [],
+        "brand-agent": [],
+        "image-agent": [],
+        "logo-agent": [],
+        "video-agent": [],
+        "codepen-explorer": [],
+        "git": [],
+        "deployer": [],
+        "self-auditor": [],
+        "game-designer": [],
+        "api-tester": [],
+        "performance-benchmarker": [],
+        "seo-discovery": [],
+    }
+
+    def audit_helpers_for_agent(
+        self,
+        agent_name: str,
+        since_seconds: int = 600,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1K.1: Audit automatico de helpers obligatorios por subagente.
+
+        Usado por hook PostToolUse (qa-auto-audit.js) cuando un Agent spawn
+        retorna. Identifica el tipo de subagente y verifica si invoco los
+        helpers esperados para ese flujo.
+
+        Args:
+            agent_name: nombre del subagente (de tool_input.subagent_type)
+            since_seconds: ventana temporal (default 10 min para cubrir
+                           subagentes largos)
+
+        Retorna dict del audit_invocations() + metadata del agente:
+        {
+          "agent_name": str,
+          "agent_known": bool,
+          "required_for_agent": [...],
+          "verdict": "complete" | "incomplete" | "skipped",
+          ...
+        }
+
+        Comportamiento:
+        - Agente desconocido (no en map) -> verdict=skipped
+        - Agente con required=[] -> verdict=skipped (creativos, utilidades)
+        - Agente con required helpers -> audit_invocations() y retorna verdict
+        """
+        self._record_invocation("audit_helpers_for_agent", context={"agent": agent_name})
+
+        required = self.AGENT_HELPER_REQUIREMENTS.get(agent_name)
+        if required is None:
+            return {
+                "agent_name": agent_name,
+                "agent_known": False,
+                "required_for_agent": [],
+                "verdict": "skipped",
+                "note": f"Subagente '{agent_name}' no esta en AGENT_HELPER_REQUIREMENTS. Skip.",
+            }
+
+        if len(required) == 0:
+            return {
+                "agent_name": agent_name,
+                "agent_known": True,
+                "required_for_agent": [],
+                "verdict": "skipped",
+                "note": f"Subagente '{agent_name}' sin helpers obligatorios. Skip.",
+            }
+
+        audit = self.audit_invocations(
+            required_helpers=required,
+            since_seconds=since_seconds,
+        )
+        audit["agent_name"] = agent_name
+        audit["agent_known"] = True
+        audit["required_for_agent"] = sorted(required)
+        return audit
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.
@@ -1854,6 +1975,31 @@ def main():
             result = json.load(sys.stdin)
             report = dispatcher.report(sys.argv[2] if len(sys.argv) > 2 else "unknown", result)
             print(json.dumps(report, ensure_ascii=False, indent=2))
+
+        elif command == "audit-agent":
+            # Bloque 1K.1: usado por hook PostToolUse para auditar helpers
+            # obligatorios tras retorno de Agent spawn.
+            agent_name = None
+            since_seconds = 600
+            for arg in sys.argv[2:]:
+                if arg.startswith("--agent="):
+                    agent_name = arg[len("--agent="):]
+                elif arg.startswith("--since="):
+                    try:
+                        since_seconds = int(arg[len("--since="):])
+                    except (ValueError, TypeError):
+                        pass
+            if not agent_name:
+                print(json.dumps({
+                    "verdict": "skipped",
+                    "error": "missing --agent=NAME",
+                }, ensure_ascii=False), file=sys.stderr)
+                sys.exit(0)  # fail-open
+            audit = dispatcher.audit_helpers_for_agent(agent_name, since_seconds=since_seconds)
+            print(json.dumps(audit, ensure_ascii=False, indent=2))
+            # Exit code: 0 si complete/skipped, 1 si incomplete
+            if audit.get("verdict") == "incomplete":
+                sys.exit(1)
 
         else:
             print(f"Comando desconocido: {command}", file=sys.stderr)
