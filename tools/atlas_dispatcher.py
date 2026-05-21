@@ -688,7 +688,13 @@ class ATLASDispatcher:
 
         return errores
 
-    def validate_return_envelope(self, response: Dict[str, Any], mode: str = "standard") -> Tuple[bool, List[str]]:
+    def validate_return_envelope(
+        self,
+        response: Dict[str, Any],
+        mode: str = "standard",
+        enforce_helpers: bool = False,
+        agent_name: Optional[str] = None,
+    ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
         Retorna: (is_valid, errores)
@@ -699,9 +705,23 @@ class ATLASDispatcher:
         - "dev_strict": validación para dev-agents — requiere pre_return_audit (Bloque 1A.15)
         - "design_strict": validación para ux-architect / ui-designer —
                            requiere design_intelligence consultado (Bloque 1C.1)
+
+        Bloque 1K.3 — Hard Enforcement Escalation (opt-in):
+        - enforce_helpers=True + agent_name in CRITICAL_AGENTS:
+            si faltan helpers obligatorios para ese agente, el envelope se
+            rechaza (is_valid=False) con error explicito y se marca el
+            envelope con _dispatcher_enforcement.
+        - enforce_helpers=False (default): comportamiento idéntico a pre-1K.3.
+          Backward compat estricto.
+        - enforce_helpers=True + agente NO critico: enforcement skipped,
+          validacion sigue su curso normal.
+        - enforce_helpers=True + agent_name=None: no aplicable, sin enforcement.
         """
         # Bloque 1G.2: registrar invocacion
-        self._record_invocation("validate_return_envelope", context={"mode": mode})
+        self._record_invocation(
+            "validate_return_envelope",
+            context={"mode": mode, "enforce_helpers": enforce_helpers, "agent_name": agent_name},
+        )
         errores = []
 
         # CAMPOS OBLIGATORIOS en ambos modos
@@ -808,6 +828,20 @@ class ATLASDispatcher:
                 errores.append("archivos debe ser lista")
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("bloqueadores debe ser lista o null")
+
+        # Bloque 1K.3: Hard Enforcement Escalation (opt-in)
+        # Solo aplica si enforce_helpers=True Y se proveyo agent_name.
+        # Para agentes en CRITICAL_AGENTS con helpers faltantes,
+        # agrega error explicito que bloquea el envelope.
+        if enforce_helpers and agent_name and isinstance(response, dict):
+            enforcement = self.enforce_helpers_for_agent(response, agent_name)
+            if enforcement.get("verdict") == "incomplete":
+                missing = enforcement.get("missing_helpers", [])
+                errores.append(
+                    f"Hard enforcement (Bloque 1K.3): agente critico "
+                    f"'{agent_name}' termino sin invocar helpers obligatorios: "
+                    f"{missing}. Re-delegar o invocar helpers explicitamente."
+                )
 
         return len(errores) == 0, errores
 
@@ -1783,6 +1817,18 @@ class ATLASDispatcher:
     #  Bloque 1K.1: Helper Requirements Map por Subagente
     # ============================================================
 
+    # Bloque 1K.3: Set de agentes criticos para Hard Enforcement Escalation.
+    # Para estos agentes, si faltan helpers obligatorios y enforce_helpers=True
+    # en validate_return_envelope, el envelope se rechaza con error explicito.
+    # Otros agentes (creativos, utilidades) NO estan sujetos a este enforcement
+    # — el audit sigue siendo advisory para ellos.
+    CRITICAL_AGENTS = {
+        "evidence-collector",  # QA Fase 3
+        "reality-checker",     # Certificacion Fase 4
+        "ux-architect",        # Design Fase 2
+        "ui-designer",         # Design Fase 2
+    }
+
     # Mapping subagente -> helpers obligatorios que DEBERIAN haberse invocado
     # cuando termina ese subagente. Usado por audit_helpers_for_agent().
     AGENT_HELPER_REQUIREMENTS = {
@@ -1899,6 +1945,108 @@ class ATLASDispatcher:
         audit["agent_known"] = True
         audit["required_for_agent"] = sorted(required)
         return audit
+
+    # ============================================================
+    #  Bloque 1K.3: Hard Enforcement Escalation
+    # ============================================================
+
+    def enforce_helpers_for_agent(
+        self,
+        envelope: Dict[str, Any],
+        agent_name: str,
+        since_seconds: int = 600,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1K.3: Hard enforcement para agentes criticos.
+
+        Si agent_name esta en CRITICAL_AGENTS y faltan helpers obligatorios,
+        marca el envelope con _dispatcher_enforcement y retorna verdict
+        "incomplete". El caller (validate_return_envelope con enforce_helpers=True)
+        usa esto para rechazar el envelope.
+
+        Para agentes NO criticos, retorna "skipped" sin afectar el envelope.
+
+        Args:
+            envelope: Return Envelope del subagente (puede ser modificado in-place
+                      agregando _dispatcher_enforcement)
+            agent_name: nombre del subagente (de tool_input.subagent_type)
+            since_seconds: ventana del audit (default 10 min)
+
+        Retorna dict:
+        {
+          "verdict": "passed" | "incomplete" | "skipped",
+          "agent_name": str,
+          "is_critical": bool,
+          "missing_helpers": [...],
+          "severity": "HARD_BLOCK" | None,
+          "note": str,
+        }
+
+        Comportamiento:
+        - agent_name NO en CRITICAL_AGENTS -> verdict=skipped, envelope intacto
+        - agent_name en CRITICAL_AGENTS y todos los helpers OK -> verdict=passed
+        - agent_name critico + missing helpers -> verdict=incomplete +
+          envelope["_dispatcher_enforcement"] poblado
+        """
+        self._record_invocation("enforce_helpers_for_agent", context={"agent_name": agent_name})
+
+        is_critical = agent_name in self.CRITICAL_AGENTS
+
+        if not is_critical:
+            return {
+                "verdict": "skipped",
+                "agent_name": agent_name,
+                "is_critical": False,
+                "missing_helpers": [],
+                "severity": None,
+                "note": (
+                    f"Agente '{agent_name}' no esta en CRITICAL_AGENTS "
+                    f"(set: {sorted(self.CRITICAL_AGENTS)}). Enforcement skipped."
+                ),
+            }
+
+        # Audit del agente critico
+        audit = self.audit_helpers_for_agent(agent_name, since_seconds=since_seconds)
+
+        if audit.get("verdict") != "incomplete":
+            return {
+                "verdict": "passed",
+                "agent_name": agent_name,
+                "is_critical": True,
+                "missing_helpers": [],
+                "severity": None,
+                "note": (
+                    f"Hard enforcement PASSED para '{agent_name}': "
+                    f"{audit.get('note', 'all required helpers invoked')}"
+                ),
+            }
+
+        # verdict == "incomplete" -> bloquear
+        missing = audit.get("missing", [])
+        enforcement_record = {
+            "verdict": "incomplete",
+            "agent_name": agent_name,
+            "is_critical": True,
+            "missing_helpers": missing,
+            "severity": "HARD_BLOCK",
+            "note": (
+                f"Hard enforcement BLOCKED: agente critico '{agent_name}' "
+                f"termino sin invocar helpers obligatorios: {missing}. "
+                f"Envelope rechazado — re-delegar o invocar helpers explicitamente."
+            ),
+            "audit": {
+                "required_for_agent": audit.get("required_for_agent", []),
+                "invoked": audit.get("invoked", []),
+                "missing": missing,
+                "window_seconds": audit.get("window_seconds"),
+            },
+        }
+
+        # Marcar el envelope (mutacion controlada — no destructiva)
+        if isinstance(envelope, dict):
+            envelope["_dispatcher_enforcement"] = dict(enforcement_record)
+
+        return enforcement_record
 
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
