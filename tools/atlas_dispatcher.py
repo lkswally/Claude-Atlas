@@ -957,6 +957,73 @@ class ATLASDispatcher:
         runner = RealityCheckRunner(seed=seed, sample_size=sample_size)
         return runner.run_re_runs(qa_results, rerun_callback)
 
+    # ============================================================
+    #  Bloque 1F.1: File Hash Caching para QA
+    # ============================================================
+
+    def should_skip_qa(
+        self,
+        task_id: str,
+        archivos: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Bloque 1F.1: Consulta el cache de QA. Si hit, retorna el resultado
+        cacheado para que evidence-collector pueda skip re-ejecucion.
+
+        Retorna None si:
+        - Cache no disponible / corrupto
+        - No hay entry para task_id
+        - Algun archivo cambio (hash o mtime)
+
+        Retorna dict si hit:
+        {"qa_result": {...}, "from_cache": True, "cached_at": iso, ...}
+
+        Fail-open: si file_hash_cache no importable, retorna None (re-ejecuta QA).
+        """
+        try:
+            from file_hash_cache import FileHashCache
+        except ImportError:
+            return None
+
+        try:
+            cache = FileHashCache(self.project_root)
+            return cache.get_cached_result(task_id, archivos)
+        except Exception:
+            return None
+
+    def cache_qa_result(
+        self,
+        task_id: str,
+        archivos: List[str],
+        qa_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1F.1: Cachea un resultado QA PASS para skip futuro.
+
+        SOLO cachea status=PASS. FAIL nunca se cachea (puede ser fix-pending).
+
+        Fail-open: si file_hash_cache no importable, retorna
+        {"cached": False, "reason": "module not importable"}.
+        """
+        try:
+            from file_hash_cache import FileHashCache
+        except ImportError as e:
+            return {
+                "cached": False,
+                "reason": f"file_hash_cache no importable: {e}",
+                "task_id": task_id,
+            }
+
+        try:
+            cache = FileHashCache(self.project_root)
+            return cache.cache_result(task_id, archivos, qa_result)
+        except Exception as e:
+            return {
+                "cached": False,
+                "reason": f"Error al cachear: {type(e).__name__}: {e}",
+                "task_id": task_id,
+            }
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.

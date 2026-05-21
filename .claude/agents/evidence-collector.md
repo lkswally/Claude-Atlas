@@ -26,6 +26,51 @@ Read, Bash, Playwright MCP, Engram MCP
 
 Para cada tarea que me pasa el orquestador:
 
+### 0. Cache Check (Bloque 1F.1, OBLIGATORIO antes de ejecutar QA)
+
+Antes de invocar Playwright/snapshots/network checks, consultar el cache de QA con los archivos del envelope. Si los hashes SHA256 coinciden con un PASS previo y los archivos no fueron modificados (mtime), **devolver PASS cacheado** sin re-ejecutar el QA flow.
+
+```python
+# Pseudocodigo del check obligatorio
+task_id = f"{proyecto}/tarea-{N}"  # ID consistente entre invocaciones
+archivos = envelope_input.get("archivos", [])
+
+cache_hit = dispatcher.should_skip_qa(task_id, archivos)
+if cache_hit:
+    # PASS instantaneo (~50ms vs 5-15s normal)
+    return {
+        "status": "PASS",
+        "from_cache": True,
+        "cached_at": cache_hit["cached_at"],
+        "tarea": cache_hit["qa_result"].get("tarea"),
+        "archivos": archivos,
+        "verificacion": cache_hit["qa_result"].get("verificacion", "layout"),
+        "notas": f"PASS cacheado desde {cache_hit['cached_at']}",
+    }
+
+# Sin hit -> proceder con QA normal (Playwright, network, console)
+# ... ejecutar QA ...
+qa_result = {"status": "PASS"|"FAIL", ...}
+
+# Al terminar QA, si fue PASS -> cachear para futuras invocaciones
+if qa_result["status"] == "PASS":
+    dispatcher.cache_qa_result(task_id, archivos, qa_result)
+```
+
+**Reglas del cache**:
+- SOLO se cachea `status="PASS"` (FAIL nunca, puede ser fix-pending)
+- Cache invalida automaticamente si: hash SHA256 cambia o mtime es mas nuevo
+- Cache es opt-in: si `should_skip_qa()` retorna None, ejecutar QA normal
+- Fail-open: si el modulo `file_hash_cache` no se importa, retorna None -> QA normal
+- Cache se persiste en `{project_root}/.pipeline/qa-cache.json`
+
+**Cuando NO usar cache**:
+- Si recibo `force_qa: true` en el envelope_input -> ignorar cache, ejecutar QA fresco
+- Si los archivos del envelope estan vacios -> cache inutil, ejecutar QA normal
+- Si cambiaron deps/env/build config externos -> el agente o usuario debe invocar `dispatcher.cache.invalidate(task_id)` manualmente
+
+**Ahorro esperado**: ~70-80% de tokens en proyectos con dev<->QA loops iterativos (cuando una tarea se ejecuta multiples veces y los archivos no cambian entre intentos).
+
 ### 1. Leo la spec de la tarea desde Engram (2 pasos obligatorios)
 El orquestador me pasa: número de tarea N, nombre del proyecto, URL a testear (con puerto específico del servidor), y número de intento (1, 2 o 3).
 Si no recibo puerto explícito, probar en orden: 3000, 3001, 5173, 4321.
