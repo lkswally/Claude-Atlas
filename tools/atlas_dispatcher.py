@@ -333,6 +333,7 @@ class ATLASDispatcher:
         - Si la strategy no soporta get_observation (ej. disk_fallback),
           intenta obtener contenido del disco directamente con el cajon
         """
+        self._record_invocation("get_cajon_full", context={"proyecto": proyecto, "cajon": cajon})
         # Paso 1: search
         search_result = self._engram_strategy.check_cajon(proyecto, cajon)
 
@@ -443,6 +444,7 @@ class ATLASDispatcher:
         DiskFallbackStrategy puro), retorna {"status": "timeout"} con error
         explicito.
         """
+        self._record_invocation("resolve_ambiguous_project", context={"cajon": cajon, "chosen_project": chosen_project})
         # Caso preferido: bridge MCP soporta mem_search_with_recovery
         bridge = getattr(self._engram_strategy, "_bridge", None)
         if bridge is not None and hasattr(bridge, "mem_search_with_recovery"):
@@ -697,6 +699,8 @@ class ATLASDispatcher:
         - "design_strict": validación para ux-architect / ui-designer —
                            requiere design_intelligence consultado (Bloque 1C.1)
         """
+        # Bloque 1G.2: registrar invocacion
+        self._record_invocation("validate_return_envelope", context={"mode": mode})
         errores = []
 
         # CAMPOS OBLIGATORIOS en ambos modos
@@ -900,6 +904,7 @@ class ATLASDispatcher:
         caller decide si emitir envelope con `queried=false` (sera rechazado
         en design_strict) o si abortar.
         """
+        self._record_invocation("consult_design_intelligence", context={"query": query[:50], "domain": domain})
         try:
             from skills_invocation import SkillsInvocation
         except ImportError as e:
@@ -941,6 +946,7 @@ class ATLASDispatcher:
         Fallback controlado: si reality_check_runner no se puede importar,
         retorna verdict "INCONCLUSIVE" con error en note. NO rompe el pipeline.
         """
+        self._record_invocation("run_certification_re_runs", context={"sample_size": sample_size, "qa_count": len(qa_results) if qa_results else 0})
         try:
             from reality_check_runner import RealityCheckRunner
         except ImportError as e:
@@ -980,6 +986,7 @@ class ATLASDispatcher:
 
         Fail-open: si file_hash_cache no importable, retorna None (re-ejecuta QA).
         """
+        self._record_invocation("should_skip_qa", context={"task_id": task_id, "archivos_count": len(archivos) if archivos else 0})
         try:
             from file_hash_cache import FileHashCache
         except ImportError:
@@ -1005,6 +1012,7 @@ class ATLASDispatcher:
         Fail-open: si file_hash_cache no importable, retorna
         {"cached": False, "reason": "module not importable"}.
         """
+        self._record_invocation("cache_qa_result", context={"task_id": task_id, "status": qa_result.get("status") if isinstance(qa_result, dict) else None})
         try:
             from file_hash_cache import FileHashCache
         except ImportError as e:
@@ -1053,6 +1061,7 @@ class ATLASDispatcher:
         Fail-open: si network_inspector no importable, retorna verdict OK
         con error en note. NO rompe pipeline.
         """
+        self._record_invocation("inspect_network_requests", context={"requests_count": len(requests) if requests else 0, "page_origin": page_origin})
         try:
             from network_inspector import NetworkInspector
         except ImportError as e:
@@ -1094,6 +1103,7 @@ class ATLASDispatcher:
 
         Fail-open: si console_log_analyzer no importable, retorna OK con note.
         """
+        self._record_invocation("analyze_console_messages", context={"messages_count": len(messages) if messages else 0})
         try:
             from console_log_analyzer import ConsoleLogAnalyzer
         except ImportError as e:
@@ -1131,6 +1141,7 @@ class ATLASDispatcher:
 
         Fail-open: si visual_fidelity_checker no importable, retorna OK con note.
         """
+        self._record_invocation("check_visual_fidelity", context={"has_spec": bool(spec), "has_evidence": bool(evidence)})
         try:
             from visual_fidelity_checker import VisualFidelityChecker
         except ImportError as e:
@@ -1160,6 +1171,7 @@ class ATLASDispatcher:
         Invocar al cerrar trabajo sobre una task o al cerrar sesion.
         Fail-open: errores de I/O no rompen el pipeline.
         """
+        self._record_invocation("record_session_summary", context={"session_id": session_id, "task_id": task_id})
         try:
             from delegation_tracker import DelegationTracker
         except ImportError as e:
@@ -1187,6 +1199,7 @@ class ATLASDispatcher:
         Fail-open: si delegation_tracker no importable, retorna verdict=ok
         con error en note. NO rompe pipeline.
         """
+        self._record_invocation("check_cross_session_loops", context={"task_id": task_id, "recent_sessions": recent_sessions})
         try:
             from delegation_tracker import DelegationTracker
         except ImportError as e:
@@ -1211,6 +1224,72 @@ class ATLASDispatcher:
                 "loop_count": {},
                 "note": f"Error en cross-session check: {type(e).__name__}: {e}",
                 "history_entries": [],
+            }
+
+    # ============================================================
+    #  Bloque 1G.2: Runtime Invocation Tracking
+    # ============================================================
+
+    def _record_invocation(
+        self,
+        helper_name: str,
+        context: Optional[Dict[str, Any]] = None,
+        outcome: Optional[str] = None,
+    ) -> None:
+        """
+        Bloque 1G.2: Registra una invocacion de helper en el invocation log.
+        Fail-open: silencioso si tracker no disponible o I/O falla.
+        """
+        try:
+            from invocation_tracker import InvocationTracker
+            tracker = InvocationTracker(self.project_root)
+            tracker.record(helper_name, context=context, outcome=outcome)
+        except Exception:
+            pass  # fail-open: tracking no debe romper el helper original
+
+    def audit_invocations(
+        self,
+        required_helpers: List[str],
+        since_seconds: int = 300,
+        context_filter: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1G.2: Audita si los helpers requeridos fueron invocados en
+        la ventana de tiempo especificada.
+
+        Retorna dict con verdict ("complete" | "incomplete") + missing list.
+        Fail-open: si tracker no importable, retorna verdict=complete con note.
+        """
+        try:
+            from invocation_tracker import InvocationTracker
+        except ImportError as e:
+            return {
+                "verdict": "complete",
+                "required": sorted(required_helpers),
+                "invoked": [],
+                "missing": [],
+                "extra": [],
+                "total_invocations": 0,
+                "window_seconds": since_seconds,
+                "note": f"invocation_tracker no importable: {e}. Audit skipped.",
+            }
+        try:
+            tracker = InvocationTracker(self.project_root)
+            return tracker.audit_invocations(
+                required_helpers=required_helpers,
+                since_seconds=since_seconds,
+                context_filter=context_filter,
+            )
+        except Exception as e:
+            return {
+                "verdict": "complete",
+                "required": sorted(required_helpers),
+                "invoked": [],
+                "missing": [],
+                "extra": [],
+                "total_invocations": 0,
+                "window_seconds": since_seconds,
+                "note": f"Audit error (fail-open): {type(e).__name__}: {e}",
             }
 
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
