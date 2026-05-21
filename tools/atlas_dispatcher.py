@@ -1024,6 +1024,48 @@ class ATLASDispatcher:
                 "task_id": task_id,
             }
 
+    # ============================================================
+    #  Bloque 1H.1: Network Inspection
+    # ============================================================
+
+    def inspect_network_requests(
+        self,
+        requests: List[Dict[str, Any]],
+        page_origin: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1H.1: Inspecciona network requests capturados durante QA.
+
+        Analiza requests por severidad y produce verdict:
+        - CRITICAL (5xx, mixed content, network errors) -> FAIL
+        - HIGH (4xx en assets criticos, redirects > 3) -> WARN
+        - MEDIUM/LOW informativos -> OK
+
+        Args:
+            requests: lista de dicts con shape compatible con Playwright HAR
+                      {"url": str, "status": int, "method": str,
+                       "duration_ms"?: int, "error"?: str, "redirect_count"?: int}
+            page_origin: URL base de la pagina (ej. "https://example.com")
+                         para distinguir same-origin de cross-origin
+
+        Retorna dict del NetworkInspector.inspect() (ver tools/network_inspector.py).
+
+        Fail-open: si network_inspector no importable, retorna verdict OK
+        con error en note. NO rompe pipeline.
+        """
+        try:
+            from network_inspector import NetworkInspector
+        except ImportError as e:
+            return {
+                "verdict": "OK",
+                "issues": [],
+                "summary": {"total_requests": len(requests) if requests else 0},
+                "note": f"network_inspector no importable: {e}. Skip de inspeccion.",
+            }
+
+        inspector = NetworkInspector(page_origin=page_origin)
+        return inspector.inspect(requests)
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.

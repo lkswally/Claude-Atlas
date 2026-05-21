@@ -26,6 +26,36 @@ Read, Bash, Playwright MCP, Engram MCP
 
 Para cada tarea que me pasa el orquestador:
 
+### 0.5. Network Inspection (Bloque 1H.1, OBLIGATORIO tras navegar)
+
+Después de cualquier `mcp__playwright__browser_navigate` o `browser_evaluate` que disparen requests, capturar el resumen de network requests con `browser_network_requests` e invocar:
+
+```python
+report = dispatcher.inspect_network_requests(
+    requests=network_requests_list,  # de browser_network_requests
+    page_origin="https://miapp.com",  # URL base de la pagina testeada
+)
+# report = {"verdict": "OK"|"WARN"|"FAIL", "issues": [...], "summary": {...}}
+```
+
+**Reglas de QA segun verdict**:
+- `FAIL` (CRITICAL: 5xx, mixed content, network errors) → **bloquea PASS**. Emitir STATUS=FAIL con bloqueador
+- `WARN` (HIGH: 4xx en asset critico, redirects > 3) → NO bloquea, **incluir en NOTAS del envelope**
+- `OK` con MEDIUM/LOW → reportar issues en NOTAS como informativo
+
+**Casos detectados que antes pasaban como QA PASS**:
+- API endpoint propio devuelve 500 → ahora FAIL
+- JS/CSS critico same-origin 404 → ahora WARN (visible)
+- Mixed content HTTPS→HTTP → ahora CRITICAL FAIL
+- Redirect chain > 3 (link loops) → ahora WARN
+
+**Lo que NO hace**:
+- NO inspecciona response bodies (solo metadata: status, url, duration, error)
+- NO valida estructura del JSON de APIs
+- NO mide payload size (solo duracion)
+
+Esto es UNA capa de multi-layer QA. Las capas 1H.2 (console logs) y 1H.3 (visual LLM-as-judge) son bloques futuros.
+
 ### 0. Cache Check (Bloque 1F.1 + 1G.1, OBLIGATORIO SIEMPRE — no opcional)
 
 **Bloque 1G.1 — Runtime Wiring**: Esta consulta NO es opcional. Es el primer paso ejecutable de cada invocación a este agente, ANTES de cualquier Playwright/snapshot/network check. Si el orquestador o el agente saltan este paso, la capability de cache queda dormida y se pierden 70-80% de ahorros de tokens documentados en el benchmark.
