@@ -1524,6 +1524,261 @@ class ATLASDispatcher:
             "note": note,
         }
 
+    # ============================================================
+    #  Bloque 1J.2: Screenshot Hash Verification
+    # ============================================================
+
+    def verify_screenshot_evidence(
+        self,
+        evidence: Dict[str, Any],
+        expected_path: Optional[str] = None,
+        screenshot_path_key: str = "screenshot_path",
+        screenshot_hash_key: str = "screenshot_hash",
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1J.2: Verifica que la visual_evidence reportada por el agente
+        tenga un screenshot real en disco con hash verificable.
+
+        Detecta agentes que reportan evidencia visual sin haber capturado
+        realmente el screenshot. Cierra el ultimo gap honesto de
+        "evidencia visual sin verificacion independiente".
+
+        Args:
+            evidence: dict con campo screenshot_path (y opcionalmente
+                      screenshot_hash declarado por el agente)
+            expected_path: opcional, ruta esperada (si caller sabe donde
+                           deberia estar el screenshot)
+            screenshot_path_key: key para path (default 'screenshot_path')
+            screenshot_hash_key: key para hash declarado (default 'screenshot_hash')
+
+        Retorna dict:
+        {
+          "verdict": "ok" | "mismatch" | "unverifiable",
+          "checks": [{"field", "status", "details", ...}],
+          "discrepancies": [...],
+          "computed_hash": str | None,
+          "file_exists": bool,
+          "file_size": int | None,
+          "note": str,
+        }
+
+        Reglas:
+        - screenshot_path ausente -> unverifiable (no detecta nada)
+        - File no existe -> mismatch CRITICAL (evidencia fantasma)
+        - File existe + hash declarado != computado -> mismatch CRITICAL
+        - File existe + sin hash declarado -> ok (compute y reporta)
+        - expected_path provisto y difiere -> mismatch HIGH (screenshot incorrecto)
+        - File existe + tamaño 0 bytes -> mismatch HIGH (screenshot vacio)
+        - File existe + hash match (si declarado) -> ok
+        """
+        self._record_invocation("verify_screenshot_evidence")
+        import hashlib
+
+        checks: List[Dict[str, Any]] = []
+        discrepancies: List[Dict[str, Any]] = []
+
+        if not isinstance(evidence, dict):
+            return {
+                "verdict": "unverifiable",
+                "checks": [],
+                "discrepancies": [],
+                "computed_hash": None,
+                "file_exists": False,
+                "file_size": None,
+                "note": "evidence no es dict. Nada que verificar.",
+            }
+
+        declared_path = evidence.get(screenshot_path_key)
+        declared_hash = evidence.get(screenshot_hash_key)
+
+        if not declared_path or not isinstance(declared_path, str):
+            return {
+                "verdict": "unverifiable",
+                "checks": [],
+                "discrepancies": [],
+                "computed_hash": None,
+                "file_exists": False,
+                "file_size": None,
+                "note": (
+                    f"evidence no declara {screenshot_path_key}. "
+                    f"No se puede verificar."
+                ),
+            }
+
+        # Resolver path: absoluto o relativo al project_root
+        norm_path = declared_path.replace("\\", "/")
+        if norm_path.startswith("./"):
+            norm_path = norm_path[2:]
+        path_obj = Path(norm_path)
+        if not path_obj.is_absolute():
+            path_obj = self.project_root / norm_path
+
+        # Check 1: existe el archivo?
+        file_exists = path_obj.exists() and path_obj.is_file()
+        path_check = {
+            "field": screenshot_path_key,
+            "declared": declared_path,
+            "resolved": str(path_obj),
+            "exists": file_exists,
+        }
+
+        if not file_exists:
+            path_check["status"] = "mismatch_critical"
+            path_check["severity"] = "CRITICAL"
+            path_check["details"] = (
+                f"Agente declaro screenshot_path='{declared_path}' pero el archivo "
+                f"NO existe en disco. Evidencia fantasma — el screenshot no se capturo."
+            )
+            checks.append(path_check)
+            discrepancies.append(path_check)
+            return {
+                "verdict": "mismatch",
+                "checks": checks,
+                "discrepancies": discrepancies,
+                "computed_hash": None,
+                "file_exists": False,
+                "file_size": None,
+                "note": "Screenshot declarado no existe. MISMATCH CRITICAL.",
+            }
+
+        path_check["status"] = "ok"
+        checks.append(path_check)
+
+        # Check 2: expected_path si se provee
+        if expected_path:
+            exp_norm = expected_path.replace("\\", "/")
+            if exp_norm.startswith("./"):
+                exp_norm = exp_norm[2:]
+            # Comparar absoluto vs absoluto
+            exp_obj = Path(exp_norm)
+            if not exp_obj.is_absolute():
+                exp_obj = self.project_root / exp_norm
+            same = (str(exp_obj.resolve()) == str(path_obj.resolve()))
+            exp_check = {
+                "field": f"{screenshot_path_key}_expected_match",
+                "expected": expected_path,
+                "declared": declared_path,
+                "match": same,
+            }
+            if not same:
+                exp_check["status"] = "mismatch_high"
+                exp_check["severity"] = "HIGH"
+                exp_check["details"] = (
+                    f"expected_path='{expected_path}' difiere de declarado "
+                    f"'{declared_path}'. Screenshot incorrecto o nombre divergente."
+                )
+                discrepancies.append(exp_check)
+            else:
+                exp_check["status"] = "ok"
+            checks.append(exp_check)
+
+        # Check 3: tamaño del archivo
+        try:
+            file_size = path_obj.stat().st_size
+        except (OSError, IOError) as e:
+            return {
+                "verdict": "unverifiable",
+                "checks": checks,
+                "discrepancies": discrepancies,
+                "computed_hash": None,
+                "file_exists": True,
+                "file_size": None,
+                "note": f"No se pudo leer stat: {type(e).__name__}: {e}",
+            }
+
+        size_check = {
+            "field": "file_size",
+            "size_bytes": file_size,
+        }
+        if file_size == 0:
+            size_check["status"] = "mismatch_high"
+            size_check["severity"] = "HIGH"
+            size_check["details"] = "Archivo existe pero tiene 0 bytes. Screenshot vacio."
+            discrepancies.append(size_check)
+        elif file_size < 1024:
+            # Menor a 1KB es sospechoso para un screenshot real
+            size_check["status"] = "warning"
+            size_check["severity"] = "LOW"
+            size_check["details"] = f"Archivo muy pequeño ({file_size} bytes). Sospechoso para screenshot."
+        else:
+            size_check["status"] = "ok"
+        checks.append(size_check)
+
+        # Check 4: computar hash
+        try:
+            h = hashlib.sha256()
+            with open(path_obj, "rb") as f:
+                for chunk in iter(lambda: f.read(65536), b""):
+                    h.update(chunk)
+            computed_hash = h.hexdigest()
+        except (OSError, IOError) as e:
+            return {
+                "verdict": "unverifiable",
+                "checks": checks,
+                "discrepancies": discrepancies,
+                "computed_hash": None,
+                "file_exists": True,
+                "file_size": file_size,
+                "note": f"No se pudo computar hash: {type(e).__name__}: {e}",
+            }
+
+        # Check 5: comparar hash declarado si existe
+        if declared_hash:
+            hash_check = {
+                "field": screenshot_hash_key,
+                "declared": declared_hash,
+                "computed": computed_hash,
+            }
+            # Permitir formato con prefijo "sha256:" opcional
+            declared_clean = declared_hash.replace("sha256:", "").strip().lower()
+            if declared_clean == computed_hash.lower():
+                hash_check["status"] = "ok"
+                hash_check["match"] = True
+            else:
+                hash_check["status"] = "mismatch_critical"
+                hash_check["severity"] = "CRITICAL"
+                hash_check["match"] = False
+                hash_check["details"] = (
+                    f"Hash declarado '{declared_hash}' != computado '{computed_hash}'. "
+                    f"El agente puede haber modificado o cacheado un screenshot diferente."
+                )
+                discrepancies.append(hash_check)
+            checks.append(hash_check)
+        else:
+            checks.append({
+                "field": screenshot_hash_key,
+                "status": "not_declared",
+                "details": "Agente no declaro hash. Computado disponible para que caller lo cachee.",
+                "computed": computed_hash,
+            })
+
+        # Verdict global
+        has_critical = any(d.get("severity") == "CRITICAL" for d in discrepancies)
+        has_high = any(d.get("severity") == "HIGH" for d in discrepancies)
+
+        if has_critical:
+            verdict = "mismatch"
+            note = f"MISMATCH CRITICAL: {len(discrepancies)} discrepancia(s) graves. Bloquear evidencia."
+        elif has_high:
+            verdict = "mismatch"
+            note = f"MISMATCH HIGH: {len(discrepancies)} discrepancia(s). Evidencia sospechosa."
+        else:
+            verdict = "ok"
+            if declared_hash:
+                note = f"Screenshot verificado: existe, tamaño OK, hash coincide ({file_size} bytes)."
+            else:
+                note = f"Screenshot existe ({file_size} bytes). Hash computado disponible para tracking futuro."
+
+        return {
+            "verdict": verdict,
+            "checks": checks,
+            "discrepancies": discrepancies,
+            "computed_hash": computed_hash,
+            "file_exists": True,
+            "file_size": file_size,
+            "note": note,
+        }
+
     def report(self, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generar reporte estandarizado de una ejecución de comando.
