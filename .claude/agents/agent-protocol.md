@@ -1097,6 +1097,83 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.17. Auto-Invocation of Missing Helpers (Bloque 1K.4)
+
+**Alcance**: cierra el último gap operativo de enforcement. Cuando `validate_return_envelope(enforce_helpers=True, try_auto_invoke=True)` detecta helpers faltantes en un agente crítico, el dispatcher **intenta invocar los helpers automáticamente** usando contexto inferible del envelope **antes de rechazar**.
+
+**Diferencia con 1K.3**:
+- 1K.3: missing helpers → REJECT directo, requiere re-delegación
+- 1K.4: missing helpers → intenta auto-invocar con contexto del envelope → si resuelve, ACCEPT; si no, REJECT con detalle
+
+### API
+
+```python
+is_valid, errores = dispatcher.validate_return_envelope(
+    envelope,
+    mode="qa_strict",
+    enforce_helpers=True,
+    agent_name="evidence-collector",
+    try_auto_invoke=True,   # NUEVO opt-in (1K.4)
+)
+```
+
+### Tabla de helpers auto-invocables
+
+| Helper | Auto-invocable | Args inferidos del envelope |
+|--------|----------------|-----------------------------|
+| `should_skip_qa` | ✅ | `task_id=envelope.tarea`, `archivos=envelope.archivos` |
+| `cache_qa_result` | ✅ (solo si `status=PASS`) | `task_id`, `archivos`, `qa_result=envelope` |
+| `verify_screenshot_evidence` | ✅ | `evidence` con `screenshot_path` de envelope o sub-dicts (evidence/visual_evidence) |
+| `verify_design_intelligence` | ✅ | `envelope` completo (lee `design_intelligence`) |
+| `verify_design_intelligence_real` | ✅ | `envelope` completo |
+| `consult_design_intelligence` | ✅ | `query=envelope.design_intelligence.industry`, `domain="product"` |
+| `inspect_network_requests` | ❌ | Requiere lista de requests, no inferible |
+| `analyze_console_messages` | ❌ | Requiere lista de messages, no inferible |
+| `check_visual_fidelity` | ❌ | Requiere spec + evidence detallados |
+| `run_certification_re_runs` | ❌ | Requiere qa_results + rerun_callback |
+| `validate_return_envelope` | ❌ | Loop guard (auto-referente) |
+| `verify_pre_return_audit` | ❌ | Requiere campo `pre_return_audit` |
+| `verify_declared_files` | ❌ | Requiere git diff context |
+
+### Salida en envelope tras auto-invoke
+
+```python
+envelope["_dispatcher_enforcement"] = {
+    "verdict": "auto_fixed" | "incomplete",
+    "agent_name": "evidence-collector",
+    "is_critical": True,
+    "missing_helpers": [...],   # still_missing (vacío si todos resueltos)
+    "severity": "RESOLVED" | "HARD_BLOCK",
+    "auto_invoked": [
+        {"helper": "should_skip_qa", "outcome": "ok", "args_inferred": {...}},
+    ],
+    "auto_invoke_failed": [
+        {"helper": "verify_design_intelligence_real", "reason": "..."},
+    ],
+    "not_auto_invocable": ["inspect_network_requests", ...],
+    "audit": {...},
+}
+```
+
+### Reglas operativas
+
+1. **No inventa datos**: si el contexto requerido no está en el envelope, el helper se registra en `auto_invoke_failed` con `reason` explícita, queda en `still_missing`.
+2. **Loop guard**: `validate_return_envelope` está en `NON_AUTO_INVOCABLE_HELPERS` para prevenir recursión.
+3. **Honestidad sobre verdict del helper**: si auto-invoke ejecuta y el helper retorna `mismatch` o `unverifiable`, NO se cuenta como éxito silencioso — el verdict del helper queda en `auto_invoked.verdict`.
+4. **`cache_qa_result` solo si PASS**: no cachea FAILs por error.
+5. **`try_auto_invoke=False` (default)**: comportamiento 1K.3 puro, backward compat estricto.
+
+### LO QUE 1K.4 NO HACE
+
+- ❌ NO inventa datos. Si el contexto no está, no ejecuta.
+- ❌ NO obliga al orquestador a usar `try_auto_invoke=True` (opt-in)
+- ❌ NO cubre helpers no auto-invocables (network, console, visual_fidelity, re_runs) — siguen requiriendo re-delegación
+- ❌ NO modifica el envelope salvo agregar `_dispatcher_enforcement` con detalle
+- ❌ NO genera retry automático del subagent — solo intenta resolver via dispatcher
+- ❌ Backward compat: `try_auto_invoke=False` (default) → 1K.3 puro
+
+---
+
 ## 4.16. Hard Enforcement Escalation (Bloque 1K.3)
 
 **Alcance**: cierra el gap "audit advisory pero el agente puede ignorarlo". Convierte la auditoría de invocaciones (1G.2 + 1K.1 advisory) en **rechazo activo de envelope** para agentes críticos cuando faltan helpers obligatorios.

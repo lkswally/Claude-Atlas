@@ -694,6 +694,7 @@ class ATLASDispatcher:
         mode: str = "standard",
         enforce_helpers: bool = False,
         agent_name: Optional[str] = None,
+        try_auto_invoke: bool = False,
     ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
@@ -829,19 +830,36 @@ class ATLASDispatcher:
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("bloqueadores debe ser lista o null")
 
-        # Bloque 1K.3: Hard Enforcement Escalation (opt-in)
+        # Bloque 1K.3 + 1K.4: Hard Enforcement Escalation con auto-invoke opcional
         # Solo aplica si enforce_helpers=True Y se proveyo agent_name.
-        # Para agentes en CRITICAL_AGENTS con helpers faltantes,
-        # agrega error explicito que bloquea el envelope.
+        # Para agentes en CRITICAL_AGENTS con helpers faltantes:
+        # - try_auto_invoke=False (default): bloquea con missing list (1K.3)
+        # - try_auto_invoke=True (1K.4): intenta resolver via auto-invocacion
+        #   antes de bloquear. Si resuelve todos -> ACCEPT.
         if enforce_helpers and agent_name and isinstance(response, dict):
-            enforcement = self.enforce_helpers_for_agent(response, agent_name)
-            if enforcement.get("verdict") == "incomplete":
+            enforcement = self.enforce_helpers_for_agent(
+                response, agent_name, try_auto_invoke=try_auto_invoke
+            )
+            verdict = enforcement.get("verdict")
+            if verdict == "incomplete":
                 missing = enforcement.get("missing_helpers", [])
-                errores.append(
-                    f"Hard enforcement (Bloque 1K.3): agente critico "
-                    f"'{agent_name}' termino sin invocar helpers obligatorios: "
-                    f"{missing}. Re-delegar o invocar helpers explicitamente."
-                )
+                if try_auto_invoke:
+                    # Detallar que se intento auto-invoke pero quedaron missing
+                    auto_inv = enforcement.get("auto_invoked", [])
+                    errores.append(
+                        f"Hard enforcement (Bloque 1K.3/1K.4): agente critico "
+                        f"'{agent_name}' tiene helpers faltantes tras intento de "
+                        f"auto-invocacion. Auto-invocados: {[a['helper'] for a in auto_inv]}. "
+                        f"Aun faltan: {missing}. Re-delegar."
+                    )
+                else:
+                    errores.append(
+                        f"Hard enforcement (Bloque 1K.3): agente critico "
+                        f"'{agent_name}' termino sin invocar helpers obligatorios: "
+                        f"{missing}. Re-delegar o invocar helpers explicitamente."
+                    )
+            # verdict == "auto_fixed" -> NO agrega error, envelope queda con detalle
+            # verdict == "passed" / "skipped" -> sin cambios
 
         return len(errores) == 0, errores
 
@@ -1950,45 +1968,239 @@ class ATLASDispatcher:
     #  Bloque 1K.3: Hard Enforcement Escalation
     # ============================================================
 
+    # Bloque 1K.4: Set de helpers que NO se auto-invocan (auto-referentes,
+    # requieren contexto no inferible, o pueden generar loops).
+    # NOTA: validate_return_envelope se excluye para evitar recursion.
+    NON_AUTO_INVOCABLE_HELPERS = {
+        "validate_return_envelope",      # auto-referente, loop guard
+        "inspect_network_requests",      # requiere lista de requests, no inferible
+        "analyze_console_messages",      # requiere lista de messages, no inferible
+        "check_visual_fidelity",         # requiere spec+evidence detallados
+        "run_certification_re_runs",     # requiere qa_results + callback
+        "verify_pre_return_audit",       # requiere campo pre_return_audit (1A.15)
+        "verify_declared_files",         # requiere git diff context
+    }
+
+    def _try_auto_invoke_helpers(
+        self,
+        envelope: Dict[str, Any],
+        missing_helpers: List[str],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Bloque 1K.4: Intenta auto-invocar helpers faltantes usando contexto
+        inferible del envelope. Solo invoca si el contexto es suficiente.
+
+        NUNCA inventa datos. Si el contexto no esta o es insuficiente, el
+        helper queda en still_missing.
+
+        Retorna dict:
+        {
+          "auto_invoked": [{helper, outcome, args_inferred}, ...],
+          "auto_invoke_failed": [{helper, reason}, ...],
+          "not_auto_invocable": [...],
+          "still_missing": [...],
+        }
+        """
+        auto_invoked: List[Dict[str, Any]] = []
+        auto_invoke_failed: List[Dict[str, Any]] = []
+        not_auto_invocable: List[str] = []
+        still_missing: List[str] = []
+
+        if not isinstance(envelope, dict):
+            return {
+                "auto_invoked": [],
+                "auto_invoke_failed": [],
+                "not_auto_invocable": [],
+                "still_missing": list(missing_helpers),
+            }
+
+        # Inferencias compartidas
+        task_id = envelope.get("tarea") or envelope.get("task_id")
+        archivos = envelope.get("archivos")
+        if archivos is not None and not isinstance(archivos, list):
+            archivos = None
+
+        for helper in missing_helpers:
+            # Loop guard + helpers no auto-invocables
+            if helper in self.NON_AUTO_INVOCABLE_HELPERS:
+                not_auto_invocable.append(helper)
+                still_missing.append(helper)
+                continue
+
+            # Estrategia por helper
+            try:
+                if helper == "should_skip_qa":
+                    if not task_id or archivos is None:
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": "Contexto insuficiente: requiere tarea + archivos en envelope",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    self.should_skip_qa(task_id, archivos)
+                    auto_invoked.append({
+                        "helper": helper,
+                        "outcome": "ok",
+                        "args_inferred": {"task_id": task_id, "archivos": archivos},
+                    })
+
+                elif helper == "cache_qa_result":
+                    status = envelope.get("status")
+                    if status != "PASS":
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": f"Solo se cachean PASS, status='{status}'. No invocado.",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    if not task_id or archivos is None:
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": "Contexto insuficiente: requiere tarea + archivos",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    self.cache_qa_result(task_id, archivos, envelope)
+                    auto_invoked.append({
+                        "helper": helper,
+                        "outcome": "ok",
+                        "args_inferred": {"task_id": task_id, "archivos_count": len(archivos)},
+                    })
+
+                elif helper == "verify_screenshot_evidence":
+                    # Buscar screenshot_path en envelope o sub-dicts comunes
+                    sp = (
+                        envelope.get("screenshot_path")
+                        or (envelope.get("evidence") or {}).get("screenshot_path")
+                        or (envelope.get("visual_evidence") or {}).get("screenshot_path")
+                    )
+                    if not sp:
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": "Sin screenshot_path en envelope ni en evidence/visual_evidence",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    evidence_dict = {"screenshot_path": sp}
+                    # Pasar hash si existe
+                    sh = (
+                        envelope.get("screenshot_hash")
+                        or (envelope.get("evidence") or {}).get("screenshot_hash")
+                        or (envelope.get("visual_evidence") or {}).get("screenshot_hash")
+                    )
+                    if sh:
+                        evidence_dict["screenshot_hash"] = sh
+                    result = self.verify_screenshot_evidence(evidence_dict)
+                    auto_invoked.append({
+                        "helper": helper,
+                        "outcome": "ok",
+                        "verdict": result.get("verdict"),
+                        "args_inferred": {"screenshot_path": sp},
+                    })
+
+                elif helper == "verify_design_intelligence_real":
+                    di = envelope.get("design_intelligence")
+                    if not isinstance(di, dict) or not di.get("queried"):
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": "design_intelligence ausente o queried=false en envelope",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    result = self.verify_design_intelligence_real(envelope)
+                    auto_invoked.append({
+                        "helper": helper,
+                        "outcome": "ok",
+                        "verdict": result.get("verdict"),
+                        "args_inferred": {"industry": di.get("industry"), "style": di.get("style")},
+                    })
+
+                elif helper == "consult_design_intelligence":
+                    di = envelope.get("design_intelligence") or {}
+                    industry = di.get("industry") if isinstance(di, dict) else None
+                    if not industry:
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": "Sin industry en design_intelligence — query no inferible",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    self.consult_design_intelligence(industry, domain="product")
+                    auto_invoked.append({
+                        "helper": helper,
+                        "outcome": "ok",
+                        "args_inferred": {"query": industry, "domain": "product"},
+                    })
+
+                elif helper == "verify_design_intelligence":
+                    # 1C.1 verify (chequeo de formato del campo design_intelligence)
+                    di = envelope.get("design_intelligence")
+                    if not isinstance(di, dict):
+                        auto_invoke_failed.append({
+                            "helper": helper,
+                            "reason": "design_intelligence ausente o no es dict",
+                        })
+                        still_missing.append(helper)
+                        continue
+                    self.verify_design_intelligence(envelope)
+                    auto_invoked.append({
+                        "helper": helper,
+                        "outcome": "ok",
+                        "args_inferred": {"envelope_has_di": True},
+                    })
+
+                else:
+                    # Helper no contemplado en estrategia -> tratar como no auto-invocable
+                    not_auto_invocable.append(helper)
+                    still_missing.append(helper)
+
+            except Exception as e:
+                auto_invoke_failed.append({
+                    "helper": helper,
+                    "reason": f"Excepcion durante auto-invoke: {type(e).__name__}: {e}",
+                })
+                still_missing.append(helper)
+
+        return {
+            "auto_invoked": auto_invoked,
+            "auto_invoke_failed": auto_invoke_failed,
+            "not_auto_invocable": not_auto_invocable,
+            "still_missing": still_missing,
+        }
+
     def enforce_helpers_for_agent(
         self,
         envelope: Dict[str, Any],
         agent_name: str,
         since_seconds: int = 600,
+        try_auto_invoke: bool = False,
     ) -> Dict[str, Any]:
         """
-        Bloque 1K.3: Hard enforcement para agentes criticos.
+        Bloque 1K.3 + 1K.4: Hard enforcement para agentes criticos con
+        auto-invocacion opcional de helpers faltantes (1K.4).
 
-        Si agent_name esta en CRITICAL_AGENTS y faltan helpers obligatorios,
-        marca el envelope con _dispatcher_enforcement y retorna verdict
-        "incomplete". El caller (validate_return_envelope con enforce_helpers=True)
-        usa esto para rechazar el envelope.
+        Si agent_name esta en CRITICAL_AGENTS y faltan helpers obligatorios:
+        - Si try_auto_invoke=False (default, 1K.3 puro): marca envelope con
+          _dispatcher_enforcement y retorna verdict "incomplete".
+        - Si try_auto_invoke=True (1K.4): intenta auto-invocar helpers
+          faltantes usando contexto del envelope. Tras auto-invoke, re-audita.
+          Si todos resueltos -> verdict "auto_fixed". Si quedan no resueltos
+          -> verdict "incomplete" con detalle de auto_invoked / auto_invoke_failed.
 
         Para agentes NO criticos, retorna "skipped" sin afectar el envelope.
 
         Args:
-            envelope: Return Envelope del subagente (puede ser modificado in-place
-                      agregando _dispatcher_enforcement)
-            agent_name: nombre del subagente (de tool_input.subagent_type)
-            since_seconds: ventana del audit (default 10 min)
+            envelope: Return Envelope del subagente
+            agent_name: nombre del subagente
+            since_seconds: ventana del audit
+            try_auto_invoke: Bloque 1K.4 — intentar resolver missing helpers
 
-        Retorna dict:
-        {
-          "verdict": "passed" | "incomplete" | "skipped",
-          "agent_name": str,
-          "is_critical": bool,
-          "missing_helpers": [...],
-          "severity": "HARD_BLOCK" | None,
-          "note": str,
-        }
-
-        Comportamiento:
-        - agent_name NO en CRITICAL_AGENTS -> verdict=skipped, envelope intacto
-        - agent_name en CRITICAL_AGENTS y todos los helpers OK -> verdict=passed
-        - agent_name critico + missing helpers -> verdict=incomplete +
-          envelope["_dispatcher_enforcement"] poblado
+        Retorna dict con verdict "passed" | "auto_fixed" | "incomplete" | "skipped".
         """
-        self._record_invocation("enforce_helpers_for_agent", context={"agent_name": agent_name})
+        self._record_invocation(
+            "enforce_helpers_for_agent",
+            context={"agent_name": agent_name, "try_auto_invoke": try_auto_invoke},
+        )
 
         is_critical = agent_name in self.CRITICAL_AGENTS
 
@@ -2021,8 +2233,46 @@ class ATLASDispatcher:
                 ),
             }
 
-        # verdict == "incomplete" -> bloquear
+        # verdict == "incomplete"
         missing = audit.get("missing", [])
+
+        # Bloque 1K.4: si try_auto_invoke=True, intentar resolver missing
+        # invocando helpers con contexto del envelope antes de bloquear.
+        auto_invoke_result = None
+        if try_auto_invoke and missing:
+            auto_invoke_result = self._try_auto_invoke_helpers(envelope, missing)
+            # Re-auditar tras auto-invoke
+            still_missing = auto_invoke_result["still_missing"]
+            if not still_missing:
+                # Todos los missing resueltos via auto-invoke
+                resolved_record = {
+                    "verdict": "auto_fixed",
+                    "agent_name": agent_name,
+                    "is_critical": True,
+                    "missing_helpers": [],
+                    "severity": "RESOLVED",
+                    "note": (
+                        f"Auto-invocation (Bloque 1K.4): {len(auto_invoke_result['auto_invoked'])} "
+                        f"helper(s) auto-invocados con contexto del envelope. "
+                        f"Originalmente faltaban: {missing}."
+                    ),
+                    "audit": {
+                        "required_for_agent": audit.get("required_for_agent", []),
+                        "invoked": audit.get("invoked", []),
+                        "originally_missing": missing,
+                        "window_seconds": audit.get("window_seconds"),
+                    },
+                    "auto_invoked": auto_invoke_result["auto_invoked"],
+                    "auto_invoke_failed": auto_invoke_result["auto_invoke_failed"],
+                    "not_auto_invocable": auto_invoke_result["not_auto_invocable"],
+                }
+                if isinstance(envelope, dict):
+                    envelope["_dispatcher_enforcement"] = dict(resolved_record)
+                return resolved_record
+
+            # Hay still_missing -> bloqueo persistente, pero con detalle de intento
+            missing = still_missing  # actualizar para el record
+
         enforcement_record = {
             "verdict": "incomplete",
             "agent_name": agent_name,
@@ -2041,6 +2291,12 @@ class ATLASDispatcher:
                 "window_seconds": audit.get("window_seconds"),
             },
         }
+
+        # Bloque 1K.4: incluir detalle del intento de auto-invoke si se hizo
+        if auto_invoke_result is not None:
+            enforcement_record["auto_invoked"] = auto_invoke_result["auto_invoked"]
+            enforcement_record["auto_invoke_failed"] = auto_invoke_result["auto_invoke_failed"]
+            enforcement_record["not_auto_invocable"] = auto_invoke_result["not_auto_invocable"]
 
         # Marcar el envelope (mutacion controlada — no destructiva)
         if isinstance(envelope, dict):
