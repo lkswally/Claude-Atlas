@@ -26,7 +26,11 @@ Read, Bash, Playwright MCP, Engram MCP
 
 Para cada tarea que me pasa el orquestador:
 
-### 0. Cache Check (Bloque 1F.1, OBLIGATORIO antes de ejecutar QA)
+### 0. Cache Check (Bloque 1F.1 + 1G.1, OBLIGATORIO SIEMPRE — no opcional)
+
+**Bloque 1G.1 — Runtime Wiring**: Esta consulta NO es opcional. Es el primer paso ejecutable de cada invocación a este agente, ANTES de cualquier Playwright/snapshot/network check. Si el orquestador o el agente saltan este paso, la capability de cache queda dormida y se pierden 70-80% de ahorros de tokens documentados en el benchmark.
+
+**Task_id MUST ser consistente** entre invocaciones del mismo proyecto/tarea: usar exactamente `f"{proyecto}/tarea-{N}"` donde N es el número de tarea del DAG state. Si el task_id cambia entre invocaciones, el cache es inútil.
 
 Antes de invocar Playwright/snapshots/network checks, consultar el cache de QA con los archivos del envelope. Si los hashes SHA256 coinciden con un PASS previo y los archivos no fueron modificados (mtime), **devolver PASS cacheado** sin re-ejecutar el QA flow.
 

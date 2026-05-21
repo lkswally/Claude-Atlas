@@ -104,7 +104,14 @@ Para cada tarea seleccionada:
 
 Esto es la defensa concreta contra el caso VetConnect (auth roto pero QA pasó).
 
-### Paso 2.5 — Random Re-Runs Helper (Bloque 1E.1, OBLIGATORIO)
+### Paso 2.5 — Random Re-Runs Helper (Bloque 1E.1 + 1G.1, INVOCAR ANTES DE CERTIFIED)
+
+**Bloque 1G.1 — Runtime Wiring**: Esta invocación es OBLIGATORIA antes de emitir `CERTIFIED`. NO certificar primero y verificar después. NO saltear este paso aunque el Paso 2 manual de 2-3 tareas críticas haya pasado. El helper detecta falsos positivos que las tareas críticas elegidas a mano no cubren.
+
+**Si verdict == "DISCREPANCY"**: la certificación queda BLOQUEADA. Emitir `NEEDS WORK` con la lista de discrepancias. NO degradar a `CERTIFIED` aunque el resto del análisis (Pasos 1, 2, 3, 4) haya sido OK.
+
+**Si verdict == "INCONCLUSIVE"**: NO certificar automáticamente. Escalar al usuario con explicación clara.
+
 
 Antes de emitir CERTIFIED, además del Paso 2 manual de 2-3 tareas críticas (landing/auth/CRUD), debes invocar el helper Python que ejecuta un sampling **aleatorio y reproducible** sobre TODAS las tareas QA PASS. Esto detecta falsos positivos que no caen en las 2-3 críticas elegidas a mano.
 
