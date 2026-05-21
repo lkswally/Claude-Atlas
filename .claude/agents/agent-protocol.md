@@ -1097,6 +1097,55 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.14. Visual Evidence Independent Verification (Bloque 1J.1)
+
+**Alcance**: cierra el gap "honestidad supuesta del agente" sobre `design_intelligence`. El dispatcher **re-invoca el skill independientemente** y compara con lo declarado por el agente. Mismo patrón que `verify_pre_return_audit` (1A.15) pero para design intelligence.
+
+### Helper
+
+```python
+report = dispatcher.verify_design_intelligence_real(envelope)
+# {
+#   "verdict": "match" | "mismatch" | "unverifiable",
+#   "checks": [...], "discrepancies": [...],
+#   "skill_query_result": {...},
+#   "note": str,
+# }
+```
+
+### Reglas de severidad
+
+| Caso | Severidad | Verdict |
+|------|-----------|---------|
+| `design_intelligence` ausente / `queried=false` | - | unverifiable |
+| `industry` no declarada | - | unverifiable |
+| Skill no disponible | - | unverifiable (no rompe) |
+| `industry` declarada NO retorna resultados del skill | CRITICAL | mismatch |
+| `style` declarado NO aparece en results para esa industry | HIGH | mismatch |
+| `verified_against` contiene CSV que no existe en el catalogo | LOW | match (warning) |
+| Todo coincide | - | match |
+
+### Cuándo invocar (orquestador)
+
+Tras recibir envelope de `ux-architect` o `ui-designer` con `design_intelligence` declarada:
+1. Validar formato → `validate_return_envelope(mode="design_strict")` (1C.1)
+2. **Re-verificar independientemente → `verify_design_intelligence_real(envelope)` (1J.1)**
+3. Si verdict=="mismatch" → re-delegar al agente con detalle de discrepancias
+
+### Match parcial por tokens
+
+El style declarado se compara token-by-token: si el agente dice "Glassmorphism" y el skill responde "Glassmorphism + Flat Design" → MATCH parcial OK. Esto evita falsos mismatches por nombres compuestos.
+
+### LO QUE 1J.1 NO HACE
+
+- ❌ NO valida que el agente realmente vio el screenshot — solo re-invoca el skill con lo declarado
+- ❌ NO compara visual evidence (eso es 1H.3) — compara la declaración de `design_intelligence` contra el output real del skill
+- ❌ Skill unavailable → unverifiable (no rompe pero no garantiza)
+- ❌ Honestidad sobre `verified_against` es LOW (informativo, no block)
+- ❌ NO detecta si el agente fue creativo combinando estilos no listados (solo si reporta uno completamente inventado)
+
+---
+
 ## 4.13. Runtime Invocation Tracking + Enforcement (Bloque 1G.2)
 
 **Alcance**: convierte el wiring documental de 1G.1 en wiring **medible**. Cada helper obligatorio del dispatcher registra automáticamente su invocación en `.pipeline/invocation-log.jsonl`. El orquestador puede auditar en runtime qué helpers se invocaron — diferencia operativa real vs documental.
