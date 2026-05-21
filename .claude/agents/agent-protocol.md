@@ -1097,6 +1097,57 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.9. Network Inspection Contract (Bloque 1H.1)
+
+**Alcance**: PRIMERA capa de multi-layer QA. SOLO cubre análisis de network requests capturados por Playwright. NO cubre console logs (1H.2) ni visual fidelity (1H.3).
+
+### Helper
+
+```python
+report = dispatcher.inspect_network_requests(
+    requests=playwright_network_requests,  # de browser_network_requests
+    page_origin="https://app.com",         # para distinguir same-origin
+)
+# {"verdict": "OK" | "WARN" | "FAIL", "issues": [...], "summary": {...}, "note": str}
+```
+
+### Severidad y verdict
+
+| Severidad | Casos | Efecto |
+|-----------|-------|--------|
+| **CRITICAL** | 5xx, mixed content HTTPS→HTTP, network errors (`ERR_*`) | verdict=FAIL → **bloquea QA PASS** |
+| **HIGH** | 4xx en asset crítico same-origin (.js, .css, /api/), redirect chain >3 | verdict=WARN → no bloquea, reportar |
+| **MEDIUM** | 4xx en same-origin no-crítico, requests >5s | verdict=OK informativo |
+| **LOW** | 4xx en cross-origin (tracking), favicon missing | verdict=OK informativo |
+
+### Cuándo invocar (en evidence-collector)
+
+Después de cada `browser_navigate` + interacciones que disparen requests:
+1. `browser_network_requests` → captura la lista
+2. `dispatcher.inspect_network_requests(requests, page_origin)` → analiza
+3. Si verdict=FAIL → STATUS=FAIL en el envelope QA
+4. Si verdict=WARN → STATUS=PASS con WARN en NOTAS
+5. Si verdict=OK → continuar normalmente
+
+### Casos detectados que antes pasaban como QA PASS
+
+- API endpoint propio devuelve 500 silenciosamente → ahora CRITICAL
+- JS bundle 404 (cache miss en deploy roto) → ahora HIGH
+- Mixed content (page HTTPS → CDN HTTP) → ahora CRITICAL
+- Redirect loop (5+ redirects) → ahora HIGH
+- Auth endpoint 401/403 que el agente ignoró visualmente → ahora HIGH (es /auth/)
+
+### LO QUE 1H.1 NO HACE
+
+- ❌ NO inspecciona response bodies — solo metadata (status, url, duration, error)
+- ❌ NO valida estructura JSON de APIs
+- ❌ NO mide payload size — solo duración
+- ❌ NO cubre console logs (1H.2)
+- ❌ NO cubre visual fidelity LLM-as-judge (1H.3)
+- ❌ Evidence-collector agente debe leer su md y consultar el helper. Capability disponible, no auto-invocada por dispatcher
+
+---
+
 ## 5. Reglas universales (todos los subagentes)
 
 1. **No arrancar servidores con Bash** → usar `preview_start` (solo aplica en Windows/Claude Desktop; en Linux/Claude Code CLI, usar Bash normalmente)
