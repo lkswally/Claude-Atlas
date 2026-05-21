@@ -1097,6 +1097,75 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.15. Screenshot Hash Verification (Bloque 1J.2)
+
+**Alcance**: cierra el último gap de evidencia visual sin verificación independiente. Verifica que la `visual_evidence` reportada por el agente tenga:
+- `screenshot_path` real apuntando a archivo existente
+- hash SHA256 computable y verificable
+- coincidencia con hash declarado (si el agente lo provee)
+
+Detecta agentes que reportan evidencia sin haber capturado realmente el screenshot, o que cambian el archivo entre runs.
+
+### Helper
+
+```python
+report = dispatcher.verify_screenshot_evidence(
+    evidence={"screenshot_path": "qa-evidence/task-1.png", "screenshot_hash": "abc..."},
+    expected_path="qa-evidence/task-1.png",  # opcional
+)
+# {
+#   "verdict": "ok" | "mismatch" | "unverifiable",
+#   "checks": [...], "discrepancies": [...],
+#   "computed_hash": str, "file_exists": bool, "file_size": int,
+# }
+```
+
+### Reglas de severidad
+
+| Caso | Severidad | Verdict |
+|------|-----------|---------|
+| Evidence no es dict / sin path | - | unverifiable |
+| Archivo declarado NO existe | CRITICAL | mismatch (evidencia fantasma) |
+| Hash declarado != computado | CRITICAL | mismatch (tampering) |
+| `expected_path` provisto y difiere | HIGH | mismatch (screenshot incorrecto) |
+| Archivo 0 bytes (vacío) | HIGH | mismatch (screenshot inválido) |
+| Archivo < 1KB | LOW | ok (sospechoso, informativo) |
+| File OK + hash OK (o no declarado) | - | ok |
+
+### Patrón típico de uso (en evidence-collector)
+
+```python
+# 1. Capturar screenshot via Playwright
+screenshot_path = "qa-evidence/task-3-screenshot.png"
+mcp__playwright__browser_take_screenshot(path=screenshot_path)
+
+# 2. Agente reporta evidence en envelope con path
+envelope_evidence = {"screenshot_path": screenshot_path, ...}
+
+# 3. Dispatcher verifica
+report = dispatcher.verify_screenshot_evidence(envelope_evidence)
+if report["verdict"] == "mismatch":
+    # CRITICAL: no se capturo screenshot o fue tamperado
+    return {"status": "FAIL", "bloqueadores": [d["details"] for d in report["discrepancies"]]}
+
+# 4. Caller cachea el hash para futuras verificaciones
+cached_hash = report["computed_hash"]
+```
+
+### Detección de tampering entre runs
+
+Si en QA #1 se cachea hash, y en QA #2 el agente reporta el mismo path con el hash viejo pero el archivo fue modificado → CRITICAL mismatch. El verificador atrapa cambios silenciosos.
+
+### LO QUE 1J.2 NO HACE
+
+- ❌ NO valida que el screenshot sea de la pagina correcta — solo que exista y tenga hash verificable
+- ❌ NO compara contra screenshot "esperado" a nivel de contenido (eso es 1H.3 con LLM-as-judge multimodal)
+- ❌ Archivos pequeños (<1KB) se marcan LOW pero no bloquean
+- ❌ `expected_path` es opcional — sin él, no se verifica que sea el screenshot correcto
+- ❌ Sin path declarado → unverifiable (no detecta evidencia inventada si el agente no menciona path)
+
+---
+
 ## 4.14. Visual Evidence Independent Verification (Bloque 1J.1)
 
 **Alcance**: cierra el gap "honestidad supuesta del agente" sobre `design_intelligence`. El dispatcher **re-invoca el skill independientemente** y compara con lo declarado por el agente. Mismo patrón que `verify_pre_return_audit` (1A.15) pero para design intelligence.
