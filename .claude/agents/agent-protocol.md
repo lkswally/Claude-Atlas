@@ -1097,6 +1097,55 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.12. Anti-Loop INTER-Sesion Contract (Bloque 1I.1)
+
+**Alcance**: extiende `delegation_tracker` (1D.1) con persistencia cross-session via append-only log. Detecta loops que persisten entre sesiones — flags que se "olvidaban" al cerrar sesion ahora se acumulan.
+
+### Helpers
+
+```python
+# Al cerrar trabajo sobre una task o al cerrar sesion:
+dispatcher.record_session_summary(session_id, task_id="atlas/tarea-3")
+
+# Antes de invocar a un subagente con esa task_id:
+result = dispatcher.check_cross_session_loops(task_id, recent_sessions=3)
+# {"verdict": "ok" | "loop_detected", "flags_sticky": {...}, "loop_count": {...}}
+```
+
+### Reglas de stickiness
+
+Para cada flag (`escalation_needed`, `pause_recommended`, `fresh_review_recommended`):
+- Si aparece en **>= 2 de las últimas 3 sesiones** para esa task_id → `*_sticky = True`
+- Si alguna sticky → `verdict = "loop_detected"`
+- Resultado: el orquestador debe **escalar inmediatamente** sin esperar nuevos triggers intra-sesión
+
+### Persistencia
+
+- Archivo: `{project_root}/.pipeline/delegation-history.jsonl`
+- Formato: append-only JSON Lines (una entry por sesión)
+- Cada entry: `{session_id, task_id, timestamp, flags, consecutive_reads, files_modified_count, ...}`
+- Resiliente: lineas malformadas se saltean (fail-open en `_read_history`)
+- Crece append-only — prune manual via futuro helper si se necesita
+
+### Cuándo invocar
+
+| Momento | Helper | Por qué |
+|---------|--------|---------|
+| Tras cada tarea completada en Fase 3 | `record_session_summary(session_id, task_id)` | Snapshot del estado actual para historial |
+| Al cerrar sesión (en orquestador) | `record_session_summary(session_id, task_id=None)` | Snapshot final |
+| Antes de re-delegar a un subagente con task_id | `check_cross_session_loops(task_id)` | Detectar si la task viene loopeando hace sesiones |
+| Si verdict == "loop_detected" | Escalar al usuario | NO seguir reintentando |
+
+### LO QUE 1I.1 NO HACE
+
+- ❌ NO bloquea automáticamente — produce verdict que el agente/orquestador debe consumir
+- ❌ NO purga history vieja — append-only, crece linealmente
+- ❌ Honestidad del task_id supuesta — caller debe usar IDs consistentes entre sesiones (recomendado: `{proyecto}/tarea-{N}` o `{proyecto}/{cajon}`)
+- ❌ Orquestador agente debe leer su md y consultar (capability disponible, no auto-invocada)
+- ❌ NO usa Engram para persistir (decision: file local más simple para análisis local; cross-machine sync futuro)
+
+---
+
 ## 4.11. Visual Fidelity Checker Contract (Bloque 1H.3)
 
 **Alcance**: TERCERA capa de multi-layer QA. Compara visual spec declarada vs evidence reportada por el agente (LLM-as-judge multimodal). Cierra el set de capas QA acordado (1H.1 network + 1H.2 console + 1H.3 visual).
