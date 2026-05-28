@@ -711,6 +711,7 @@ class ATLASDispatcher:
         enforce_helpers: bool = False,
         agent_name: Optional[str] = None,
         try_auto_invoke: bool = False,
+        enforce_design_quality: Optional[bool] = None,
     ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
@@ -733,6 +734,18 @@ class ATLASDispatcher:
         - enforce_helpers=True + agente NO critico: enforcement skipped,
           validacion sigue su curso normal.
         - enforce_helpers=True + agent_name=None: no aplicable, sin enforcement.
+
+        Bloque 1L.2 — design_quality bloqueante (opt-in con default por modo):
+        - enforce_design_quality=None (default):
+            * mode="design_strict" -> True (active por defecto en design_strict)
+            * otros modos -> False (backward compat estricto, sin cambios)
+        - enforce_design_quality=True forzado: rechaza HIGH findings de
+          design_quality_enforcement aunque mode != design_strict (uso avanzado,
+          NO recomendado).
+        - enforce_design_quality=False forzado: skip total (rollback runtime).
+        - Whitelist por brand.style: SOLO fonts canonicos en estilos
+          {brutalism, editorial-raw, neo-grotesque} se degradan HIGH->whitelisted
+          warning. Colors/layouts/etc. NUNCA se whitelistan (anti-disguise).
         """
         # Bloque 1G.2: registrar invocacion
         self._record_invocation(
@@ -845,6 +858,23 @@ class ATLASDispatcher:
                 errores.append("archivos debe ser lista")
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("bloqueadores debe ser lista o null")
+
+        # Bloque 1L.2: design_quality bloqueante con whitelist por brand.style
+        # Resolver default si enforce_design_quality=None
+        if enforce_design_quality is None:
+            effective_enforce_dq = (mode == "design_strict")
+        else:
+            effective_enforce_dq = bool(enforce_design_quality)
+
+        # Permitir rollback runtime via env var
+        if os.environ.get("ATLAS_DESIGN_QUALITY_BLOCKING_DISABLED", "").lower() in ("1", "true", "yes"):
+            effective_enforce_dq = False
+
+        if effective_enforce_dq and response.get("status") == "completado":
+            dq_errores, dq_warnings = self.verify_design_quality(response)
+            errores.extend(dq_errores)
+            if dq_warnings:
+                response.setdefault("_dispatcher_warnings", []).extend(dq_warnings)
 
         # Bloque 1K.3 + 1K.4: Hard Enforcement Escalation con auto-invoke opcional
         # Solo aplica si enforce_helpers=True Y se proveyo agent_name.
@@ -1294,6 +1324,198 @@ class ATLASDispatcher:
                 "note": f"Error en cross-session check: {type(e).__name__}: {e}",
                 "history_entries": [],
             }
+
+    # ============================================================
+    #  Bloque 1L.2: Design Quality Blocking en design_strict
+    # ============================================================
+
+    # Whitelist anti-disguise: SOLO fonts canonicos por estilo declarado.
+    # Colors / layouts / opacity / radius / components NUNCA se whitelistan
+    # (un brutalism real puede usar Helvetica, pero NO un Tailwind blue #3b82f6).
+    STYLE_FONT_WHITELIST: Dict[str, set] = {
+        "brutalism": {"helvetica", "arial", "times new roman"},
+        "editorial-raw": {"helvetica", "times new roman", "verdana"},
+        "neo-grotesque": {"helvetica", "arial"},
+    }
+
+    def _resolve_brand_style(
+        self,
+        response: Dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Bloque 1L.2: resuelve el style declarado.
+        Fuentes (en orden de prioridad):
+        1. response["brand"]["style"]  (inline para tests / overrides)
+        2. response["brand_style"]     (alias corto)
+        3. {project_root}/brand.json -> "style"
+        4. {project_root}/.pipeline/brand.json -> "style"
+
+        Retorna el style normalizado (lowercase + trim) o None.
+        """
+        # Inline en envelope
+        brand_inline = response.get("brand")
+        if isinstance(brand_inline, dict):
+            style = brand_inline.get("style")
+            if isinstance(style, str) and style.strip():
+                return style.strip().lower()
+
+        brand_style_short = response.get("brand_style")
+        if isinstance(brand_style_short, str) and brand_style_short.strip():
+            return brand_style_short.strip().lower()
+
+        # Disco
+        for candidate in (
+            self.project_root / "brand.json",
+            self.project_root / ".pipeline" / "brand.json",
+        ):
+            if not candidate.exists():
+                continue
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                style = data.get("style")
+                if isinstance(style, str) and style.strip():
+                    return style.strip().lower()
+                # Algunos brand.json anidan: {"brand": {"style": ...}}
+                inner = data.get("brand")
+                if isinstance(inner, dict):
+                    style = inner.get("style")
+                    if isinstance(style, str) and style.strip():
+                        return style.strip().lower()
+        return None
+
+    def verify_design_quality(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1L.2: Re-ejecuta design_quality_enforcement sobre los archivos
+        declarados en el envelope y devuelve (errores_bloqueantes, warnings).
+
+        - Por cada archivo en response['archivos']: corre DesignQualityEnforcer.
+        - Filtra HIGH findings por STYLE_FONT_WHITELIST si brand.style se resuelve.
+        - HIGH no-whitelistados -> bloquean (errores).
+        - HIGH whitelistados -> warnings (visibles en _dispatcher_warnings).
+        - MEDIUM/LOW -> warnings informativos.
+
+        Fail-open: si design_quality_enforcement no disponible (import error)
+        retorna ([], []) y deja un warning explicito.
+
+        Args:
+            response: envelope del subagente
+
+        Returns:
+            (errores: List[str], warnings: List[str])
+        """
+        self._record_invocation(
+            "verify_design_quality",
+            context={"archivos_count": len(response.get("archivos") or [])},
+        )
+
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        try:
+            from design_quality_enforcement import DesignQualityEnforcer
+        except ImportError as e:
+            warnings.append(
+                f"design_quality_enforcement no disponible ({type(e).__name__}: {e}). "
+                f"Verificacion 1L.2 skipped."
+            )
+            return errores, warnings
+
+        archivos = response.get("archivos") or []
+        if not isinstance(archivos, list) or not archivos:
+            # Sin archivos para escanear, no bloquea (otros validadores ya
+            # rechazaron envelope si era obligatorio).
+            return errores, warnings
+
+        style = self._resolve_brand_style(response)
+        whitelist_fonts = self.STYLE_FONT_WHITELIST.get(style, set()) if style else set()
+
+        enforcer = DesignQualityEnforcer()
+        scanned = 0
+        skipped: List[str] = []
+        for f in archivos:
+            if not isinstance(f, str):
+                continue
+            path = Path(f)
+            if not path.is_absolute():
+                path = self.project_root / path
+            # Solo extensiones relevantes para evitar escanear binarios/configs
+            suffix = path.suffix.lower()
+            if suffix not in (".css", ".scss", ".sass", ".less",
+                              ".tsx", ".jsx", ".ts", ".js",
+                              ".vue", ".svelte", ".html", ".astro"):
+                skipped.append(f)
+                continue
+            if not path.exists():
+                # No bloqueamos por archivo missing — pre_return_audit /
+                # verify_declared_files ya cubren ese caso en dev_strict.
+                continue
+            findings = enforcer.analyze_file(path)
+            enforcer.findings.extend(findings)
+            scanned += 1
+
+        if scanned == 0:
+            warnings.append(
+                "design_quality: 0 archivos UI escaneados "
+                f"(de {len(archivos)} declarados; skipped por extension: {len(skipped)}). "
+                "Sin enforcement aplicable."
+            )
+            return errores, warnings
+
+        # Particionar HIGH findings: whitelistados vs bloqueantes
+        blocking: List[Any] = []
+        whitelisted: List[Any] = []
+        for finding in enforcer.findings:
+            if finding.severity != "HIGH":
+                continue
+            if (finding.pattern_type == "font"
+                    and finding.pattern.lower() in whitelist_fonts):
+                whitelisted.append(finding)
+            else:
+                blocking.append(finding)
+
+        if whitelisted:
+            warnings.append(
+                f"design_quality: {len(whitelisted)} HIGH finding(s) degradados a "
+                f"warning por whitelist de estilo '{style}' "
+                f"(solo fonts whitelistados): "
+                + ", ".join(
+                    f"{f.pattern}@{f.file_path}:{f.line_number}"
+                    for f in whitelisted
+                )
+            )
+
+        if blocking:
+            # Mensaje accionable: file:line + tipo + sugerencia explicita
+            lines = [
+                f"design_quality (Bloque 1L.2): {len(blocking)} HIGH finding(s) "
+                f"bloquean envelope en mode='design_strict'. "
+                f"Fix obligatorio antes de re-enviar."
+                f"{' Style declarado: ' + style + '.' if style else ' Sin brand.style declarado.'}"
+            ]
+            for f in blocking:
+                lines.append(
+                    f"  - [{f.pattern_type}] '{f.pattern}' @ "
+                    f"{f.file_path or '<unknown>'}:{f.line_number or '?'} "
+                    f"-> {f.suggestion}"
+                )
+            errores.append("\n".join(lines))
+
+        # MEDIUM / LOW como informativos (no bloquean)
+        med = sum(1 for f in enforcer.findings if f.severity == "MEDIUM")
+        low = sum(1 for f in enforcer.findings if f.severity == "LOW")
+        if med or low:
+            warnings.append(
+                f"design_quality: {med} MEDIUM + {low} LOW findings "
+                f"(no bloquean, pero conviene revisar)."
+            )
+
+        return errores, warnings
 
     # ============================================================
     #  Bloque 1L.1: Intent Classifier (Design Criterion Hardening)
