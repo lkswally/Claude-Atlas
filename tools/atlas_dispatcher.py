@@ -712,6 +712,7 @@ class ATLASDispatcher:
         agent_name: Optional[str] = None,
         try_auto_invoke: bool = False,
         enforce_design_quality: Optional[bool] = None,
+        enforce_references: Optional[bool] = None,
     ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
@@ -734,6 +735,20 @@ class ATLASDispatcher:
         - enforce_helpers=True + agente NO critico: enforcement skipped,
           validacion sigue su curso normal.
         - enforce_helpers=True + agent_name=None: no aplicable, sin enforcement.
+
+        Bloque 1L.3 — reference-driven-design obligatorio (opt-in con default por modo):
+        - enforce_references=None (default):
+            * mode="design_strict" -> True (active por defecto)
+            * otros modos -> False (backward compat estricto)
+        - enforce_references=True/False forzados -> override explicito.
+        - Env var ATLAS_REFERENCES_ENFORCEMENT_DISABLED=1 desactiva runtime.
+        - Schema validado:
+            * brand.references: list de 2..5 entries
+            * cada entry: {url:str, rationale:str (>=10 chars),
+                           take:[str] no-vacio, skip:[str] opcional}
+        - ui-designer: response.references_used: [url] no-vacio Y subset de
+          brand.references URLs.
+        - NO se valida URL vivo (no HTTP en runtime — fuera de scope).
 
         Bloque 1L.2 — design_quality bloqueante (opt-in con default por modo):
         - enforce_design_quality=None (default):
@@ -875,6 +890,21 @@ class ATLASDispatcher:
             errores.extend(dq_errores)
             if dq_warnings:
                 response.setdefault("_dispatcher_warnings", []).extend(dq_warnings)
+
+        # Bloque 1L.3: references obligatorias en design_strict
+        if enforce_references is None:
+            effective_enforce_refs = (mode == "design_strict")
+        else:
+            effective_enforce_refs = bool(enforce_references)
+
+        if os.environ.get("ATLAS_REFERENCES_ENFORCEMENT_DISABLED", "").lower() in ("1", "true", "yes"):
+            effective_enforce_refs = False
+
+        if effective_enforce_refs and response.get("status") == "completado":
+            ref_errores, ref_warnings = self.verify_references(response)
+            errores.extend(ref_errores)
+            if ref_warnings:
+                response.setdefault("_dispatcher_warnings", []).extend(ref_warnings)
 
         # Bloque 1K.3 + 1K.4: Hard Enforcement Escalation con auto-invoke opcional
         # Solo aplica si enforce_helpers=True Y se proveyo agent_name.
@@ -1516,6 +1546,278 @@ class ATLASDispatcher:
             )
 
         return errores, warnings
+
+    # ============================================================
+    #  Bloque 1L.3: reference-driven-design obligatorio
+    # ============================================================
+
+    REFERENCES_MIN = 2
+    REFERENCES_MAX = 5
+    REFERENCE_RATIONALE_MIN_CHARS = 10
+    REFERENCE_URL_MIN_CHARS = 4  # ej: "x.io"
+
+    def _resolve_brand_references(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[Optional[List[Dict[str, Any]]], str]:
+        """
+        Bloque 1L.3: resuelve la lista de references desde varias fuentes,
+        en orden de prioridad:
+
+        1. response["brand"]["references"]  (inline)
+        2. response["references"]           (alias short)
+        3. {project_root}/brand.json -> "references"
+           (o brand.json -> "brand" -> "references" si esta anidado)
+        4. {project_root}/.pipeline/brand.json idem
+
+        Returns:
+            (references: List[dict] | None, origin: str)
+            origin in {"inline-brand", "inline-references", "disk:brand.json",
+                       "disk:.pipeline/brand.json", "missing"}
+        """
+        # Si el campo existe pero NO es lista, lo devolvemos como esta y
+        # verify_references reporta "debe ser lista" en vez de "ausente".
+        brand_inline = response.get("brand")
+        if isinstance(brand_inline, dict):
+            if "references" in brand_inline:
+                return brand_inline.get("references"), "inline-brand"
+
+        if "references" in response:
+            return response.get("references"), "inline-references"
+
+        for candidate, origin in (
+            (self.project_root / "brand.json", "disk:brand.json"),
+            (self.project_root / ".pipeline" / "brand.json", "disk:.pipeline/brand.json"),
+        ):
+            if not candidate.exists():
+                continue
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            if "references" in data:
+                return data.get("references"), origin
+            inner = data.get("brand")
+            if isinstance(inner, dict) and "references" in inner:
+                return inner.get("references"), origin
+
+        return None, "missing"
+
+    def verify_references(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1L.3: valida que brand.references este presente, bien formado
+        y que (si es ui-designer envelope) references_used cite un subset.
+
+        Retorna (errores_bloqueantes, warnings).
+
+        REGLAS:
+        - references debe ser lista de 2..5 entries.
+        - Cada entry:
+            * url: str no-vacio (>=4 chars), contiene "." o "://" (heuristica
+              minima, NO http check)
+            * rationale: str (>=10 chars)
+            * take: list[str] con al menos 1 string no-vacio
+            * skip: opcional, si presente debe ser list[str]
+        - references_used (cuando aplica, ie agente UI):
+            * presente como list[str] no-vacio
+            * cada URL DEBE estar en references (subset)
+
+        NOTA: ui-designer SIEMPRE debe citar references_used. Para detectar
+        si el envelope es ui-designer, miramos response['agent'] o
+        response['design_intelligence'].queried (heuristica suave). Si no
+        podemos decidir, solo se valida que references_used (si esta) sea
+        consistente, sin obligar a estar presente.
+        """
+        self._record_invocation(
+            "verify_references",
+            context={"has_inline_brand": isinstance(response.get("brand"), dict)},
+        )
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        refs, origin = self._resolve_brand_references(response)
+
+        if refs is None:
+            errores.append(
+                "design_strict (Bloque 1L.3): brand.references ausente. "
+                "Requerido: lista de 2..5 entries. "
+                "Fuentes admitidas: response.brand.references, response.references, "
+                "{root}/brand.json, {root}/.pipeline/brand.json."
+            )
+            return errores, warnings
+
+        if not isinstance(refs, list):
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references debe ser lista; "
+                f"recibido {type(refs).__name__} ({origin})."
+            )
+            return errores, warnings
+
+        n = len(refs)
+        if n < self.REFERENCES_MIN:
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references tiene {n} entries; "
+                f"minimo {self.REFERENCES_MIN}. Origen: {origin}."
+            )
+            return errores, warnings
+        if n > self.REFERENCES_MAX:
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references tiene {n} entries; "
+                f"maximo {self.REFERENCES_MAX}. Acotar a las mas relevantes. "
+                f"Origen: {origin}."
+            )
+            return errores, warnings
+
+        # Validar shape de cada entry
+        bad_entries: List[str] = []
+        seen_urls: List[str] = []
+        for idx, entry in enumerate(refs):
+            if not isinstance(entry, dict):
+                bad_entries.append(
+                    f"  - entry[{idx}]: no es dict (recibido {type(entry).__name__})"
+                )
+                continue
+
+            url = entry.get("url")
+            rationale = entry.get("rationale")
+            take = entry.get("take")
+            skip = entry.get("skip")
+
+            entry_errs: List[str] = []
+            if not isinstance(url, str) or len(url.strip()) < self.REFERENCE_URL_MIN_CHARS:
+                entry_errs.append(
+                    f"url ausente o invalido (recibido: {url!r})"
+                )
+            elif ("." not in url) and ("://" not in url):
+                entry_errs.append(
+                    f"url '{url}' no parece URL (sin '.' ni '://')"
+                )
+            else:
+                seen_urls.append(url.strip())
+
+            if not isinstance(rationale, str) or len(rationale.strip()) < self.REFERENCE_RATIONALE_MIN_CHARS:
+                entry_errs.append(
+                    f"rationale ausente o < {self.REFERENCE_RATIONALE_MIN_CHARS} chars "
+                    f"(recibido: {rationale!r})"
+                )
+
+            if not isinstance(take, list) or not take:
+                entry_errs.append(
+                    f"take debe ser lista no-vacia (recibido: {take!r})"
+                )
+            else:
+                non_empty = [t for t in take if isinstance(t, str) and t.strip()]
+                if not non_empty:
+                    entry_errs.append(
+                        "take debe tener al menos 1 string no-vacio"
+                    )
+
+            if skip is not None and not isinstance(skip, list):
+                entry_errs.append(
+                    f"skip (opcional) debe ser lista si esta presente "
+                    f"(recibido: {type(skip).__name__})"
+                )
+
+            if entry_errs:
+                bad_entries.append(
+                    f"  - entry[{idx}] (url={url!r}): " + "; ".join(entry_errs)
+                )
+
+        if bad_entries:
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references tiene "
+                f"{len(bad_entries)} entries con shape invalido (origen: {origin}):\n"
+                + "\n".join(bad_entries)
+            )
+            return errores, warnings
+
+        # Detectar duplicados de URL (warning, no bloqueo)
+        if len(seen_urls) != len(set(seen_urls)):
+            warnings.append(
+                "brand.references contiene URLs duplicadas — revisar."
+            )
+
+        # Validar references_used si esta presente
+        used = response.get("references_used")
+        is_ui_agent = self._looks_like_ui_designer(response)
+
+        if used is None:
+            if is_ui_agent:
+                errores.append(
+                    "design_strict (Bloque 1L.3): ui-designer envelope no "
+                    "incluye references_used. Requerido: lista no-vacia de "
+                    "URLs citadas de brand.references."
+                )
+            # Si no parece ui-designer (ej brand-agent generando el brief),
+            # no es obligatorio que cite.
+            return errores, warnings
+
+        if not isinstance(used, list):
+            errores.append(
+                f"design_strict (Bloque 1L.3): references_used debe ser lista; "
+                f"recibido {type(used).__name__}."
+            )
+            return errores, warnings
+
+        if not used:
+            errores.append(
+                "design_strict (Bloque 1L.3): references_used vacio. "
+                "ui-designer debe citar al menos 1 URL de brand.references."
+            )
+            return errores, warnings
+
+        valid_urls = {
+            entry["url"].strip()
+            for entry in refs
+            if isinstance(entry, dict) and isinstance(entry.get("url"), str)
+        }
+        out_of_set: List[str] = []
+        for u in used:
+            if not isinstance(u, str):
+                out_of_set.append(repr(u))
+                continue
+            if u.strip() not in valid_urls:
+                out_of_set.append(u)
+
+        if out_of_set:
+            errores.append(
+                f"design_strict (Bloque 1L.3): references_used contiene URLs "
+                f"que NO estan en brand.references: {out_of_set}. "
+                f"references_used debe ser subset estricto."
+            )
+
+        return errores, warnings
+
+    def _looks_like_ui_designer(self, response: Dict[str, Any]) -> bool:
+        """
+        Bloque 1L.3: heuristica suave para detectar si el envelope viene de
+        ui-designer (o equivalente) y por tanto debe citar references_used.
+
+        Senales (cualquiera suficiente):
+        - response['agent'] in {"ui-designer", "ux-architect"}
+        - response['design_intelligence'].queried == True
+        - response['references_used'] esta presente (lista o no)
+        - cajon engram menciona 'design-system' o 'visual-direction'
+        """
+        agent = response.get("agent")
+        if isinstance(agent, str) and agent.lower() in ("ui-designer", "ux-architect"):
+            return True
+        di = response.get("design_intelligence")
+        if isinstance(di, dict) and di.get("queried") is True:
+            return True
+        if "references_used" in response:
+            return True
+        cajon = response.get("engram", "")
+        if isinstance(cajon, str):
+            low = cajon.lower()
+            if "design-system" in low or "visual-direction" in low or "ui-designer" in low:
+                return True
+        return False
 
     # ============================================================
     #  Bloque 1L.1: Intent Classifier (Design Criterion Hardening)

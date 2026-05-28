@@ -27,8 +27,20 @@ if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
 
+def _valid_refs_l2():
+    """References minimas validas para que 1L.3 no bloquee tests 1L.2."""
+    return [
+        {
+            "url": f"https://l2ref-{i}.com",
+            "rationale": f"referencia valida para test 1L.2 numero {i}",
+            "take": ["palette"],
+        }
+        for i in range(2)
+    ]
+
+
 def _make_envelope_completado(archivos, **extra):
-    """Envelope base con todo lo que design_strict + 1C.1 piden para que
+    """Envelope base con todo lo que design_strict + 1C.1 + 1L.3 piden para que
     SOLO 1L.2 sea la barrera (o no)."""
     base = {
         "status": "completado",
@@ -44,7 +56,12 @@ def _make_envelope_completado(archivos, **extra):
             "results_used": ["style.editorial-raw"],
             "decisions_referenced": {"fonts": "Fraunces"},
         },
+        # Bloque 1L.3: references obligatorias
+        "references": _valid_refs_l2(),
+        "references_used": ["https://l2ref-0.com"],
     }
+    # Si extra incluye brand, no sobreescribir references inline
+    # (algun test puede querer style sin references)
     base.update(extra)
     return base
 
@@ -157,11 +174,17 @@ class TestDesignQualityBlocking(unittest.TestCase):
         # Apuntamos project_root temporalmente al test_dir para no contaminar repo.
         original_root = self.dispatcher.project_root
         brand_path = self.test_dir / "brand.json"
-        brand_path.write_text(json.dumps({"style": "neo-grotesque"}), encoding="utf-8")
+        brand_path.write_text(json.dumps({
+            "style": "neo-grotesque",
+            "references": _valid_refs_l2(),
+        }), encoding="utf-8")
         self.dispatcher.project_root = self.test_dir
         try:
             css = self._write("ng.css", "body { font-family: 'Arial', sans-serif; }")
             env = _make_envelope_completado([css])
+            # Quitar brand y references inline para forzar lectura de disco
+            env.pop("brand", None)
+            env.pop("references", None)
             ok, errores = self.dispatcher.validate_return_envelope(env, mode="design_strict")
             self.assertTrue(ok, f"neo-grotesque+arial should pass; errores={errores}")
         finally:
