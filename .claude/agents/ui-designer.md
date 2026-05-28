@@ -502,6 +502,29 @@ design_intelligence:
 
 **Sin este campo, el dispatcher rechaza el envelope en `mode="design_strict"`**. Si la skill no está disponible (`SkillsInvocation.is_available() == False`), NO emitir output con defaults — reportar bloqueador y `STATUS: fallido`.
 
+### Reference-driven design enforcement (Bloque 1L.3)
+
+**Obligatorio en `mode="design_strict"`**: el envelope DEBE incluir `references_used` citando URLs de `brand.json.references`.
+
+```yaml
+references_used:
+  - "https://refsite-1.com"   # URL exacta de brand.json.references
+  - "https://refsite-2.com"   # debe ser subset estricto
+```
+
+Reglas que el dispatcher aplica:
+- `references_used` debe ser **lista no vacía** de strings
+- Cada URL DEBE estar en `brand.json.references[].url` (subset estricto, no inventar)
+- Si `brand.references` no tiene 2-5 entries válidos, el envelope se rechaza antes de mirar `references_used` — pedir a brand-agent que complete primero
+- No basta con listar: el design system producido DEBE derivar elementos de cada URL citada (paleta, typography mix, layout, etc.)
+
+**Cómo citar honestamente**:
+- Solo citar URLs cuyos `take[]` realmente se aplicaron en el design system
+- Si una referencia del brand no se usó, NO citarla (no inflar)
+- Si ninguna referencia del brand sirvió, devolver `STATUS: fallido` + BLOQUEADOR pidiendo nuevas referencias al brand-agent
+
+**Anti-disguise**: citar referencias no compensa fonts/colores genéricos. El detector de design_quality (Bloque 1L.2) sigue activo en paralelo.
+
 ## Tools
 - Read
 - Write

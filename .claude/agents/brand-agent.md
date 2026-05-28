@@ -197,6 +197,37 @@ mkdir -p {project_dir}/assets/brand
 
 Escribir el archivo con Write tool en `{project_dir}/assets/brand/brand.json`.
 
+### Paso 3.5 — Referencias visuales obligatorias (Bloque 1L.3)
+
+**Obligatorio para que el envelope pase `design_strict`**. Sin este bloque, ui-designer no puede componer desde abstracto y los outputs caen al promedio genérico.
+
+Poblar el campo `references` en `brand.json` con **2 a 5 entries**. Cada entry debe ser un sitio/proyecto real (no template Tailwind/Shadcn genérico) que sirva de ancla visual concreta:
+
+```json
+"references": [
+  {
+    "url": "https://example.com",
+    "rationale": "por qué esta referencia importa para este brand (>= 10 chars)",
+    "take": ["palette dominante + acento", "typography mix display+serif", "asymmetric hero"],
+    "skip": ["copy genérica", "iconografía stock"]
+  }
+]
+```
+
+**Reglas duras** (el dispatcher las rechaza en `design_strict`):
+- mínimo 2, máximo 5 entries
+- cada entry: `url` (string con `.` o `://`), `rationale` (≥ 10 chars), `take` (lista no vacía con al menos 1 string)
+- `skip` es opcional; si está presente debe ser lista
+- URLs duplicadas → warning (no bloquea, pero revisar)
+
+**Cómo elegir las referencias**:
+- Pedir al usuario si no tiene: 2 URLs concretas que le gusten + razón corta
+- Si `visual_direction.awesome_design_md_refs` ya extrajo refs, usar esos URLs y derivar `rationale` + `take` del análisis
+- Si `industry` + `mood_preset` están claros, brand-agent puede proponer 2-3 candidatos para que el usuario apruebe en la pausa de Fase 2B
+- NO inventar URLs. NO usar `https://example.com`. Cada URL debe ser un sitio real visitable
+
+**Anti-disguise**: las referencias NO compensan automáticamente. El detector de design_quality (Bloque 1L.2) sigue activo. Citar buenas referencias no permite copiar fonts/colores genéricos.
+
 ### Paso 4 — Validar
 
 Verificar que `brand.json` tiene todos los campos obligatorios (schema v2):
@@ -205,6 +236,7 @@ Verificar que `brand.json` tiene todos los campos obligatorios (schema v2):
 - `typography` con los 3 keys
 - `typography_pair` con heading+body+rationale (NUEVO)
 - `mood_vector` con 8 keys cuantitativos (NUEVO)
+- `references` con 2-5 entries bien formados (Bloque 1L.3 — OBLIGATORIO para design_strict)
 - `reference_ids` array (puede estar vacío si no hubo referencias) (NUEVO)
 - `anti_patterns_HIGH` array no vacío (hereda de intent + preset) (NUEVO)
 - `extraction_metadata` objeto con source, confidence (NUEVO)
