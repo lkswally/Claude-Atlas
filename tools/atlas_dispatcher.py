@@ -24,6 +24,12 @@ try:
 except ImportError:
     _audit_files = None  # disponible solo si pre_return_audit.py esta presente
 
+# Bloque 1L.1: Intent Classifier (opt-in, default ON)
+try:
+    from intent_classifier import classify_user_intent as _classify_user_intent
+except ImportError:
+    _classify_user_intent = None  # disponible solo si intent_classifier.py esta presente
+
 # Bloque 1B.1: Engram Strategy Pattern (preparacion para MCP real en 1B.2)
 # Por defecto se usa DiskFallbackStrategy — NO es Engram real, es disk fallback.
 # El orquestador puede inyectar un callback (CallbackStrategy) que conecte
@@ -97,6 +103,16 @@ class ATLASDispatcher:
         # Valores: "active" | "disabled_by_env" | "disabled_by_param" |
         #          "unavailable: {reason}" | "disabled_default"
         self.engram_mcp_status: str = "disabled_default"
+
+        # Bloque 1L.1: Intent Classifier (opt-in via env var)
+        # Default ON si _classify_user_intent fue importado.
+        # Desactivable con ATLAS_INTENT_CLASSIFIER_DISABLED=1
+        intent_disabled = os.environ.get(
+            "ATLAS_INTENT_CLASSIFIER_DISABLED", ""
+        ).lower() in ("1", "true", "yes")
+        self.intent_classifier_enabled: bool = bool(
+            _classify_user_intent is not None and not intent_disabled
+        )
 
         # Bloque 1B.5: auto-enable de Engram MCP al construir.
         # Decision matrix:
@@ -1280,6 +1296,74 @@ class ATLASDispatcher:
             }
 
     # ============================================================
+    #  Bloque 1L.1: Intent Classifier (Design Criterion Hardening)
+    # ============================================================
+
+    def classify_user_intent(
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1L.1: Clasifica el prompt del usuario en uno de 4 buckets
+        antes de delegar a project-manager-senior.
+
+        Buckets: audit | redesign | implement | validate
+
+        Comportamiento:
+        - Si intent_classifier_enabled=False -> devuelve resultado neutro
+          (intent=None, confidence=low, rationale=disabled).
+        - Si modulo no importado -> idem disabled.
+        - Si confidence='low' -> el orquestador DEBE escalar al usuario con
+          escalation_question.
+
+        Args:
+            prompt: texto del usuario (string).
+            context: dict opcional con DAG state (reservado para futuro).
+
+        Returns:
+            dict con shape (ver intent_classifier.classify_user_intent):
+            {"intent", "confidence", "signals", "fallback_intent",
+             "rationale", "escalation_question"}
+        """
+        self._record_invocation(
+            "classify_user_intent",
+            context={
+                "enabled": self.intent_classifier_enabled,
+                "prompt_len": len(prompt) if isinstance(prompt, str) else 0,
+            },
+        )
+
+        if not self.intent_classifier_enabled or _classify_user_intent is None:
+            return {
+                "intent": None,
+                "confidence": "low",
+                "signals": [],
+                "fallback_intent": None,
+                "rationale": (
+                    "intent_classifier disabled "
+                    f"(enabled={self.intent_classifier_enabled}, "
+                    f"module_imported={_classify_user_intent is not None})"
+                ),
+                "escalation_question": None,
+            }
+
+        try:
+            return _classify_user_intent(prompt, context=context)
+        except Exception as e:
+            # Fail-open: no romper el pipeline si el classifier falla
+            return {
+                "intent": None,
+                "confidence": "low",
+                "signals": [],
+                "fallback_intent": None,
+                "rationale": (
+                    f"intent_classifier raised {type(e).__name__}: {e}"
+                ),
+                "escalation_question": None,
+            }
+
+    # ============================================================
     #  Bloque 1G.2: Runtime Invocation Tracking
     # ============================================================
 
@@ -2341,7 +2425,7 @@ def main():
     """Punto de entrada del dispatcher"""
     if len(sys.argv) < 2:
         print("Uso: python tools/atlas_dispatcher.py <command> [args...]")
-        print("Comandos: check-phase FROM_PHASE TO_PHASE, validate-envelope, report")
+        print("Comandos: check-phase FROM_PHASE TO_PHASE, validate-envelope, report, classify-intent, audit-agent")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -2379,6 +2463,24 @@ def main():
             result = json.load(sys.stdin)
             report = dispatcher.report(sys.argv[2] if len(sys.argv) > 2 else "unknown", result)
             print(json.dumps(report, ensure_ascii=False, indent=2))
+
+        elif command == "classify-intent":
+            # Bloque 1L.1: clasifica intent del prompt del usuario.
+            # Usage:
+            #   python tools/atlas_dispatcher.py classify-intent "<prompt>"
+            #   echo "<prompt>" | python tools/atlas_dispatcher.py classify-intent -
+            if len(sys.argv) < 3:
+                print(json.dumps({
+                    "ok": False,
+                    "error": "missing prompt argument (use '-' to read from stdin)",
+                }, ensure_ascii=False), file=sys.stderr)
+                sys.exit(1)
+            if sys.argv[2] == "-":
+                prompt = sys.stdin.read()
+            else:
+                prompt = " ".join(sys.argv[2:])
+            result = dispatcher.classify_user_intent(prompt)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
 
         elif command == "audit-agent":
             # Bloque 1K.1: usado por hook PostToolUse para auditar helpers
