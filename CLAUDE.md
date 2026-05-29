@@ -87,17 +87,25 @@ ATLAS pasó por 23 bloques de mejora consolidados en `main` el 2026-05-21. Capab
 ### Auto-Audit Hook (serie 1K)
 - **QA Auto-Audit PostToolUse Hook** (1K.1) — al terminar subagent spawn, audita automáticamente helpers obligatorios y emite WARN si faltan
 
+### Design Criterion Hardening (serie 1L — branch `feature/1L-design-criterion`, pendiente merge a main)
+- **Intent Classifier** (1L.1) — `classify_user_intent(prompt)` clasifica el pedido en 4 buckets (audit/redesign/implement/validate) con confidence high/medium/low. En `low` escala al usuario. Heurística pura ES+EN, sin LLM.
+- **design_quality bloqueante en design_strict** (1L.2) — HIGH findings rechazan envelope con error accionable (file:line + suggestion). Whitelist anti-disguise por `brand.style`: solo fonts canónicas en {brutalism, editorial-raw, neo-grotesque} se degradan. Colors / layouts / opacity / radius **nunca** se whitelistan.
+- **reference-driven-design obligatorio** (1L.3) — `brand.references` schema estricto (2-5 entries con `url`, `rationale`≥10 chars, `take[]` no-vacío). ui-designer DEBE citar `references_used` como subset estricto. NO se valida URL viva.
+- **Refuerzo editorial obligatorio** (1L.4) — `editorial_compliance` con 5 sub-campos verificables: asymmetric_section, typography_mix (anti-monotypo: display≠body), references_cited (subset de references_used), boilerplate_avoided, whitespace_intentional. Rationales ≥20 chars (anti-teatro).
+- **Cascada en design_strict**: 1C.1 → 1L.2 → 1L.3 → 1L.4 → 1K.3/1K.4 (si aplica). Backward compat estricto en otros modos.
+- **Rollback por capas**: param `enforce_*=False`, env vars `ATLAS_*_DISABLED=1`, git revert por sub-bloque, o `git reset --hard pre-1L-criterion`.
+
 ### Tests operativos
 218+ tests en `_qa/` cubriendo todos los bloques. Regression sweep en main consolidado: **100% verde**.
 
-### Helpers públicos del dispatcher (16)
-`validate_return_envelope(mode)`, `verify_pre_return_audit`, `verify_declared_files`, `verify_design_intelligence`, `verify_design_intelligence_real`, `verify_screenshot_evidence`, `consult_design_intelligence`, `get_cajon_full`, `resolve_ambiguous_project`, `should_skip_qa`, `cache_qa_result`, `run_certification_re_runs`, `inspect_network_requests`, `analyze_console_messages`, `check_visual_fidelity`, `record_session_summary`, `check_cross_session_loops`, `audit_invocations`, `audit_helpers_for_agent`.
+### Helpers públicos del dispatcher (20)
+`validate_return_envelope(mode)`, `verify_pre_return_audit`, `verify_declared_files`, `verify_design_intelligence`, `verify_design_intelligence_real`, `verify_screenshot_evidence`, `consult_design_intelligence`, `get_cajon_full`, `resolve_ambiguous_project`, `should_skip_qa`, `cache_qa_result`, `run_certification_re_runs`, `inspect_network_requests`, `analyze_console_messages`, `check_visual_fidelity`, `record_session_summary`, `check_cross_session_loops`, `audit_invocations`, `audit_helpers_for_agent`, `classify_user_intent` (1L.1), `verify_design_quality` (1L.2), `verify_references` (1L.3), `verify_editorial_compliance` (1L.4).
 
 ### Modos de validate_return_envelope
 - `standard` — validación suave (creativos, utilidades)
 - `qa_strict` — evidence-collector con PASS/FAIL exclusivos + archivos no-vacíos
 - `dev_strict` — dev-agents con pre_return_audit + file declaration superset
-- `design_strict` — ux-architect/ui-designer con design_intelligence.queried=true
+- `design_strict` — ux-architect/ui-designer con design_intelligence + 1L.2 + 1L.3 + 1L.4 (cascada completa)
 
 ### Hooks operativos
 13 hooks pre-existentes + 2 nuevos (1D.1 `delegation-tracker.js`, 1K.1 `qa-auto-audit.js`).

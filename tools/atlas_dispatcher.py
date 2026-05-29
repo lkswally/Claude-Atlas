@@ -713,6 +713,7 @@ class ATLASDispatcher:
         try_auto_invoke: bool = False,
         enforce_design_quality: Optional[bool] = None,
         enforce_references: Optional[bool] = None,
+        enforce_editorial_compliance: Optional[bool] = None,
     ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
@@ -735,6 +736,20 @@ class ATLASDispatcher:
         - enforce_helpers=True + agente NO critico: enforcement skipped,
           validacion sigue su curso normal.
         - enforce_helpers=True + agent_name=None: no aplicable, sin enforcement.
+
+        Bloque 1L.4 — refuerzo editorial obligatorio (opt-in con default por modo):
+        - enforce_editorial_compliance=None (default):
+            * mode="design_strict" + envelope parece ui-designer -> True
+            * otros casos -> False (backward compat)
+        - Env var ATLAS_EDITORIAL_ENFORCEMENT_DISABLED=1 desactiva runtime.
+        - Schema editorial_compliance obligatorio:
+            * asymmetric_section: {present, where, rationale (>=20 chars)}
+            * typography_mix: {display, body, justified}; display!=body
+            * references_cited: lista de URLs, subset de references_used
+            * boilerplate_avoided: {explained (>=20 chars)}
+            * whitespace_intentional: {documented: bool=True}
+        - Anti-teatro: rationale/explained con < 20 chars REJECT.
+        - Anti-monotypo: display == body REJECT.
 
         Bloque 1L.3 — reference-driven-design obligatorio (opt-in con default por modo):
         - enforce_references=None (default):
@@ -905,6 +920,24 @@ class ATLASDispatcher:
             errores.extend(ref_errores)
             if ref_warnings:
                 response.setdefault("_dispatcher_warnings", []).extend(ref_warnings)
+
+        # Bloque 1L.4: editorial_compliance obligatorio en design_strict para ui-designer
+        if enforce_editorial_compliance is None:
+            effective_enforce_ec = (
+                mode == "design_strict"
+                and self._looks_like_ui_designer(response)
+            )
+        else:
+            effective_enforce_ec = bool(enforce_editorial_compliance)
+
+        if os.environ.get("ATLAS_EDITORIAL_ENFORCEMENT_DISABLED", "").lower() in ("1", "true", "yes"):
+            effective_enforce_ec = False
+
+        if effective_enforce_ec and response.get("status") == "completado":
+            ec_errores, ec_warnings = self.verify_editorial_compliance(response)
+            errores.extend(ec_errores)
+            if ec_warnings:
+                response.setdefault("_dispatcher_warnings", []).extend(ec_warnings)
 
         # Bloque 1K.3 + 1K.4: Hard Enforcement Escalation con auto-invoke opcional
         # Solo aplica si enforce_helpers=True Y se proveyo agent_name.
@@ -1818,6 +1851,217 @@ class ATLASDispatcher:
             if "design-system" in low or "visual-direction" in low or "ui-designer" in low:
                 return True
         return False
+
+    # ============================================================
+    #  Bloque 1L.4: Refuerzo editorial obligatorio
+    # ============================================================
+
+    EDITORIAL_RATIONALE_MIN_CHARS = 20
+    EDITORIAL_REQUIRED_KEYS = (
+        "asymmetric_section",
+        "typography_mix",
+        "references_cited",
+        "boilerplate_avoided",
+        "whitespace_intentional",
+    )
+
+    def verify_editorial_compliance(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1L.4: valida que el envelope de ui-designer incluya
+        editorial_compliance con compromisos verificables (no teatro).
+
+        Reglas duras (todas rechazan envelope):
+        1. campo editorial_compliance presente y dict
+        2. 5 sub-campos obligatorios: asymmetric_section, typography_mix,
+           references_cited, boilerplate_avoided, whitespace_intentional
+        3. asymmetric_section:
+            - present: bool
+            - where: str no-vacio
+            - rationale: str >= EDITORIAL_RATIONALE_MIN_CHARS (anti-teatro)
+        4. typography_mix:
+            - display: str no-vacio
+            - body: str no-vacio
+            - display.lower() != body.lower() (anti-monotypo: Inter+Inter REJECT)
+            - justified: bool == True (si False, debe justificarse en notas
+              -- no soportado en 1L.4, simple True)
+        5. references_cited:
+            - list[str] no-vacia
+            - subset estricto de response.references_used
+        6. boilerplate_avoided:
+            - explained: str >= EDITORIAL_RATIONALE_MIN_CHARS
+        7. whitespace_intentional:
+            - documented: bool == True
+
+        Returns:
+            (errores: List[str], warnings: List[str])
+        """
+        self._record_invocation(
+            "verify_editorial_compliance",
+            context={
+                "has_ec": "editorial_compliance" in response,
+                "has_ru": "references_used" in response,
+            },
+        )
+
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        ec = response.get("editorial_compliance")
+        if ec is None:
+            errores.append(
+                "design_strict (Bloque 1L.4): editorial_compliance ausente. "
+                "ui-designer DEBE incluir editorial_compliance con 5 sub-campos: "
+                + ", ".join(self.EDITORIAL_REQUIRED_KEYS) + "."
+            )
+            return errores, warnings
+
+        if not isinstance(ec, dict):
+            errores.append(
+                f"design_strict (Bloque 1L.4): editorial_compliance debe ser dict; "
+                f"recibido {type(ec).__name__}."
+            )
+            return errores, warnings
+
+        missing = [k for k in self.EDITORIAL_REQUIRED_KEYS if k not in ec]
+        if missing:
+            errores.append(
+                f"design_strict (Bloque 1L.4): editorial_compliance falta sub-campos: "
+                f"{missing}."
+            )
+            # Continuamos validando los presentes (mas info accionable)
+
+        # --- asymmetric_section -----------------------------------------
+        asym = ec.get("asymmetric_section")
+        if isinstance(asym, dict):
+            asym_errs = []
+            if not isinstance(asym.get("present"), bool):
+                asym_errs.append("present debe ser bool")
+            where = asym.get("where")
+            if not isinstance(where, str) or not where.strip():
+                asym_errs.append("where ausente o vacio (donde aplica la asimetria)")
+            rationale = asym.get("rationale")
+            if not isinstance(rationale, str) or len(rationale.strip()) < self.EDITORIAL_RATIONALE_MIN_CHARS:
+                asym_errs.append(
+                    f"rationale debe ser str >= {self.EDITORIAL_RATIONALE_MIN_CHARS} chars "
+                    f"(anti-teatro). Recibido: {rationale!r}"
+                )
+            if asym.get("present") is False:
+                # Layout simetrico SIN justificacion -> REJECT
+                # Si es simetrico intencional, rationale debe explicarlo (y ya pasa el >=20 chars)
+                # Solo bloqueamos si rationale no convence (heuristica simple: presencia)
+                pass
+            if asym_errs:
+                errores.append(
+                    "design_strict (Bloque 1L.4) asymmetric_section: "
+                    + "; ".join(asym_errs)
+                )
+        elif "asymmetric_section" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): asymmetric_section debe ser dict; "
+                f"recibido {type(asym).__name__}."
+            )
+
+        # --- typography_mix ---------------------------------------------
+        typo = ec.get("typography_mix")
+        if isinstance(typo, dict):
+            typo_errs = []
+            display = typo.get("display")
+            body = typo.get("body")
+            justified = typo.get("justified")
+            if not isinstance(display, str) or not display.strip():
+                typo_errs.append("display ausente o vacio")
+            if not isinstance(body, str) or not body.strip():
+                typo_errs.append("body ausente o vacio")
+            if (isinstance(display, str) and isinstance(body, str)
+                    and display.strip().lower() == body.strip().lower()):
+                typo_errs.append(
+                    f"display ('{display}') == body ('{body}'). "
+                    f"Anti-monotypo: ui-designer debe mezclar al menos 2 familias distintas."
+                )
+            if not isinstance(justified, bool) or justified is not True:
+                typo_errs.append(
+                    "justified debe ser bool=True (el ui-designer afirma haber "
+                    "justificado el mix tipografico contra brand.references)."
+                )
+            if typo_errs:
+                errores.append(
+                    "design_strict (Bloque 1L.4) typography_mix: "
+                    + "; ".join(typo_errs)
+                )
+        elif "typography_mix" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): typography_mix debe ser dict; "
+                f"recibido {type(typo).__name__}."
+            )
+
+        # --- references_cited (alineado con references_used) -----------
+        refs_cited = ec.get("references_cited")
+        if "references_cited" in ec:
+            if not isinstance(refs_cited, list):
+                errores.append(
+                    f"design_strict (Bloque 1L.4): references_cited debe ser lista; "
+                    f"recibido {type(refs_cited).__name__}."
+                )
+            elif not refs_cited:
+                errores.append(
+                    "design_strict (Bloque 1L.4): references_cited vacio. "
+                    "Debe contener al menos 1 URL del envelope.references_used."
+                )
+            else:
+                used = response.get("references_used") or []
+                if not isinstance(used, list) or not used:
+                    errores.append(
+                        "design_strict (Bloque 1L.4): references_cited no puede "
+                        "validarse: references_used ausente o vacio. "
+                        "Bloque 1L.3 ya deberia haber rechazado este envelope."
+                    )
+                else:
+                    used_set = {u for u in used if isinstance(u, str)}
+                    bad = [u for u in refs_cited
+                           if not (isinstance(u, str) and u in used_set)]
+                    if bad:
+                        errores.append(
+                            f"design_strict (Bloque 1L.4): references_cited contiene "
+                            f"URLs que NO estan en references_used: {bad}. "
+                            f"references_cited debe ser subset estricto."
+                        )
+
+        # --- boilerplate_avoided ----------------------------------------
+        bp = ec.get("boilerplate_avoided")
+        if isinstance(bp, dict):
+            explained = bp.get("explained")
+            if not isinstance(explained, str) or len(explained.strip()) < self.EDITORIAL_RATIONALE_MIN_CHARS:
+                errores.append(
+                    f"design_strict (Bloque 1L.4) boilerplate_avoided.explained: "
+                    f"debe ser str >= {self.EDITORIAL_RATIONALE_MIN_CHARS} chars "
+                    f"(anti-teatro). Recibido: {explained!r}"
+                )
+        elif "boilerplate_avoided" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): boilerplate_avoided debe ser dict; "
+                f"recibido {type(bp).__name__}."
+            )
+
+        # --- whitespace_intentional -------------------------------------
+        ws = ec.get("whitespace_intentional")
+        if isinstance(ws, dict):
+            documented = ws.get("documented")
+            if not isinstance(documented, bool) or documented is not True:
+                errores.append(
+                    "design_strict (Bloque 1L.4) whitespace_intentional.documented: "
+                    "debe ser bool=True (el ui-designer afirma haber documentado "
+                    "el ritmo de whitespace por seccion)."
+                )
+        elif "whitespace_intentional" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): whitespace_intentional debe ser dict; "
+                f"recibido {type(ws).__name__}."
+            )
+
+        return errores, warnings
 
     # ============================================================
     #  Bloque 1L.1: Intent Classifier (Design Criterion Hardening)
