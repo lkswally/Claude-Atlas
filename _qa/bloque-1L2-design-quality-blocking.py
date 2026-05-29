@@ -39,9 +39,30 @@ def _valid_refs_l2():
     ]
 
 
+def _valid_ec_l2():
+    """editorial_compliance minimo valido para que 1L.4 no bloquee tests 1L.2."""
+    return {
+        "asymmetric_section": {
+            "present": True,
+            "where": "hero",
+            "rationale": "rationale valida para test 1L.2 con mas de veinte caracteres",
+        },
+        "typography_mix": {
+            "display": "Fraunces",
+            "body": "Inter",
+            "justified": True,
+        },
+        "references_cited": ["https://l2ref-0.com"],
+        "boilerplate_avoided": {
+            "explained": "explicacion valida para test 1L.2 con mas de veinte caracteres",
+        },
+        "whitespace_intentional": {"documented": True},
+    }
+
+
 def _make_envelope_completado(archivos, **extra):
-    """Envelope base con todo lo que design_strict + 1C.1 + 1L.3 piden para que
-    SOLO 1L.2 sea la barrera (o no)."""
+    """Envelope base con todo lo que design_strict + 1C.1 + 1L.3 + 1L.4 piden
+    para que SOLO 1L.2 sea la barrera (o no)."""
     base = {
         "status": "completado",
         "tarea": "test 1L.2",
@@ -59,6 +80,8 @@ def _make_envelope_completado(archivos, **extra):
         # Bloque 1L.3: references obligatorias
         "references": _valid_refs_l2(),
         "references_used": ["https://l2ref-0.com"],
+        # Bloque 1L.4: editorial_compliance obligatorio (ui-like envelope)
+        "editorial_compliance": _valid_ec_l2(),
     }
     # Si extra incluye brand, no sobreescribir references inline
     # (algun test puede querer style sin references)

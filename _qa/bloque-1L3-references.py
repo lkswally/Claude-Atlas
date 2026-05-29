@@ -41,8 +41,32 @@ def _valid_refs(n=2):
     ]
 
 
-def _ui_envelope(refs=None, references_used=None, agent="ui-designer", archivos=None):
-    """Envelope ui-designer base que pasa 1C.1 + 1L.2 (sin archivos UI escaneables)."""
+def _valid_ec_l3(refs_cited=None):
+    """editorial_compliance valido para que 1L.4 no bloquee tests 1L.3."""
+    if refs_cited is None:
+        refs_cited = ["https://site-0.com"]
+    return {
+        "asymmetric_section": {
+            "present": True,
+            "where": "hero",
+            "rationale": "rationale para test 1L.3 con suficiente largo verificable",
+        },
+        "typography_mix": {
+            "display": "Fraunces",
+            "body": "Inter",
+            "justified": True,
+        },
+        "references_cited": refs_cited,
+        "boilerplate_avoided": {
+            "explained": "explicacion para test 1L.3 con suficiente largo verificable",
+        },
+        "whitespace_intentional": {"documented": True},
+    }
+
+
+def _ui_envelope(refs=None, references_used=None, agent="ui-designer", archivos=None,
+                 include_ec=True):
+    """Envelope ui-designer base que pasa 1C.1 + 1L.2 + 1L.4 (sin archivos UI escaneables)."""
     env = {
         "status": "completado",
         "tarea": "test 1L.3",
@@ -62,6 +86,11 @@ def _ui_envelope(refs=None, references_used=None, agent="ui-designer", archivos=
         env["brand"] = {"style": "editorial-raw", "references": refs}
     if references_used is not None:
         env["references_used"] = references_used
+        if include_ec:
+            # editorial_compliance.references_cited debe ser subset de references_used
+            env["editorial_compliance"] = _valid_ec_l3(refs_cited=[
+                u for u in references_used if isinstance(u, str)
+            ][:1] or ["https://site-0.com"])
     return env
 
 
@@ -251,14 +280,19 @@ class TestReferencesEnforcement(unittest.TestCase):
     def test_enforce_false_disables_in_design_strict(self):
         env = _ui_envelope(refs=None, references_used=None)
         env.pop("brand", None)
+        # Tambien deshabilitar 1L.4 para aislar el test al rollback de 1L.3
         ok, errores = self.dispatcher.validate_return_envelope(
-            env, mode="design_strict", enforce_references=False,
+            env, mode="design_strict",
+            enforce_references=False,
+            enforce_editorial_compliance=False,
         )
-        # Sin 1L.3: el envelope pasa (1C.1 + 1L.2 OK)
+        # Sin 1L.3 ni 1L.4: el envelope pasa (1C.1 + 1L.2 OK)
         self.assertTrue(ok, f"enforce_references=False should pass; errores={errores}")
 
     def test_env_var_disables_runtime(self):
         os.environ["ATLAS_REFERENCES_ENFORCEMENT_DISABLED"] = "1"
+        # Tambien deshabilitar 1L.4 via env var para aislar el test
+        os.environ["ATLAS_EDITORIAL_ENFORCEMENT_DISABLED"] = "1"
         try:
             env = _ui_envelope(refs=None, references_used=None)
             env.pop("brand", None)
@@ -266,6 +300,7 @@ class TestReferencesEnforcement(unittest.TestCase):
             self.assertTrue(ok, f"env var disabled should pass; errores={errores}")
         finally:
             del os.environ["ATLAS_REFERENCES_ENFORCEMENT_DISABLED"]
+            del os.environ["ATLAS_EDITORIAL_ENFORCEMENT_DISABLED"]
 
     # ---------- Disk resolution ----------
 
