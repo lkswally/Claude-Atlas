@@ -87,6 +87,12 @@ ATLAS pasó por 23 bloques de mejora consolidados en `main` el 2026-05-21. Capab
 ### Auto-Audit Hook (serie 1K)
 - **QA Auto-Audit PostToolUse Hook** (1K.1) — al terminar subagent spawn, audita automáticamente helpers obligatorios y emite WARN si faltan
 
+### Contracts formales (serie F1 — branch `feature/F1-1-envelope-contract`, pendiente merge a main)
+- **Envelope.v1 Pydantic** (F1.1 reducido) — modelo formal versionado en `tools/contracts/` con coerción bidireccional transparente. `validate_return_envelope` acepta dict legacy O instancia `Envelope` indistintamente. Per-mode validations (qa_strict / dev_strict / design_strict / standard) intactas.
+- **Backward compat estricto**: subagentes, hooks, tests existentes sin cambios. Mutaciones downstream (`_dispatcher_warnings`) preservadas vía referencia.
+- **Fail-open + disable runtime**: `ATLAS_PYDANTIC_CONTRACTS_DISABLED=1` o `tools/contracts/` ausente → path dict puro sin error.
+- **Diferidos** (F1.1.b/c/d futuros): `PhaseGate.v1`, `AuditTrail.v1`, `ClaimAudit.v1` — solo si surge caso concreto.
+
 ### Tests operativos
 218+ tests en `_qa/` cubriendo todos los bloques. Regression sweep en main consolidado: **100% verde**.
 
