@@ -24,6 +24,24 @@ try:
 except ImportError:
     _audit_files = None  # disponible solo si pre_return_audit.py esta presente
 
+# Bloque F1.1: Envelope contract formal (opt-in, default ON con fail-open)
+# La capa contracts es 100% opcional. Si no esta disponible (Pydantic missing,
+# directorio borrado, etc.), el dispatcher cae al path dict legacy sin romper.
+try:
+    from contracts import (  # type: ignore
+        Envelope as _Envelope,
+        coerce_envelope as _coerce_envelope,
+        ContractValidationError as _ContractValidationError,
+        LegacyShapeError as _LegacyShapeError,
+    )
+    _CONTRACTS_AVAILABLE = True
+except ImportError:
+    _Envelope = None  # type: ignore
+    _coerce_envelope = None  # type: ignore
+    _ContractValidationError = None  # type: ignore
+    _LegacyShapeError = None  # type: ignore
+    _CONTRACTS_AVAILABLE = False
+
 # Bloque 1B.1: Engram Strategy Pattern (preparacion para MCP real en 1B.2)
 # Por defecto se usa DiskFallbackStrategy — NO es Engram real, es disk fallback.
 # El orquestador puede inyectar un callback (CallbackStrategy) que conecte
@@ -717,7 +735,62 @@ class ATLASDispatcher:
         - enforce_helpers=True + agente NO critico: enforcement skipped,
           validacion sigue su curso normal.
         - enforce_helpers=True + agent_name=None: no aplicable, sin enforcement.
+
+        Bloque F1.1 — Envelope contract formal (opt-in transparente):
+        - `response` puede ser dict legacy (path historico) o instancia de
+          `tools.contracts.Envelope` (nuevo, opcional).
+        - Si es Envelope: se convierte a dict legacy via to_legacy_dict() y
+          se continua el flujo identico. Las mutaciones downstream
+          (_dispatcher_warnings, _dispatcher_enforcement) operan sobre el
+          dict resultante.
+        - Si es dict: se valida shape contra Envelope.v1 (no-op practico
+          porque el contrato v1 es permisivo). El mismo dict del caller
+          continua, preservando referencia para que las mutaciones lleguen.
+        - Fail-open: si el modulo contracts no esta disponible
+          (ImportError, Pydantic missing, directorio borrado), se cae al
+          path dict puro sin error.
+        - Disable runtime: env var ATLAS_PYDANTIC_CONTRACTS_DISABLED=1 fuerza
+          el path dict legacy aun con contracts instalado.
         """
+        # Bloque F1.1: coercion / shape-validation transparente
+        # IMPORTANTE: NO reasignar response cuando ya es dict — preservamos
+        # la referencia del caller para que mutaciones downstream lleguen.
+        _f11_disabled = os.environ.get(
+            "ATLAS_PYDANTIC_CONTRACTS_DISABLED", ""
+        ).lower() in ("1", "true", "yes")
+        if _CONTRACTS_AVAILABLE and not _f11_disabled:
+            try:
+                if _Envelope is not None and isinstance(response, _Envelope):
+                    # Caller paso instancia Pydantic explicita -> convertir
+                    # a dict para que el resto del metodo (que espera dict)
+                    # funcione sin cambios.
+                    response = response.to_legacy_dict()
+                elif isinstance(response, dict):
+                    # Validacion de shape (no muta response). Con el contrato
+                    # v1 permisivo, esto practicamente nunca falla. Sirve
+                    # para detectar inputs malformados antes de v2.
+                    _coerce_envelope(response)
+                else:
+                    # Tipo no soportado -> error estructural
+                    return False, [
+                        f"validate_return_envelope: tipo no soportado "
+                        f"{type(response).__name__} (esperado dict o Envelope)"
+                    ]
+            except _LegacyShapeError as e:  # type: ignore[misc]
+                return False, list(e.errors)
+            except _ContractValidationError as e:  # type: ignore[misc]
+                return False, [str(e)]
+        else:
+            # Path legacy puro (contracts no disponible o disabled). El
+            # validador downstream ya asume dict; si no lo es, fallaria mas
+            # adelante con un error oscuro. Lo cubrimos aca con un mensaje
+            # explicito para mantener UX consistente.
+            if not isinstance(response, dict):
+                return False, [
+                    f"validate_return_envelope: tipo no soportado "
+                    f"{type(response).__name__} (esperado dict; contracts disabled)"
+                ]
+
         # Bloque 1G.2: registrar invocacion
         self._record_invocation(
             "validate_return_envelope",
