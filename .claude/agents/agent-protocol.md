@@ -1097,6 +1097,78 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.19. Envelope contract formal (Bloque F1.1 reducido)
+
+**Alcance**: formalizar la **shape** del Return Envelope con un modelo Pydantic versionado (`Envelope.v1`) sin alterar el comportamiento de `validate_return_envelope`. Capa 100% opt-in / opt-out transparente.
+
+### Qué cambia
+
+- El dispatcher acepta ahora **dos formas** de envelope en `validate_return_envelope(response, mode=...)`:
+  - `Dict[str, Any]` (path histórico — todos los subagentes existentes)
+  - Instancia de `tools.contracts.Envelope` (path nuevo — opcional, para código que quiera type-safety)
+- Si el caller pasa `Envelope`, el dispatcher lo convierte a dict legacy via `to_legacy_dict()` antes de continuar.
+- Si el caller pasa dict, se valida shape contra `Envelope.v1` (no-op práctico porque v1 es permisivo) y la **misma referencia** del dict continúa por el método, preservando mutaciones downstream (`_dispatcher_warnings`, `_dispatcher_enforcement`).
+
+### Qué NO cambia
+
+- Firma pública de `validate_return_envelope`: idéntica
+- Return type: `Tuple[bool, List[str]]` idéntico
+- Subagentes: ningún cambio. Siguen emitiendo dicts JSON como antes
+- Hooks: ningún cambio
+- Tests existentes: ninguno modificado
+- Per-mode validation logic (qa_strict / dev_strict / design_strict / standard): intacta
+
+### Importar
+
+```python
+from tools.contracts import (
+    Envelope,
+    EnvelopeStatus,
+    EnvelopeMode,
+    coerce_envelope,
+    to_legacy_dict,
+    ContractValidationError,
+    LegacyShapeError,
+)
+```
+
+### Cuándo usar dict vs Pydantic
+
+| Caso | Recomendado |
+|------|-------------|
+| Subagente emite envelope desde JSON / texto | dict (sin cambios) |
+| Hook PostToolUse parsea respuesta | dict (sin cambios) |
+| Test existente | dict (no modificar) |
+| Código nuevo de Python que construye envelope programáticamente | `Envelope` (type-safety, IDE autocomplete) |
+| Necesitás validar shape antes de pasar al dispatcher | `coerce_envelope(...)` |
+| Necesitás re-serializar Pydantic a dict | `to_legacy_dict(envelope)` |
+
+### Versionado
+
+- `Envelope.contract_version: Literal["envelope.v1"] = "envelope.v1"` (default).
+- Cualquier campo nuevo que se agregue en v1 **debe** ser `Optional` con `default=None`. Sin breaking change.
+- Cuando llegue v2 (futuro), se crea `Envelope.v2` aparte. v1 permanece. Coerción decide qué versión usar via `contract_version`.
+
+### Fail-open y disable runtime
+
+- Si `tools/contracts/` no está disponible (directorio borrado, Pydantic ausente): el dispatcher detecta `ImportError` y cae al path dict puro **sin error**.
+- Env var `ATLAS_PYDANTIC_CONTRACTS_DISABLED=1`: fuerza el path dict legacy aun con contracts instalado. Útil para rollback rápido sin tocar código.
+
+### Cobertura de tests
+
+- `_qa/bloque-F11-1-envelope-contract.py` — 31 tests: shape, version, enums, coercion bidireccional, roundtrip, campos 1L preparados (`design_intelligence`, `references`, `editorial_compliance`, `agent`)
+- `_qa/bloque-F11-5-backward-compat.py` — 24 tests: paridad observable entre path contracts vs path disabled, en los 4 modos del dispatcher
+
+### Lo que NO incluye F1.1 reducido
+
+- `PhaseGate.v1` — diferido a F1.1.b si se necesita
+- `AuditTrail.v1` — diferido a F1.1.c
+- `ClaimAudit.v1` — diferido a F1.1.d
+- Refactor de `verify_*` helpers a Pydantic — no es necesario, siguen usando dict
+- Migración masiva de tests existentes — explícitamente fuera de scope
+
+---
+
 ## 4.17. Auto-Invocation of Missing Helpers (Bloque 1K.4)
 
 **Alcance**: cierra el último gap operativo de enforcement. Cuando `validate_return_envelope(enforce_helpers=True, try_auto_invoke=True)` detecta helpers faltantes en un agente crítico, el dispatcher **intenta invocar los helpers automáticamente** usando contexto inferible del envelope **antes de rechazar**.
