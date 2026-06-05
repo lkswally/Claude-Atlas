@@ -80,6 +80,37 @@ sketch:       cómo se atacaría (opcional, una línea)
 
 ---
 
+## From F2.1 (Skills Registry + Hard Rules, 2026-06-03)
+
+### PENDING-F21-1 — Activation Contracts (precondiciones evaluables)
+- **introducido**: F2.1
+- **por_qué_diferido**: requiere DSL de evaluación de condiciones complejas. Riesgo alto de sobre-ingeniería si se hace junto con MVP. Skills Registry MVP solo lista; activación queda manual / inferida por agente.
+- **resuelve_en**: F2.2 si Skills Registry demuestra uso real post-merge (≥3 invocaciones de `find_skills` en sesiones reales).
+- **sketch**: agregar campo `activation_rules` por skill con predicados tipo `{key, op, value}`. Engine de eval simple en `skills_registry.py`.
+
+### PENDING-F21-2 — Output Contracts por agente
+- **introducido**: F2.1
+- **por_qué_diferido**: requiere schema declarativo por agente (ej. `ui-designer.schema.yaml`). Mejor post-pilotos 1L cuando se sabe qué falta. Auto-generación de `verify_*` helpers desde schema es refactor del dispatcher.
+- **resuelve_en**: F2.3 post-pilotos 1L.
+- **sketch**: `.claude/agents/{agent}.schema.yaml` paralelo a cada `.md`. Loader que genera validadores desde schema.
+
+### PENDING-F21-3 — Decision Gates con audit trail
+- **introducido**: F2.1
+- **por_qué_diferido**: depende de Hard Rules + observabilidad. Audit formal de decisiones (qué se decidió, por qué, quién lo evaluó) es complejidad mayor.
+- **resuelve_en**: F2.4 si Hard Rules MVP demuestra uso real.
+
+### PENDING-F21-4 — Token Budgets explícitos
+- **introducido**: F2.1
+- **por_qué_diferido**: requiere telemetría compleja (tokens por fase, por agente, alertas). Regla operativa actual: "no observabilidad compleja".
+- **resuelve_en**: sin fecha. Re-evaluar si surge problema concreto de compactación recurrente.
+
+### PENDING-F21-5 — Activación dinámica de skills desde subagentes
+- **introducido**: F2.1
+- **por_qué_diferido**: en MVP, los subagentes NO consultan el registry automáticamente. Es opt-in. Forzar consulta requeriría modificar `.md` de cada agente.
+- **resuelve_en**: post-validación de F2.1. Si registry es útil, agregar instrucción de consulta a 1-2 agentes específicos como prueba (no masivo).
+
+---
+
 ## From roadmap operativo (2026-05-30)
 
 ### PENDING-RM-1 — HyperFrames scope sin definir

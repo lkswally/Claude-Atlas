@@ -1097,6 +1097,150 @@ El test `_qa/bloque-1g1-validation.py` verifica que los prompts contengan las in
 
 ---
 
+## 4.20. Skills Registry + Hard Rules (Bloque F2.1 MVP)
+
+**Alcance**: dos capacidades **aditivas, opt-in, fail-open** que reducen la dependencia del prompt sin tocar dispatcher ni subagentes.
+
+### 4.20.1 — Skills Registry
+
+Catálogo declarativo en `.claude/skills.registry.yaml` con metadata buscable de las capacidades existentes en ATLAS. **No inventa skills** — indexa lo que ya existe.
+
+**Schema por entry** (8 campos requeridos + 3 opcionales):
+
+```yaml
+- skill_id: "design.intelligence-search"     # str unico, formato "domain.name"
+  domain: "design"                            # str
+  agent: "ux-architect"                       # str
+  description: "..."                          # str corto
+  inputs: ["industry", "mood_preset"]         # list[str]
+  outputs: ["anti_patterns", "style"]         # list[str]
+  cost_tier: "low"                            # "low" | "medium" | "high"
+  # Opcionales:
+  invocation_hint: "..."
+  applies_when: ["phase == fase_2"]
+  reference_path: ".claude/design-data/..."
+```
+
+**API pública** (en `tools/skills_registry.py`):
+
+```python
+from skills_registry import find_skills, get_skill, list_domains, validate_registry
+
+find_skills(domain="design")                    # lista
+find_skills(agent="ui-designer")
+find_skills(applies_when={"phase": "fase_2"})
+find_skills(domain="design", agent="ui-designer")  # AND
+get_skill("design.intelligence-search")         # dict | None
+list_domains()                                  # ["branding", "design", "qa", ...]
+validate_registry()                             # report dict
+```
+
+**Cuándo consultar el registry** (opcional, no forzado):
+
+| Caso | Recomendado |
+|------|-------------|
+| Subagente arranca Fase X y quiere saber qué skills aplican | `find_skills(applies_when={"phase": "fase_X"})` |
+| Orquestador descubre qué dominios existen | `list_domains()` |
+| Validación diagnóstica del catálogo | `validate_registry()` |
+| Sesión necesita verificar si una capability ya existe antes de inventar | `get_skill(...)` |
+
+**Disable runtime**: `ATLAS_SKILLS_REGISTRY_DISABLED=1` → API retorna `[]` silenciosamente.
+
+**Cómo agregar una skill nueva**:
+1. Append una entry al `skills.registry.yaml` con los 7 campos requeridos
+2. Verificar con `python tools/skills_registry.py validate`
+3. NO modificar código del loader
+
+**Lo que el registry NO hace** (explícitamente fuera de scope F2.1):
+- No es motor de activación (no decide qué skill correr — solo lista)
+- No tiene precondiciones evaluables (eso es Activation Contracts, diferido a F2.2)
+- No tiene versionado por skill (asume v1 implícito)
+- No se inyecta en subagentes (consulta es opt-in)
+
+### 4.20.2 — Hard Rules
+
+Reglas declarativas en `.claude/hard-rules.json` evaluadas por hook PreToolUse (`.claude/hooks/pipeline-rules.js`). Formalizan disciplina de pipeline-level que hoy vive en prosa de markdown.
+
+**Formato JSON** (no YAML para evitar parser custom):
+
+```json
+{
+  "rule_id": "no-merge-pr25-without-pilots",
+  "scope": "git_merge",
+  "severity": "block",
+  "predicate": {"type": "command_match", "pattern": "gh\\s+pr\\s+merge\\s+25\\b"},
+  "condition": {
+    "type": "file_contains",
+    "path": "_qa/pilotos-1L/P1.md",
+    "must_contain_regex": "C3.*PASS",
+    "invert": true
+  },
+  "message": "...",
+  "bypass_env": "ATLAS_FORCE_MERGE_PR25"
+}
+```
+
+**Predicate types soportados** (MVP):
+- `command_match`: regex sobre el comando bash
+
+**Condition types soportados** (MVP):
+- `always`: siempre cumple si el predicate matchea
+- `file_contains`: verifica que un archivo exista y contenga regex (con `invert: true` para negar)
+- `file_exists`: verifica existencia (con `invert`)
+- `env_var_unset`: verifica que env var NO esté seteada
+
+**Severity**:
+- `block` → exit code 2, hook ABORTA la tool call
+- `warn` → exit code 0 + mensaje en stderr, tool call PROCEDE
+
+**Reglas activas en F2.1 MVP** (4 max, regla anti-sobre-ingeniería):
+
+1. `no-merge-pr25-without-pilots` (block) — protege PR #25 hasta C3-C7 PASS
+2. `no-force-push-main` (block) — bloquea `git push --force` a main/master
+3. `warn-cross-repo-commit` (warn) — detecta `cd <ruta> && git commit/push`
+4. `warn-skill-registry-unused` (warn) — recordatorio de F2.1 cuando se lee prosa de agente
+
+**Disable global**: `ATLAS_HARD_RULES_DISABLED=1` → hook es no-op total.
+
+**Bypass per-rule**: cada regla puede declarar `bypass_env` → si esa env var = `"1"`, la regla se saltea.
+
+**Fail-open absoluto**: cualquier error interno del hook (JSON missing, malformado, regex inválida) → exit 0 silencioso. JAMÁS bloquear por bugs propios.
+
+**Cómo agregar una regla**:
+1. Append una entry al array `rules` de `hard-rules.json`
+2. Severity conservadora (`warn` por default; `block` solo en casos cristalinos)
+3. Siempre incluir `bypass_env` para escape hatch documentado
+4. Test con `node .claude/hooks/pipeline-rules.js` + JSON via stdin
+
+**Lo que las hard rules NO hacen** (explícitamente fuera de scope F2.1):
+- No es motor de reglas custom con expresiones lógicas AND/OR/NOT complejas
+- No ejecuta código Python custom
+- No tiene audit trail propio (eso es Decision Gates, diferido a F2.4)
+- No reemplaza hooks existentes — es complementario
+- Solo evalúa `tool_name=Bash` (otros tools pasan-through)
+
+### 4.20.3 — Diferidos (NO entra en F2.1)
+
+| Capa | Razón de diferimiento |
+|------|------------------------|
+| **Activation Contracts** (precondiciones evaluables) | Requiere DSL de evaluación. Diferido a F2.2 si Skills Registry demuestra uso |
+| **Output Contracts por agente** | Mejor post-pilotos 1L. Diferido a F2.3 |
+| **Decision Gates con audit trail** | Depende de Hard Rules + observabilidad. Diferido a F2.4 |
+| **Token Budgets** | Requiere telemetría compleja. Diferido sin fecha |
+
+### 4.20.4 — Criterio de éxito de F2.1 (medible)
+
+| Métrica | Target |
+|---------|--------|
+| Invocaciones de `find_skills()` en sesiones reales post-merge | ≥ 3 en 2 semanas |
+| Hard rule `no-merge-pr25-without-pilots` activada al menos 1 vez | Sí |
+| Agregar dominio nuevo (marketing, branding) requiere editar | ≤ 3 archivos |
+| Tests F21-1 + F21-2 verde | 100% (27 + 16 = 43 tests) |
+
+Si en 30 días post-merge ninguna sesión consulta el registry y ninguna hard rule se activó, **F2.1 fracasó honestamente** → candidato a revert vía rollback capa 3 (git revert).
+
+---
+
 ## 4.19. Envelope contract formal (Bloque F1.1 reducido)
 
 **Alcance**: formalizar la **shape** del Return Envelope con un modelo Pydantic versionado (`Envelope.v1`) sin alterar el comportamiento de `validate_return_envelope`. Capa 100% opt-in / opt-out transparente.
