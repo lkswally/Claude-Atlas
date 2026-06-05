@@ -1,0 +1,137 @@
+# ATLAS Skills Registry (F2.1 MVP)
+# ====================================
+# Catalogo declarativo de capacidades EXISTENTES en ATLAS. NO inventa.
+# Cada entry es un index sobre algo que ya esta operativo en el sistema.
+#
+# SCHEMA POR ENTRY (campos obligatorios):
+#   skill_id:    str unico, formato "<domain>.<name>" (snake-case)
+#   domain:      str, dominio principal
+#   agent:       str, agente que la implementa o consume
+#   description: str corto (1 linea)
+#   inputs:      list[str], que necesita
+#   outputs:     list[str], que produce
+#   cost_tier:   "low" | "medium" | "high"
+#
+# CAMPOS OPCIONALES:
+#   invocation_hint: str con ejemplo de uso (no es codigo ejecutable)
+#   applies_when:    list[str] de strings tipo "key == value" (matching simple)
+#   reference_path:  str, path al archivo/recurso real
+#
+# Para agregar una skill nueva: append una entry. NO modificar codigo.
+# Para deprecar: marcar con `deprecated: true` (no borrar).
+
+version: 1
+skills:
+  # ===== DESIGN =====
+  - skill_id: "design.intelligence-search"
+    domain: "design"
+    agent: "ux-architect"
+    description: "Consulta motor BM25 de design-data para recomendaciones por industria"
+    inputs: ["industry", "mood_preset"]
+    outputs: ["anti_patterns", "style", "pattern", "decision_rules"]
+    invocation_hint: "node ~/.claude/design-data/search.js \"{industry}\" --design-system"
+    cost_tier: "low"
+    applies_when:
+      - "phase == fase_2"
+      - "agent in [ux-architect, ui-designer]"
+    reference_path: ".claude/design-data/search.js"
+
+  - skill_id: "design.awesome-design-md"
+    domain: "design"
+    agent: "brand-agent"
+    description: "Fetch de DESIGN.md de marca de referencia (Apple, Stripe, Linear, etc.)"
+    inputs: ["brand_slug"]
+    outputs: ["colors", "spacing_scale", "motion_curves", "typography_mood"]
+    invocation_hint: "WebFetch https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/{slug}.md"
+    cost_tier: "medium"
+    applies_when:
+      - "agent in [brand-agent, ux-architect]"
+      - "brief_mentions_brand_reference == true"
+
+  - skill_id: "design.codepen-vault"
+    domain: "design"
+    agent: "frontend-developer"
+    description: "Boveda de efectos visuales aprobados (CodePen extracts)"
+    inputs: ["effect_slug"]
+    outputs: ["html", "css", "js"]
+    invocation_hint: "Leer ~/.claude/codepen-vault/{slug}/"
+    cost_tier: "low"
+    applies_when:
+      - "agent == frontend-developer"
+      - "needs_visual_effect == true"
+    reference_path: "~/.claude/codepen-vault/"
+
+  # ===== QA =====
+  - skill_id: "qa.evidence-collection"
+    domain: "qa"
+    agent: "evidence-collector"
+    description: "QA visual con screenshots via Playwright MCP por tarea dev"
+    inputs: ["task_id", "url", "viewports"]
+    outputs: ["screenshots", "envelope_qa", "PASS/FAIL"]
+    cost_tier: "medium"
+    applies_when:
+      - "phase == fase_3"
+      - "task_completed == true"
+
+  - skill_id: "qa.reality-checker-reruns"
+    domain: "qa"
+    agent: "reality-checker"
+    description: "Re-ejecuta muestra aleatoria de QA PASS antes de certificacion"
+    inputs: ["qa_results", "sample_size"]
+    outputs: ["verdict", "discrepancies"]
+    cost_tier: "medium"
+    applies_when:
+      - "phase == fase_4"
+    reference_path: "tools/reality_check_runner.py"
+
+  - skill_id: "qa.network-inspection"
+    domain: "qa"
+    agent: "evidence-collector"
+    description: "Inspecciona requests para detectar 5xx, mixed content, redirects"
+    inputs: ["network_requests", "page_origin"]
+    outputs: ["findings_by_severity"]
+    cost_tier: "low"
+    reference_path: "tools/network_inspector.py"
+
+  - skill_id: "qa.console-log-analysis"
+    domain: "qa"
+    agent: "evidence-collector"
+    description: "Analiza console logs para errores Uncaught, CORS, CSP, hydration"
+    inputs: ["console_messages"]
+    outputs: ["findings_by_severity"]
+    cost_tier: "low"
+    reference_path: "tools/console_log_analyzer.py"
+
+  - skill_id: "qa.visual-fidelity-check"
+    domain: "qa"
+    agent: "reality-checker"
+    description: "Compara palette/typography/mood/anti-patterns contra brand spec"
+    inputs: ["spec", "evidence"]
+    outputs: ["fidelity_score", "deviations"]
+    cost_tier: "low"
+    reference_path: "tools/visual_fidelity_checker.py"
+
+  # ===== BRANDING =====
+  - skill_id: "branding.brand-generation"
+    domain: "branding"
+    agent: "brand-agent"
+    description: "Genera brand.json (identidad, colores, tipografia, voice)"
+    inputs: ["intent", "visual_direction"]
+    outputs: ["brand.json"]
+    cost_tier: "high"
+    applies_when:
+      - "phase == fase_2b"
+      - "project_has_assets == true"
+    reference_path: ".claude/agents/brand-agent.md"
+
+  # ===== ORCHESTRATION =====
+  - skill_id: "orchestration.intent-classifier"
+    domain: "orchestration"
+    agent: "orquestador"
+    description: "Clasifica intent del usuario en 4 buckets (audit/redesign/implement/validate)"
+    inputs: ["user_prompt"]
+    outputs: ["intent", "confidence", "escalation_question"]
+    cost_tier: "low"
+    applies_when:
+      - "phase == fase_1"
+    reference_path: "tools/intent_classifier.py"
