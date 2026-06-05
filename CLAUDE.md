@@ -87,6 +87,12 @@ ATLAS pasó por 23 bloques de mejora consolidados en `main` el 2026-05-21. Capab
 ### Auto-Audit Hook (serie 1K)
 - **QA Auto-Audit PostToolUse Hook** (1K.1) — al terminar subagent spawn, audita automáticamente helpers obligatorios y emite WARN si faltan
 
+### Skills Registry + Hard Rules (serie F2 — branch `feature/F2-1-skills-registry-hard-rules`, pendiente merge a main)
+- **Skills Registry MVP** (F2.1) — catálogo declarativo en `.claude/skills.registry.yaml` (10 skills iniciales: design / qa / branding / orchestration). API en `tools/skills_registry.py`: `find_skills(domain, agent, applies_when)`, `get_skill(id)`, `list_domains()`, `validate_registry()`. Disable: `ATLAS_SKILLS_REGISTRY_DISABLED=1`. Fail-open: registry missing / PyYAML missing → retorna `[]`.
+- **Hard Rules MVP** (F2.1) — reglas declarativas en `.claude/hard-rules.json` (4 reglas iniciales: no-merge-pr25-without-pilots [block], no-force-push-main [block], warn-cross-repo-commit [warn], warn-skill-registry-unused [warn]). Hook PreToolUse `.claude/hooks/pipeline-rules.js`. Disable global: `ATLAS_HARD_RULES_DISABLED=1`. Bypass per-rule via env var documentada. Fail-open absoluto.
+- **Diferidos en F2.1** (no incluidos): Activation Contracts, Output Contracts por agente, Decision Gates con audit trail, Token Budgets — solo si surge caso concreto.
+- **Criterio explícito de éxito o fracaso** documentado en `.claude/agents/agent-protocol.md` § 4.20.4.
+
 ### Contracts formales (serie F1 — branch `feature/F1-1-envelope-contract`, pendiente merge a main)
 - **Envelope.v1 Pydantic** (F1.1 reducido) — modelo formal versionado en `tools/contracts/` con coerción bidireccional transparente. `validate_return_envelope` acepta dict legacy O instancia `Envelope` indistintamente. Per-mode validations (qa_strict / dev_strict / design_strict / standard) intactas.
 - **Backward compat estricto**: subagentes, hooks, tests existentes sin cambios. Mutaciones downstream (`_dispatcher_warnings`) preservadas vía referencia.
