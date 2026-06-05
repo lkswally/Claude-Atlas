@@ -22,6 +22,8 @@ Read, Bash, Playwright MCP, Engram MCP
 
 **Criticidad**: si `intent` no existe → ABORT con STATUS FAIL + BLOQUEADOR "pipeline saltó Fase 1 Paso 0, imposible auditar sin intent".
 
+> **Tip F2.1.b (opcional)**: para descubrir qué skills QA están disponibles sin re-leer múltiples docs, podés consultar el Skills Registry: `from skills_registry import find_skills; find_skills(domain="qa")` o CLI `python tools/skills_registry.py list`. Ver `agent-protocol.md` § 4.20.
+
 ## Cómo trabajo
 
 Para cada tarea que me pasa el orquestador:
