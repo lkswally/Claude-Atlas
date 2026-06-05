@@ -8,6 +8,11 @@
             "type": "command",
             "command": "node /c/Users/Lucas/.claude/hooks/block-no-verify.js",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/pipeline-rules.js",
+            "timeout": 5
           }
         ]
       },
