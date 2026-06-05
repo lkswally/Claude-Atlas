@@ -1,0 +1,68 @@
+{
+  "_comment": "ATLAS Hard Rules (F2.1 MVP). JSON nativo (sin parser custom). Schema documentado en .claude/agents/agent-protocol.md seccion 4.20.",
+  "version": 1,
+  "rules": [
+    {
+      "rule_id": "no-merge-pr25-without-pilots",
+      "scope": "git_merge",
+      "severity": "block",
+      "description": "PR #25 (1L design-criterion) requiere pilotos C3-C7 antes de merge",
+      "predicate": {
+        "type": "command_match",
+        "pattern": "(^|&&\\s*|;\\s*|\\|\\s*)gh\\s+pr\\s+merge\\s+25\\b"
+      },
+      "condition": {
+        "type": "file_contains",
+        "path": "_qa/pilotos-1L/P1.md",
+        "must_contain_regex": "C3.*PASS",
+        "invert": true
+      },
+      "message": "BLOQUEADO: PR #25 requiere pilotos C3-C7 PASS antes de merge.\nValidacion esperada: _qa/pilotos-1L/P1.md con linea 'C3 ... PASS'.\nBypass de emergencia: ATLAS_FORCE_MERGE_PR25=1 (uso documentado).",
+      "bypass_env": "ATLAS_FORCE_MERGE_PR25"
+    },
+    {
+      "rule_id": "no-force-push-main",
+      "scope": "git_push",
+      "severity": "block",
+      "description": "git push --force a main/master es destructivo",
+      "predicate": {
+        "type": "command_match",
+        "pattern": "(^|&&\\s*|;\\s*|\\|\\s*)git\\s+push\\s+[^'\"\\n]*(--force|-f)\\b[^'\"\\n]*\\b(main|master)\\b"
+      },
+      "condition": {
+        "type": "always"
+      },
+      "message": "BLOQUEADO: git push --force a main/master destruye history compartido.\nSi realmente es necesario: ATLAS_ALLOW_FORCE_PUSH_MAIN=1 (uso una vez, documentar razon en commit message).",
+      "bypass_env": "ATLAS_ALLOW_FORCE_PUSH_MAIN"
+    },
+    {
+      "rule_id": "warn-cross-repo-commit",
+      "scope": "git_commit",
+      "severity": "warn",
+      "description": "git commit/push desde cwd distinto al repo target es sospechoso",
+      "predicate": {
+        "type": "command_match",
+        "pattern": "cd\\s+[^&]+&&\\s*git\\s+(commit|push)\\b"
+      },
+      "condition": {
+        "type": "always"
+      },
+      "message": "WARNING: detectado patron 'cd <ruta> && git commit/push'. Verificar que el repo target es el correcto. ATLAS core vive en D:\\ProyectosIA\\ProyectosClaude (origin/Claude-Atlas). Si vas a otro repo (MARKETING-AGENCY-OS, lucas-rojo-web, etc.) es esperado, ignora este warning."
+    },
+    {
+      "rule_id": "warn-skill-registry-unused",
+      "scope": "skills_discovery",
+      "severity": "warn",
+      "description": "Recordatorio F2.1 — skills registry disponible para discovery",
+      "predicate": {
+        "type": "command_match",
+        "pattern": "(cat|head|tail|less)\\s+.*\\.claude/agents/(ux-architect|ui-designer|brand-agent)\\.md"
+      },
+      "condition": {
+        "type": "always"
+      },
+      "message": "INFO (F2.1): para descubrir capacidades sin re-leer prosa, considera:\n  python tools/skills_registry.py list\n  from skills_registry import find_skills; find_skills(domain='design')\nEsta regla es informativa. Suprimila con ATLAS_SUPPRESS_REGISTRY_HINT=1.",
+      "bypass_env": "ATLAS_SUPPRESS_REGISTRY_HINT"
+    }
+  ]
+}
