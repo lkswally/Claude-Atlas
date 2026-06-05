@@ -38,6 +38,13 @@ REGISTRY_DEFAULT_LOCATIONS = [
     Path(__file__).parent.parent / ".claude" / REGISTRY_FILENAME,
 ]
 
+# Bloque F2.1.b: usage logging (append-only JSONL)
+USAGE_LOG_FILENAME = "skills-registry-usage.jsonl"
+USAGE_LOG_DEFAULT_LOCATIONS = [
+    Path.cwd() / ".claude" / "logs" / USAGE_LOG_FILENAME,
+    Path(__file__).parent.parent / ".claude" / "logs" / USAGE_LOG_FILENAME,
+]
+
 REQUIRED_FIELDS = ("skill_id", "domain", "agent", "description",
                    "inputs", "outputs", "cost_tier")
 VALID_COST_TIERS = {"low", "medium", "high"}
@@ -56,6 +63,62 @@ def _registry_disabled() -> bool:
     return os.environ.get(
         "ATLAS_SKILLS_REGISTRY_DISABLED", ""
     ).lower() in ("1", "true", "yes")
+
+
+def _usage_logging_disabled() -> bool:
+    """ATLAS_SKILLS_USAGE_LOG_DISABLED=1 desactiva escritura del JSONL."""
+    return os.environ.get(
+        "ATLAS_SKILLS_USAGE_LOG_DISABLED", ""
+    ).lower() in ("1", "true", "yes")
+
+
+def _resolve_usage_log_path() -> Optional[Path]:
+    """
+    Resuelve path del usage log. Si el env var override existe, lo respeta.
+    Si no, usa la primera ubicacion default cuyo PARENT exista (o se pueda
+    crear silenciosamente).
+    """
+    env_override = os.environ.get("ATLAS_SKILLS_USAGE_LOG_PATH")
+    if env_override:
+        return Path(env_override)
+    for candidate in USAGE_LOG_DEFAULT_LOCATIONS:
+        # Si el .claude/logs existe o lo podemos crear, usar esta location
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+    return None
+
+
+def _log_usage(event_type: str, context: Dict[str, Any]) -> None:
+    """
+    Bloque F2.1.b: registra una invocacion en JSONL append-only.
+
+    Fail-open absoluto: cualquier error (path missing, disco lleno,
+    permisos) -> silencioso. JAMAS interfere con la API publica.
+
+    event_type: "find_skills" | "get_skill" | "list_domains"
+    context: dict con filtros y/o resultado_count
+    """
+    if _usage_logging_disabled():
+        return
+    path = _resolve_usage_log_path()
+    if path is None:
+        return
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        entry = {
+            "ts": _dt.now(_tz.utc).isoformat(),
+            "event": event_type,
+            **context,
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+    except (OSError, TypeError, ValueError):
+        # Fail-open: nunca propagar errores del logging.
+        pass
 
 
 def _resolve_registry_path() -> Optional[Path]:
@@ -194,6 +257,11 @@ def find_skills(
     """
     skills = _load_registry(registry_path)
     if not skills:
+        _log_usage("find_skills", {
+            "domain": domain, "agent": agent,
+            "applies_when": applies_when, "result_count": 0,
+            "reason": "empty_registry",
+        })
         return []
 
     result = skills
@@ -210,6 +278,10 @@ def find_skills(
             if _matches_applies_when(s.get("applies_when") or [], applies_when)
         ]
 
+    _log_usage("find_skills", {
+        "domain": domain, "agent": agent,
+        "applies_when": applies_when, "result_count": len(result),
+    })
     return result
 
 
@@ -222,11 +294,15 @@ def get_skill(
     Obtiene una skill por id exacto. None si no existe (NO raise).
     """
     if not isinstance(skill_id, str) or not skill_id:
+        _log_usage("get_skill", {"skill_id": skill_id, "found": False,
+                                  "reason": "invalid_id"})
         return None
     skills = _load_registry(registry_path)
     for s in skills:
         if s.get("skill_id") == skill_id:
+            _log_usage("get_skill", {"skill_id": skill_id, "found": True})
             return s
+    _log_usage("get_skill", {"skill_id": skill_id, "found": False})
     return None
 
 
@@ -235,7 +311,126 @@ def list_domains(*, registry_path: Optional[Path] = None) -> List[str]:
     Lista unica de dominios presentes en el registry. Ordenada alfabeticamente.
     """
     skills = _load_registry(registry_path)
-    return sorted({s.get("domain") for s in skills if s.get("domain")})
+    domains = sorted({s.get("domain") for s in skills if s.get("domain")})
+    _log_usage("list_domains", {"result_count": len(domains)})
+    return domains
+
+
+def usage_stats(
+    since_days: Optional[int] = None,
+    *,
+    log_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """
+    Bloque F2.1.b: agrega estadisticas del usage log JSONL.
+
+    Lee TODO el JSONL (o filtra por since_days desde ahora) y agrega:
+    - total_invocations
+    - by_event: {event_type: count}
+    - top_skills: get_skill mas consultadas
+    - top_domains: find_skills(domain=X) mas frecuentes
+    - top_agents: find_skills(agent=X) mas frecuentes
+    - first_ts / last_ts
+    - log_path
+
+    Fail-open: si log no existe retorna shape con total=0.
+    NO raise.
+
+    Args:
+        since_days: si int, filtra entries con ts >= ahora - N dias
+        log_path: override para tests
+    """
+    import json as _json
+    from collections import Counter
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    resolved = log_path or _resolve_usage_log_path()
+    base = {
+        "log_path": str(resolved) if resolved else None,
+        "total_invocations": 0,
+        "by_event": {},
+        "top_skills": [],
+        "top_domains": [],
+        "top_agents": [],
+        "first_ts": None,
+        "last_ts": None,
+        "since_days": since_days,
+        "entries_skipped_malformed": 0,
+    }
+    if resolved is None or not resolved.exists():
+        return base
+
+    cutoff = None
+    if isinstance(since_days, int) and since_days > 0:
+        cutoff = _dt.now(_tz.utc) - _td(days=since_days)
+
+    by_event: Counter = Counter()
+    skills_counter: Counter = Counter()
+    domains_counter: Counter = Counter()
+    agents_counter: Counter = Counter()
+    timestamps: List[str] = []
+    skipped = 0
+
+    try:
+        with open(resolved, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = _json.loads(line)
+                except _json.JSONDecodeError:
+                    skipped += 1
+                    continue
+                if not isinstance(entry, dict):
+                    skipped += 1
+                    continue
+                ts_str = entry.get("ts")
+                if cutoff and isinstance(ts_str, str):
+                    try:
+                        ts_dt = _dt.fromisoformat(ts_str)
+                        if ts_dt.tzinfo is None:
+                            ts_dt = ts_dt.replace(tzinfo=_tz.utc)
+                        if ts_dt < cutoff:
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                event = entry.get("event")
+                if not isinstance(event, str):
+                    skipped += 1
+                    continue
+                by_event[event] += 1
+                if isinstance(ts_str, str):
+                    timestamps.append(ts_str)
+                if event == "get_skill":
+                    sid = entry.get("skill_id")
+                    if isinstance(sid, str):
+                        skills_counter[sid] += 1
+                elif event == "find_skills":
+                    domain = entry.get("domain")
+                    agent = entry.get("agent")
+                    if isinstance(domain, str):
+                        domains_counter[domain] += 1
+                    if isinstance(agent, str):
+                        agents_counter[agent] += 1
+    except OSError:
+        return base
+
+    total = sum(by_event.values())
+    base["total_invocations"] = total
+    base["by_event"] = dict(by_event)
+    base["top_skills"] = [{"skill_id": k, "count": v}
+                          for k, v in skills_counter.most_common(5)]
+    base["top_domains"] = [{"domain": k, "count": v}
+                            for k, v in domains_counter.most_common(5)]
+    base["top_agents"] = [{"agent": k, "count": v}
+                           for k, v in agents_counter.most_common(5)]
+    if timestamps:
+        timestamps.sort()
+        base["first_ts"] = timestamps[0]
+        base["last_ts"] = timestamps[-1]
+    base["entries_skipped_malformed"] = skipped
+    return base
 
 
 def validate_registry(
@@ -356,10 +551,24 @@ if __name__ == "__main__":
         ))
         sys.exit(0)
 
+    if len(sys.argv) > 1 and sys.argv[1] == "stats":
+        # Bloque F2.1.b: stats del usage log
+        since = None
+        for arg in sys.argv[2:]:
+            if arg.startswith("--since="):
+                try:
+                    since = int(arg[len("--since="):])
+                except (ValueError, TypeError):
+                    pass
+        report = usage_stats(since_days=since)
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        sys.exit(0)
+
     print(
         "usage:\n"
         "  python tools/skills_registry.py validate\n"
-        "  python tools/skills_registry.py list\n",
+        "  python tools/skills_registry.py list\n"
+        "  python tools/skills_registry.py stats [--since=N_days]\n",
         file=sys.stderr,
     )
     sys.exit(1)
