@@ -106,13 +106,23 @@ notas:       contexto breve relevante
 
 ### F11-contracts-formales
 - **título**: F1.1 — Contracts formales (envelope, phase-gate, audit trail, claim audit)
-- **estado**: open
-- **prioridad**: high
+- **estado**: partially_done (Envelope.v1 reducido mergeado en PR #27)
+- **prioridad**: medium (lo crítico ya está)
 - **introducido**: roadmap operativo 2026-05-30
-- **resuelve_en**: F1.1 (post Fase 0 cierre)
+- **resuelve_en**: F1.1.b/c/d futuros (PhaseGate / AuditTrail / ClaimAudit) solo si surge caso concreto
 - **repo**: ATLAS-core
 - **tipo**: infra
-- **notas**: Pydantic versionados (`*.v1`), mismo pattern que MARKETING-AGENCY-OS. Backward compat estricto de envelopes existentes.
+- **notas**: F1.1 reducido (Envelope.v1) mergeado a main vía PR #27. PhaseGate / AuditTrail / ClaimAudit diferidos a F1.1.b/c/d.
+
+### F21-skills-registry-hard-rules
+- **título**: F2.1 — Skills Registry + Hard Rules MVP
+- **estado**: in_progress (branch `feature/F2-1-skills-registry-hard-rules`)
+- **prioridad**: high
+- **introducido**: análisis multiagente 2026-06-03
+- **resuelve_en**: F2.1 (esta branch)
+- **repo**: ATLAS-core
+- **tipo**: infra
+- **notas**: Catálogo declarativo + reglas pipeline-level. Sin tocar dispatcher ni subagentes. 43 tests verde. Disable runtime via env vars. Criterio de fracaso explícito (§ 4.20.4 de agent-protocol).
 
 ---
 
