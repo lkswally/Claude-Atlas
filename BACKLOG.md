@@ -116,13 +116,23 @@ notas:       contexto breve relevante
 
 ### F21-skills-registry-hard-rules
 - **título**: F2.1 — Skills Registry + Hard Rules MVP
-- **estado**: in_progress (branch `feature/F2-1-skills-registry-hard-rules`)
+- **estado**: done (mergeado en PR #28, SHA 11705b4)
 - **prioridad**: high
 - **introducido**: análisis multiagente 2026-06-03
-- **resuelve_en**: F2.1 (esta branch)
+- **resuelve_en**: F2.1 (mergeado)
 - **repo**: ATLAS-core
 - **tipo**: infra
 - **notas**: Catálogo declarativo + reglas pipeline-level. Sin tocar dispatcher ni subagentes. 43 tests verde. Disable runtime via env vars. Criterio de fracaso explícito (§ 4.20.4 de agent-protocol).
+
+### F21b-registry-consumption-hints
+- **título**: F2.1.b — Registry Consumption Hints (usage logging + hints + stats CLI)
+- **estado**: in_progress (branch `feature/F2-1-b-registry-consumption-hints`)
+- **prioridad**: medium
+- **introducido**: 2026-06-05 (post-F2.1, mitigar riesgo de "registry decorativo")
+- **resuelve_en**: F2.1.b (esta branch)
+- **repo**: ATLAS-core
+- **tipo**: infra
+- **notas**: Append-only JSONL en `.claude/logs/` (gitignored) + CLI stats + hints 1 línea en 2 agentes. Hace medible el éxito/fracaso de F2.1. Fail-open total.
 
 ---
 

@@ -1228,6 +1228,31 @@ Reglas declarativas en `.claude/hard-rules.json` evaluadas por hook PreToolUse (
 | **Decision Gates con audit trail** | Depende de Hard Rules + observabilidad. Diferido a F2.4 |
 | **Token Budgets** | Requiere telemetría compleja. Diferido sin fecha |
 
+### 4.20.5 — Usage logging + stats (Bloque F2.1.b)
+
+Las 3 funciones públicas del registry (`find_skills`, `get_skill`, `list_domains`) registran cada invocación en `.claude/logs/skills-registry-usage.jsonl` (append-only). Archivo en `.gitignore` — runtime data, no source.
+
+**CLI stats**:
+
+```bash
+python tools/skills_registry.py stats           # todo el log
+python tools/skills_registry.py stats --since=7 # ultimos 7 dias
+```
+
+Retorna JSON: `total_invocations`, `by_event`, `top_skills`, `top_domains`, `top_agents`, `first_ts`/`last_ts`.
+
+**Disable / override**:
+- `ATLAS_SKILLS_USAGE_LOG_DISABLED=1` — no escribe (API sigue funcionando)
+- `ATLAS_SKILLS_USAGE_LOG_PATH=path` — override de ubicación
+
+**Fail-open absoluto**: cualquier error de escritura → silencioso. NUNCA interfiere con la API pública.
+
+**Uso pretendido**: revisión a 14/30 días post-merge para decidir si el registry está siendo consultado en sesiones reales. Si `total_invocations == 0` tras 30 días → F2.1 candidato a revert.
+
+### 4.20.6 — Hints en subagentes (Bloque F2.1.b)
+
+Se agregó **una línea opcional** en `ux-architect.md` y `evidence-collector.md` apuntando al registry como alternativa a re-leer prosa de descubrimiento. NO modifica lógica, NO obliga — hint cognitivo opt-in. El objetivo es aumentar la probabilidad de que el agente consulte `find_skills()` cuando le ahorre tiempo, sin reescribir el subagente.
+
 ### 4.20.4 — Criterio de éxito de F2.1 (medible)
 
 | Métrica | Target |

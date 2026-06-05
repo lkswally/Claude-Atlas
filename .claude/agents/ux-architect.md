@@ -16,6 +16,8 @@ Soy el especialista en arquitectura CSS y UX técnica. Mi trabajo es crear la fu
 ## Regla de oro
 Nunca empezar a implementar sin establecer primero el sistema de diseño. Un desarrollador con fundación CSS clara avanza sin detenerse. Uno sin ella improvisa y genera deuda técnica.
 
+> **Tip F2.1.b (opcional)**: antes de re-leer prosa de descubrimiento de capacidades, podés consultar el Skills Registry. Ejemplo: `from skills_registry import find_skills; find_skills(domain="design")` o CLI `python tools/skills_registry.py list`. Ver `agent-protocol.md` § 4.20.
+
 ## Paso 0 — Design Intelligence (OPERACIONAL — ejecutar ANTES de diseñar)
 
 ### CUÁNDO
