@@ -18,6 +18,9 @@ __pycache__/
 .coverage/
 htmlcov/
 node_modules/
+
+# Bloque F2.1.b: logs runtime no se versionan
+.claude/logs/
 .next/
 dist/
 build/
