@@ -39,6 +39,10 @@ const MODE = args.includes('--export') ? 'export'
   : args.includes('--hook') ? 'hook'
   : 'full';
 
+// Feature flag: ENGRAM_SYNC_DISABLED=1 desactiva el sync sin modificar el hook.
+// Útil en máquinas sin ~/.engram configurado o sin acceso a GitHub.
+const SYNC_DISABLED = process.env.ENGRAM_SYNC_DISABLED === '1';
+
 const LOG_MAX_LINES = 2000;
 
 function log(msg) {
@@ -321,8 +325,20 @@ function showStatus() {
 // MAIN
 // ============================================================
 function main() {
+  // Feature flag check — always fail-open (exit 0) when disabled
+  if (SYNC_DISABLED) {
+    if (MODE !== 'hook') console.log('[engram-sync] Disabled via ENGRAM_SYNC_DISABLED=1');
+    process.exit(0);
+  }
+
   if (!isGitRepo()) {
     log('ERROR: ~/.engram is not a git repository. Cannot sync.');
+    // En modo hook (Stop event) el contrato es fail-open: exit 0, no exit 1.
+    // exit 1 en hook mode rompe el fail-open y genera ruido en logs sin valor.
+    // Para modos interactivos (status/import/export/full) exit 1 es correcto.
+    if (MODE === 'hook') {
+      process.exit(0);
+    }
     process.exit(1);
   }
 
