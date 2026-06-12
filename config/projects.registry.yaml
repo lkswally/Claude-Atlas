@@ -1,0 +1,47 @@
+# ATLAS Projects Registry
+# ========================
+# Catalogo de proyectos externos conocidos por ATLAS.
+# No modifica los proyectos — solo los registra.
+#
+# SCHEMA POR ENTRY:
+#   id:               str unico, snake_case
+#   name:             str nombre legible
+#   path:             str path absoluto en disco (no asumir portabilidad)
+#   type:             "sibling_repo" | "embedded" | "submodule"
+#   status:           "active" | "paused" | "archived" | "broken"
+#   last_known_phase: str, ultimo bloque o fase conocido
+#   summary:          str descripcion de 1-3 lineas
+#   known_risks:      list[str] riesgos conocidos al momento del registro
+#   next_steps:       list[str] proximos pasos conocidos
+#   confidence:       "high" | "medium" | "low"
+#   registered_at:    str fecha ISO (cuando se agrego esta entrada)
+#
+# Para agregar un proyecto: append una entry. NO modificar codigo.
+# Para marcar como archivado: cambiar status a "archived". No borrar.
+
+version: 1
+projects:
+
+  - id: marketing_agency_os
+    name: "MARKETING-AGENCY-OS"
+    path: "D:\\ProyectosIA\\MARKETING-AGENCY-OS"
+    type: sibling_repo
+    status: active
+    last_known_phase: "MKT-9A — Portal MVP + Alpha Pilot readiness"
+    summary: >
+      Operating system modular para agencias de marketing. Independiente de ATLAS.
+      24 modulos core, 16 agent specs, 14 skills, 32 ADRs, 169 tests, Portal Streamlit.
+      ATLAS Bridge Contract (atlas-handoff-brief.v1) listo para futura integracion opt-in.
+      Relacion: MKT standalone; ATLAS puede invocar MKT via bridge one-way (nunca al reves).
+    known_risks:
+      - "git dubious ownership — requiere: git config --global --add safe.directory D:/ProyectosIA/MARKETING-AGENCY-OS"
+      - "Engram project no registrado — abrir Claude Code desde el directorio MKT una vez"
+      - ".env.example pendiente (P-1B.5) — accion manual; config-protection.js bloqueo la escritura"
+      - "Bug en core/pipeline/orchestrator.py:160 — strict_failure hardcoded; 30/31 tests PASS"
+    next_steps:
+      - "Correr pytest desde D:/ProyectosIA/MARKETING-AGENCY-OS y verificar 30/31 o mas PASS"
+      - "Arreglar bug orchestrator.py:160 (cambio de 1 linea) — pendiente de sesion MKT"
+      - "Decidir si continuar con MKT-9B o iniciar Alpha Pilot contra cliente real"
+      - "Registrar proyecto en Engram: abrir Claude Code desde el repo MKT"
+    confidence: high
+    registered_at: "2026-06-11"

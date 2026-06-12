@@ -327,6 +327,67 @@ def check_hard_rules() -> None:
         FAIL(".claude/hard-rules.json", f"JSON inválido: {e}")
 
 
+def check_projects_registry() -> None:
+    """Projects registry: existe, es YAML valido y proyectos activos tienen paths en disco."""
+    registry_path = PROJECT_ROOT / "config" / "projects.registry.yaml"
+    if not registry_path.exists():
+        WARN("Projects registry", "config/projects.registry.yaml no encontrado — F9 no configurado")
+        return
+
+    # Intentar parsear con PyYAML (fail-open si no esta instalado)
+    try:
+        import yaml  # type: ignore[import]
+    except ImportError:
+        WARN("Projects registry", "PyYAML no instalado — no se puede parsear el registry (pip install pyyaml)")
+        return
+
+    try:
+        data = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        FAIL("Projects registry", f"YAML invalido: {e}")
+        return
+
+    projects = data.get("projects", []) if isinstance(data, dict) else []
+    if not projects:
+        WARN("Projects registry", "registry existe pero no contiene proyectos")
+        return
+
+    active = [p for p in projects if p.get("status") == "active"]
+    missing_paths = []
+    dubious_git = []
+
+    for p in active:
+        path = p.get("path", "")
+        if not path or not Path(path).is_dir():
+            missing_paths.append(p.get("id", "<sin id>"))
+            continue
+        # Detectar dubious ownership via git
+        if p.get("type") == "sibling_repo" and (Path(path) / ".git").exists():
+            try:
+                r = subprocess.run(
+                    ["git", "-C", path, "rev-parse", "--git-dir"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if "dubious ownership" in r.stderr:
+                    dubious_git.append(p.get("id", "<sin id>"))
+            except Exception:
+                pass
+
+    issues = []
+    if missing_paths:
+        issues.append(f"paths no encontrados: {', '.join(missing_paths)}")
+    if dubious_git:
+        issues.append(f"git dubious ownership: {', '.join(dubious_git)}")
+
+    total_active = len(active)
+    if issues:
+        WARN("Projects registry",
+             f"{total_active} proyecto(s) activo(s), issues: {'; '.join(issues)}")
+    else:
+        PASS("Projects registry",
+             f"{len(projects)} proyecto(s) registrado(s), {total_active} activo(s), paths OK")
+
+
 def check_dispatcher() -> None:
     """tools/atlas_dispatcher.py debe existir e importarse sin error."""
     dp = PROJECT_ROOT / "tools" / "atlas_dispatcher.py"
@@ -399,6 +460,7 @@ def run_all() -> int:
     # --- Extras opcionales ---
     check_snapshots_dir()
     check_hard_rules()
+    check_projects_registry()
     check_dispatcher()
 
     # --- Reporte ---
