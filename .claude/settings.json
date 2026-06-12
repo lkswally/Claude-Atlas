@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/block-no-verify.js",
+            "command": "node .claude/hooks/block-no-verify.js",
             "timeout": 10
           },
           {
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/config-protection.js",
+            "command": "node .claude/hooks/config-protection.js",
             "timeout": 10
           }
         ]
@@ -33,13 +33,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/quality-gate.js",
+            "command": "node .claude/hooks/quality-gate.js",
             "timeout": 10,
             "async": true
           },
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/console-log-warning.js",
+            "command": "node .claude/hooks/console-log-warning.js",
             "timeout": 10,
             "async": true
           }
@@ -62,13 +62,13 @@
           },
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/cost-tracker.js",
+            "command": "node .claude/hooks/cost-tracker.js",
             "timeout": 10,
             "async": true
           },
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/suggest-compact.js",
+            "command": "node .claude/hooks/suggest-compact.js",
             "timeout": 10,
             "async": true
           }
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/pre-compact-engram.js",
+            "command": "node .claude/hooks/pre-compact-engram.js",
             "timeout": 30
           }
         ]
@@ -91,13 +91,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/session-summary.js",
+            "command": "node .claude/hooks/session-summary.js",
             "timeout": 30,
             "async": true
           },
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/engram-sync.js --hook",
+            "command": "node .claude/hooks/engram-sync.js --hook",
             "timeout": 60,
             "async": true
           }
@@ -109,7 +109,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /c/Users/Lucas/.claude/hooks/session-start-context.js",
+            "command": "node .claude/hooks/session-start-context.js",
             "timeout": 15
           }
         ]
