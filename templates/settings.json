@@ -3,55 +3,63 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/block-no-verify.js" }],
-        "description": "Blocks git commit/push --no-verify and --no-gpg-sign"
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/block-no-verify.js", "timeout": 10 },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/pipeline-rules.js", "timeout": 5 }
+        ],
+        "description": "Blocks git --no-verify and enforces hard rules on Bash commands"
       },
       {
         "matcher": "Write|Edit",
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/config-protection.js" }],
-        "description": "Warns when modifying linter/formatter/tsconfig files"
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/config-protection.js", "timeout": 10 }
+        ],
+        "description": "Blocks writes to .env/.pem/.key; warns on linter/formatter config changes"
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/quality-gate.js" }],
-        "description": "Warns about debugger, .only(), @ts-ignore in JS/TS files"
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/quality-gate.js", "timeout": 10, "async": true },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/console-log-warning.js", "timeout": 10, "async": true }
+        ],
+        "description": "Warns about debugger/.only()/@ts-ignore and console.log in production files"
       },
       {
-        "matcher": "Write|Edit",
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/console-log-warning.js" }],
-        "description": "Warns about console.log/warn/error in production JS/TS files"
-      },
-      {
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/suggest-compact.js", "async": true }],
-        "description": "Suggests /compact every ~50 tool calls to manage context window"
-      },
-      {
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/cost-tracker.js", "async": true }],
-        "description": "Logs tool calls by category for cost/usage analysis"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/session-summary.js", "async": true }],
-        "description": "Logs session activity for recovery and tracking"
-      },
-      {
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/engram-sync.js --hook", "async": true, "timeout": 60000 }],
-        "description": "Auto-syncs Engram memories to GitHub on session stop"
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/session-start-context.js" }],
-        "description": "Loads previous session context on startup"
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/delegation-tracker.js", "timeout": 5, "async": true },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/qa-auto-audit.js", "timeout": 6, "async": true },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/cost-tracker.js", "timeout": 10, "async": true },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/suggest-compact.js", "timeout": 10, "async": true }
+        ],
+        "description": "Tracks delegation state, auto-audits QA helpers, logs cost, suggests /compact"
       }
     ],
     "PreCompact": [
       {
-        "hooks": [{ "type": "command", "command": "node __CLAUDE_HOME__/hooks/pre-compact-engram.js" }],
-        "description": "Saves session snapshot and resets tool counter before context compaction"
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/pre-compact-engram.js", "timeout": 30 }
+        ],
+        "description": "Saves session snapshot before context compaction"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/session-summary.js", "timeout": 30, "async": true },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/engram-sync.js --hook", "timeout": 60, "async": true }
+        ],
+        "description": "Logs session activity and syncs Engram memories on session stop"
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/session-start-context.js", "timeout": 15 }
+        ],
+        "description": "Loads previous session context on startup"
       }
     ]
   },

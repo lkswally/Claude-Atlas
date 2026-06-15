@@ -20,8 +20,18 @@ const PATTERNS = [
   { regex: /\.only\s*\(/g, msg: '.only() in test — will skip other tests if committed', severity: 'error' },
   { regex: /debugger;/g, msg: 'debugger statement found — remove before committing', severity: 'error' },
   { regex: /TODO|FIXME|HACK|XXX/g, msg: 'TODO/FIXME/HACK marker found — track or resolve', severity: 'info' },
-  { regex: /(?:api[_-]?key|secret[_-]?key|auth[_-]?token|private[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"]{8,}/ig, msg: 'Possible hardcoded secret/API key detected — use environment variables instead', severity: 'error' },
-  { regex: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}/ig, msg: 'Possible hardcoded password detected — use environment variables instead', severity: 'error' },
+  { regex: /(?:api[_-]?key|secret[_-]?key|auth[_-]?token|private[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"]{8,}/ig, msg: 'Possible hardcoded secret/API key detected — use environment variables instead', severity: 'error', excludeEnvPatterns: true },
+  { regex: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}/ig, msg: 'Possible hardcoded password detected — use environment variables instead', severity: 'error', excludeEnvPatterns: true },
+];
+
+// Patterns that indicate the match is an env var reference (not a hardcoded secret)
+const ENV_REFERENCE_PATTERNS = [
+  /process\.env\./,
+  /import\.meta\.env\./,
+  /Deno\.env\./,
+  /Bun\.env\./,
+  /\.env\?\./,      // optional chaining on env object
+  /ENV\[/,          // Ruby/Node style ENV lookups
 ];
 
 let input = '';
@@ -61,6 +71,21 @@ process.stdin.on('end', () => {
         if (pattern.msg.includes('`any` type')) {
           if (matches.length >= 3) {
             warnings.push(`[${pattern.severity}] ${pattern.msg} (${matches.length}x)`);
+          }
+        } else if (pattern.excludeEnvPatterns) {
+          // Para secrets/passwords: verificar que cada match NO esté en línea con env var reference
+          const realMatches = matches.filter((match) => {
+            // Find the line containing this match
+            const idx = content.indexOf(match);
+            if (idx === -1) return true;
+            const lineStart = content.lastIndexOf('\n', idx) + 1;
+            const lineEnd = content.indexOf('\n', idx);
+            const line = content.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+            // Si la línea referencia process.env.*/import.meta.env.*/etc → no es hardcoded
+            return !ENV_REFERENCE_PATTERNS.some((re) => re.test(line));
+          });
+          if (realMatches.length > 0) {
+            warnings.push(`[${pattern.severity}] ${pattern.msg} (${realMatches.length}x)`);
           }
         } else {
           warnings.push(`[${pattern.severity}] ${pattern.msg} (${matches.length}x)`);

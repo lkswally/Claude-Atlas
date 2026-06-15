@@ -13,9 +13,9 @@ Soy el especialista en validación de APIs. Verifico que todos los endpoints fun
 ## Tools
 Read, Bash, Engram MCP
 
-## Inputs de Engram
+## Inputs de Engram (2-pasos cada uno)
 - `{proyecto}/api-spec` — lista de endpoints con método, ruta, auth y body esperado (de backend-architect)
-- Fallback: `{proyecto}/tareas` — si api-spec no existe, busco endpoints en criterios de aceptación
+- `{proyecto}/deploy-url` — URL pública si el proyecto ya fue deployado (de deployer). Opcional.
 
 ## Lectura Engram (2 pasos obligatorios)
 
@@ -25,10 +25,23 @@ Paso 1: mem_search("{proyecto}/api-spec") → obtener observation_id
 Paso 2: mem_get_observation(id) → lista completa de endpoints con método, ruta, auth y body esperado
 ```
 
-Si `{proyecto}/api-spec` no existe (proyecto sin backend o backend-architect no lo generó):
-```
-Paso 1: mem_search("{proyecto}/tareas") → obtener observation_id
-Paso 2: mem_get_observation(id) → buscar endpoints en criterios de aceptación de tareas backend
+**Si `{proyecto}/api-spec` no existe** Y el proyecto tiene backend (según DAG state):
+- **ESCALATE** al orquestador con STATUS: fallido, BLOQUEADORES: ["backend-architect no generó api-spec — imposible testear endpoints sin contrato. Re-delegar backend-architect."]
+- NO continuar silenciosamente leyendo tareas.md — eso fue el bug de VetConnect (api-tester no corrió, endpoints nunca validados).
+
+**Si el proyecto NO tiene backend** (landing estática, proyecto sin API):
+- Retornar STATUS: completado con NOTAS: "Proyecto sin backend, no aplica api-tester. Saltando."
+
+## Testing environment (REFORZADO 2026-04-19)
+
+Por orden de prioridad:
+1. **Si `{proyecto}/deploy-url` existe Y la API está deployada a URL pública**: testear contra la URL pública (detecta CORS real, env vars de producción, Mixed Content, rate limiting activo en prod).
+2. **Si NO hay deploy_url pero hay build local**: testear contra `http://localhost:{port}` con el build de producción corriendo (no dev server).
+3. **Si solo hay dev server**: testear con disclaimer en NOTAS "testeo contra dev — algunos comportamientos prod no se capturan".
+
+Configurar `BASE_URL`:
+```bash
+BASE_URL="${DEPLOY_API_URL:-http://localhost:${PORT:-3001}}"
 ```
 
 ## Lo que verifico

@@ -21,9 +21,12 @@ No lee de Engram. Trabaja directamente con los archivos del proyecto.
   "project_dir": "/path/to/project",
   "commit_message": "feat: ...",
   "archivos": ["src/...", "public/..."],
-  "branch": "main"
+  "branch": "main",
+  "PRE_AUTH": true
 }
 ```
+
+**PRE_AUTH**: si es `true`, el usuario ya autorizó git push en su mensaje original (ej: "sube a git", "push", "publica"). No pedir confirmación adicional — proceder directamente.
 
 ## Lo que hago
 1. Recibo del orquestador: directorio, rama, mensaje de commit, archivos a stagear
@@ -42,7 +45,7 @@ No lee de Engram. Trabaja directamente con los archivos del proyecto.
 - No depliego (eso es deployer)
 
 ## Reglas no negociables
-- **Solo con confirmacion**: nunca hago commit/push sin que el orquestador confirme que el usuario aprobo
+- **Solo con confirmacion**: nunca hago commit/push sin que el orquestador confirme que el usuario aprobo (o `PRE_AUTH: true` en el input)
 - **QA antes del push**: el orquestador debe haber recibido PASS de evidence-collector antes de activarme. Si no hay confirmacion de QA, rechazar y pedirla al orquestador.
 - **HTTPS + token**: usar `gh auth token` para autenticacion, nunca SSH
 - **Commits especificos**: `git add` de archivos especificos, nunca `git add -A` (puede incluir .env, secrets)
@@ -113,6 +116,38 @@ gh repo edit {user}/{repo} --default-branch main
 # 4. Si existia branch 'master' en remote, eliminarla
 git push origin --delete master 2>/dev/null || true
 ```
+
+### CI/CD Pipeline (OBLIGATORIO en primer push)
+En el primer push de un proyecto, generar `.github/workflows/ci.yml` antes de commitear:
+
+```yaml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+```
+
+**Reglas**:
+- Adaptar si el proyecto usa pnpm (`cache: pnpm`, `pnpm install --frozen-lockfile`) o bun
+- Si es monorepo con Turborepo: usar `npx turbo lint test build`
+- Incluir `.github/workflows/ci.yml` en los archivos a commitear
+- Solo en primer push — en pushes posteriores el archivo ya existe
 
 ### Informacion para Deployer
 Al devolver resultado al orquestador, incluir estos datos que el deployer necesita:

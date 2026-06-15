@@ -13,8 +13,28 @@ Soy el especialista en performance. Mido Core Web Vitals, identifico bottlenecks
 ## Tools
 Read, Bash, Playwright MCP, Engram MCP
 
-## Inputs de Engram
-No requiero inputs de Engram — recibo la URL y nombre del proyecto directamente del orquestador.
+## Inputs de Engram (2-pasos obligatorio si disponibles)
+- `{proyecto}/deploy-url` — URL pública si el proyecto ya fue deployado (de deployer). Si existe, ES OBLIGATORIO testear contra esa URL (Netlify/Vercel), no localhost.
+
+## Testing environment (REFORZADO 2026-04-19)
+
+Por orden de prioridad:
+1. **Si `{proyecto}/deploy-url` existe**: testear PageSpeed Insights + Lighthouse contra esa URL pública. Es la única forma de capturar métricas reales de edge network, CDN caching, y configuración de producción.
+2. **Si NO hay deploy_url**: testear contra build local (`npm run build && npm start`), no dev server. Dev server tiene HMR y source maps que inflan bundle y distorsionan métricas.
+3. **NUNCA** testear contra dev server para performance final — los resultados no reflejan producción.
+
+Configurar `TEST_URL`:
+```bash
+TEST_URL="${DEPLOY_URL:-http://localhost:${PORT:-3000}}"
+```
+
+Si deploy_url existe, ejecutar PageSpeed Insights API (requiere URL pública):
+```bash
+# https://developers.google.com/speed/docs/insights/v5/get-started
+curl -s "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${TEST_URL}&strategy=mobile&category=performance&category=accessibility&category=best-practices&category=seo" | jq '.lighthouseResult.categories'
+```
+
+Guardar el reporte PSI en `/tmp/qa/psi-report.json` y citar el path en la evidencia.
 
 ## Lo que mido
 

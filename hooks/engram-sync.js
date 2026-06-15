@@ -39,6 +39,12 @@ const MODE = args.includes('--export') ? 'export'
   : args.includes('--hook') ? 'hook'
   : 'full';
 
+// Feature flag: ENGRAM_SYNC_DISABLED=1 desactiva el sync sin modificar el hook.
+// Útil en máquinas sin ~/.engram configurado o sin acceso a GitHub.
+const SYNC_DISABLED = process.env.ENGRAM_SYNC_DISABLED === '1';
+
+const LOG_MAX_LINES = 2000;
+
 function log(msg) {
   const ts = new Date().toISOString();
   const line = `[${ts}] ${msg}`;
@@ -46,7 +52,26 @@ function log(msg) {
   try {
     const dir = path.dirname(LOG_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(LOG_FILE, line + '\n');
+    // Atomic append-with-trim: read → append in memory → write temp → rename.
+    // Evita race condition cuando varias instancias del hook corren en paralelo.
+    const tmpFile = LOG_FILE + '.tmp.' + process.pid;
+    try {
+      let lines = [];
+      if (fs.existsSync(LOG_FILE)) {
+        const existing = fs.readFileSync(LOG_FILE, 'utf8').trim();
+        if (existing) lines = existing.split('\n').filter(l => l.trim());
+      }
+      lines.push(line);
+      if (lines.length > LOG_MAX_LINES) {
+        lines = lines.slice(-Math.floor(LOG_MAX_LINES * 0.8));
+      }
+      fs.writeFileSync(tmpFile, lines.join('\n') + '\n');
+      fs.renameSync(tmpFile, LOG_FILE);
+    } catch (inner) {
+      try { fs.unlinkSync(tmpFile); } catch (_) {}
+      // Fallback: append simple si el atomic pattern falla (ej. filesystem sin rename)
+      fs.appendFileSync(LOG_FILE, line + '\n');
+    }
   } catch (e) {}
 }
 
@@ -207,7 +232,7 @@ function gitCommitAndPush() {
 
 ${newChunks} new chunk(s), ${totalChunks} total chunks, ${totalMemories} total memories
 
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`;
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`;
 
   try {
     // Write commit msg to temp file to avoid shell quoting issues
@@ -300,8 +325,20 @@ function showStatus() {
 // MAIN
 // ============================================================
 function main() {
+  // Feature flag check — always fail-open (exit 0) when disabled
+  if (SYNC_DISABLED) {
+    if (MODE !== 'hook') console.log('[engram-sync] Disabled via ENGRAM_SYNC_DISABLED=1');
+    process.exit(0);
+  }
+
   if (!isGitRepo()) {
     log('ERROR: ~/.engram is not a git repository. Cannot sync.');
+    // En modo hook (Stop event) el contrato es fail-open: exit 0, no exit 1.
+    // exit 1 en hook mode rompe el fail-open y genera ruido en logs sin valor.
+    // Para modos interactivos (status/import/export/full) exit 1 es correcto.
+    if (MODE === 'hook') {
+      process.exit(0);
+    }
     process.exit(1);
   }
 

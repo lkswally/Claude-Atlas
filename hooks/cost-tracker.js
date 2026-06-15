@@ -71,21 +71,22 @@ process.stdin.on('end', () => {
       entry.category = 'other';
     }
 
-    // Append (atomic: write to temp then rename to avoid race conditions)
+    // Atomic append-with-trim: read → append in memory → write to temp → rename.
+    // Evita race condition read-write entre append y trim cuando corren hooks paralelos.
     const tmpFile = COST_LOG + '.tmp.' + process.pid;
     try {
-      fs.appendFileSync(COST_LOG, JSON.stringify(entry) + '\n');
-
-      // Auto-trim si supera MAX_LINES (keep 80% to avoid frequent trims)
-      const content = fs.readFileSync(COST_LOG, 'utf8').trim();
-      if (content) {
-        const lines = content.split('\n').filter(l => l.trim());
-        if (lines.length > MAX_LINES) {
-          const trimmed = lines.slice(-Math.floor(MAX_LINES * 0.8)).join('\n') + '\n';
-          fs.writeFileSync(tmpFile, trimmed);
-          fs.renameSync(tmpFile, COST_LOG);
-        }
+      let lines = [];
+      if (fs.existsSync(COST_LOG)) {
+        const existing = fs.readFileSync(COST_LOG, 'utf8').trim();
+        if (existing) lines = existing.split('\n').filter(l => l.trim());
       }
+      lines.push(JSON.stringify(entry));
+      // Trim si supera MAX_LINES (keep 80% to avoid frequent trims)
+      if (lines.length > MAX_LINES) {
+        lines = lines.slice(-Math.floor(MAX_LINES * 0.8));
+      }
+      fs.writeFileSync(tmpFile, lines.join('\n') + '\n');
+      fs.renameSync(tmpFile, COST_LOG);  // rename es atómico en mismo filesystem
     } catch (e) {
       try { fs.unlinkSync(tmpFile); } catch (_) {}
     }

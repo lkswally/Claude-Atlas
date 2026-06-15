@@ -94,8 +94,20 @@ Estructura: monorepo | single-repo
 ## Gaps identificados
 {lista de cosas no especificadas que podrían bloquear — si no hay, escribir "ninguno"}
 
-## Tareas de configuración (primero)
-[tareas de setup: inicializar proyecto, instalar dependencias, configurar DB, etc.]
+## Tarea 0: Project Infrastructure (OBLIGATORIA — siempre incluir)
+Setup base que todo proyecto necesita antes del desarrollo:
+- Inicializar proyecto con stack detectado
+- ESLint + Prettier (.eslintrc.json, .prettierrc, .editorconfig)
+- Husky + lint-staged (pre-commit: lint + type-check)
+- .env.example con todas las variables necesarias (nunca valores reales)
+- .gitignore completo (node_modules, .env, dist, .next, etc.)
+- README.md con: descripción del proyecto, stack usado, setup local (git clone, npm install, configurar .env, npm run dev), scripts disponibles (dev, build, test, lint), estructura de carpetas
+- vitest.config.ts + script "test" en package.json
+- Estructura de carpetas estandarizada (ver sección abajo)
+Criterio de aceptación: npm run lint pasa sin errores, npm test existe (puede no tener tests aún), README tiene instrucciones de setup completas
+
+## Tareas de configuración
+[tareas de setup adicionales: configurar DB, auth, API base, etc.]
 [Si monorepo: incluir tarea de setup workspace con apps/ + packages/ + turbo.json]
 
 ## Tareas de desarrollo (orden de dependencias)
@@ -103,10 +115,40 @@ Estructura: monorepo | single-repo
 
 ## Tareas de integración (al final)
 [conectar partes, testing manual, ajustes finales]
+
+## Estados secundarios (recomendación)
+Si el proyecto tiene UI, considerar incluir tareas para:
+- Empty states (listas vacías, sin resultados, primer uso)
+- Error states (404, 500, offline, timeout)
+- Loading states (skeleton screens, spinners con branding)
+- Success states (confirmaciones, animaciones de completado)
+Incluir como criterios dentro de tareas existentes o como tarea dedicada si el proyecto es complejo.
 ```
 
-### Estructura monorepo (cuando aplique)
-Si el proyecto tiene frontend + backend separados o múltiples apps:
+### Estructura single-repo (default para la mayoría de proyectos)
+```
+{proyecto}/
+├── src/
+│   ├── app/                ← rutas/páginas (Next.js app router, etc.)
+│   ├── components/
+│   │   ├── ui/             ← componentes base (botones, inputs, cards)
+│   │   └── {feature}/      ← componentes por feature
+│   ├── lib/                ← utilidades, helpers, configuración de clients
+│   ├── hooks/              ← custom React hooks
+│   ├── types/              ← interfaces y tipos TypeScript
+│   └── __tests__/          ← tests unitarios (mirror de la estructura de src/)
+├── public/                 ← assets estáticos
+├── .eslintrc.json
+├── .prettierrc
+├── .editorconfig
+├── .env.example
+├── .gitignore
+├── vitest.config.ts
+├── README.md
+└── package.json
+```
+
+### Estructura monorepo (cuando el proyecto tiene frontend + backend separados)
 ```
 {proyecto}/
 ├── apps/
@@ -119,7 +161,11 @@ Si el proyecto tiene frontend + backend separados o múltiples apps:
 │   └── auth/           ← config Better Auth compartida
 ├── package.json        ← workspace root
 ├── turbo.json          ← build orchestration (si usa Turborepo)
-└── .env.example
+├── .eslintrc.json
+├── .prettierrc
+├── .env.example
+├── README.md
+└── vitest.config.ts    ← config compartida o por app
 ```
 La primera tarea de config DEBE incluir el setup del workspace.
 

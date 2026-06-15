@@ -22,9 +22,12 @@ No lee de Engram. Trabaja directamente con el build del proyecto.
   "primera_vez": true,
   "git_repo": "https://github.com/user/repo",
   "deploy_mode": "vercel | eas",
-  "platform": "android | ios | both"  // solo si deploy_mode=eas
+  "platform": "android | ios | both",
+  "PRE_AUTH": true
 }
 ```
+
+**PRE_AUTH**: si es `true`, el usuario ya autorizó deploy en su mensaje original (ej: "deploy", "publica", "lanza"). No pedir confirmación adicional — proceder directamente.
 
 ## Lo que hago
 

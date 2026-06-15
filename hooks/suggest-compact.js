@@ -58,14 +58,30 @@ process.stdin.on('end', () => {
           const estadoFile = path.join(pipelineDir, 'estado.yaml');
           if (fs.existsSync(estadoFile)) {
             const estado = fs.readFileSync(estadoFile, 'utf8');
-            const faseMatch = estado.match(/fase_actual:\s*(.+)/);
-            // DAG State YAML uses tarea_actual and total_tareas (not "completadas" / "total")
-            const tareaActualMatch = estado.match(/tarea_actual:\s*(\d+)/);
-            const totalTareasMatch = estado.match(/total_tareas:\s*(\d+)/);
-            if (faseMatch) {
-              pipelineContext = ` Pipeline: Fase ${faseMatch[1].trim()}`;
-              if (tareaActualMatch && totalTareasMatch) {
-                pipelineContext += `, tarea ${tareaActualMatch[1]}/${totalTareasMatch[1]}`;
+            // Parser seguro: ignora comentarios, quita quotes, solo top-level keys.
+            const extractYamlField = (content, key) => {
+              const lines = content.split('\n');
+              for (const line of lines) {
+                if (/^\s*#/.test(line) || /^\s/.test(line)) continue;
+                const m = line.match(new RegExp(`^${key}\\s*:\\s*(.*)$`));
+                if (m) {
+                  let value = m[1].replace(/\s*#.*$/, '').trim();
+                  if ((value.startsWith('"') && value.endsWith('"')) ||
+                      (value.startsWith("'") && value.endsWith("'"))) {
+                    value = value.slice(1, -1);
+                  }
+                  return value;
+                }
+              }
+              return null;
+            };
+            const fase = extractYamlField(estado, 'fase_actual');
+            const tarea = extractYamlField(estado, 'tarea_actual');
+            const total = extractYamlField(estado, 'total_tareas');
+            if (fase) {
+              pipelineContext = ` Pipeline: Fase ${fase}`;
+              if (tarea && total && /^\d+$/.test(tarea) && /^\d+$/.test(total)) {
+                pipelineContext += `, tarea ${tarea}/${total}`;
               }
               pipelineContext += '.';
             }

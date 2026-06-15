@@ -470,23 +470,38 @@ function testClaudeMdFile(claudeMdPath) {
     }
   }
 
-  // Check tools table has all agents
+  // Check tools table has all agents.
+  // Source of truth: pipeline-reference.md (moved there to reduce CLAUDE.md bloat).
+  // If CLAUDE.md redirects ("ver pipeline-reference.md"), check that file instead.
   const agentFiles = fs.readdirSync(AGENTS_DIR)
     .filter(f => f.endsWith('.md'))
     .filter(f => !REFERENCE_SUFFIXES.some(s => f.endsWith(s)))
     .filter(f => !NON_AGENT_FILES.includes(f))
     .map(f => f.replace('.md', ''));
 
+  // Determine where the tools table lives
+  let tableContent = content;
+  let tableSource = 'CLAUDE.md';
+  const redirectsToPipelineRef = content.includes('Tabla completa de tools') &&
+                                 content.includes('pipeline-reference.md');
+  if (redirectsToPipelineRef) {
+    const pipelineRefPath = path.join(AGENTS_DIR, 'pipeline-reference.md');
+    if (fs.existsSync(pipelineRefPath)) {
+      tableContent = fs.readFileSync(pipelineRefPath, 'utf8');
+      tableSource = 'pipeline-reference.md';
+    }
+  }
+
   const missingInTable = [];
   for (const agent of agentFiles) {
     // Check if agent appears in the tools table (| agentname |)
-    if (!content.includes(`| ${agent} |`) && !content.includes(`| ${agent}`)) {
+    if (!tableContent.includes(`| ${agent} |`) && !tableContent.includes(`| ${agent}`)) {
       missingInTable.push(agent);
     }
   }
 
   if (missingInTable.length > 0) {
-    issues.push(`Agents missing from tools table: ${missingInTable.join(', ')}`);
+    issues.push(`Agents missing from tools table (${tableSource}): ${missingInTable.join(', ')}`);
   }
 
   // Check hooks section exists

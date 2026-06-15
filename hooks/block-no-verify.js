@@ -43,6 +43,15 @@ process.stdin.on('end', () => {
       process.exit(2);
     }
 
+    // Detectar git push --force / -f (puede sobrescribir historia remota)
+    if (/git\s+push\s+.*(-f\b|--force\b|--force-with-lease\b)/.test(command)) {
+      process.stderr.write(
+        'BLOCKED: git push --force detected. This can overwrite remote history. ' +
+        'Ask the user for explicit permission.'
+      );
+      process.exit(2);
+    }
+
     // Detectar rm -rf con paths peligrosos (/, ~, ., ..)
     if (/\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|.*-rf\s+|.*-fr\s+)(\/|~|\.\.|\.(?:\s|$))/.test(command) ||
         /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|.*-rf\s+|.*-fr\s+)\*/.test(command)) {

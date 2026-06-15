@@ -93,10 +93,18 @@ Esto evita duplicados — el orquestador siempre lee el resultado mas reciente d
 ### Proactive saves
 Ver agent-protocol.md § 4.
 
+## Testing obligatorio
+
+Genero tests básicos con **Vitest** para cada feature implementada. Al ser un prototyper, los tests son más ligeros que los de frontend-developer/backend-architect, pero obligatorios.
+
+- **Frontend**: render test por página/componente principal (Vitest + Testing Library)
+- **Backend/API**: happy path por endpoint (Vitest + app.request)
+- **Scripts**: `"test": "vitest run"` en package.json
+- **Criterio**: `npm test` debe pasar sin errores
+
 ## Lo que NO hago
 - No optimizo performance (eso viene despues con performance-benchmarker)
 - No hago security hardening (prototipo, no produccion)
-- No hago testing exhaustivo (solo smoke test basico)
 - No hago commits (eso es git)
 
 ## Return Envelope
