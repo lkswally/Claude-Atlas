@@ -327,6 +327,59 @@ def check_hard_rules() -> None:
         FAIL(".claude/hard-rules.json", f"JSON inválido: {e}")
 
 
+def check_skills_registry() -> None:
+    """
+    Skills Registry (F2.1): PyYAML disponible, registry existe, parsea y tiene skills validas.
+
+    WARN en lugar de FAIL porque el registry es fail-open por disenio.
+    Si PyYAML falta, emite WARN visible (no silencio).
+    """
+    registry_path = PROJECT_ROOT / ".claude" / "skills.registry.yaml"
+
+    # Check 1: PyYAML disponible
+    try:
+        import yaml  # type: ignore[import]
+    except ImportError:
+        WARN("Skills registry", "PyYAML no instalado — registry silenciosamente muerto (pip install pyyaml)")
+        return
+
+    # Check 2: archivo existe
+    if not registry_path.exists():
+        WARN("Skills registry", f".claude/skills.registry.yaml no encontrado")
+        return
+
+    # Check 3: parsea sin error
+    try:
+        data = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        WARN("Skills registry", f"YAML invalido: {e}")
+        return
+
+    if not isinstance(data, dict):
+        WARN("Skills registry", "YAML no es un dict en la raiz")
+        return
+
+    # Check 4: tiene skills
+    skills = data.get("skills", [])
+    if not isinstance(skills, list) or len(skills) == 0:
+        WARN("Skills registry", "registry existe pero lista 'skills' vacia o ausente")
+        return
+
+    # Check 5: al menos una skill con campos minimos validos
+    REQUIRED = ("skill_id", "domain", "agent", "description", "inputs", "outputs", "cost_tier")
+    valid = [s for s in skills if isinstance(s, dict) and all(k in s for k in REQUIRED)]
+    invalid = len(skills) - len(valid)
+    domains = sorted({s.get("domain", "") for s in valid if s.get("domain")})
+
+    if invalid > 0:
+        WARN("Skills registry",
+             f"{valid}/{len(skills)} skills validas, {invalid} con campos faltantes. "
+             f"Dominios: {domains}")
+    else:
+        PASS("Skills registry",
+             f"{len(valid)} skills, dominios: {domains}")
+
+
 def check_projects_registry() -> None:
     """Projects registry: existe, es YAML valido y proyectos activos tienen paths en disco."""
     registry_path = PROJECT_ROOT / "config" / "projects.registry.yaml"
@@ -460,6 +513,7 @@ def run_all() -> int:
     # --- Extras opcionales ---
     check_snapshots_dir()
     check_hard_rules()
+    check_skills_registry()
     check_projects_registry()
     check_dispatcher()
 
