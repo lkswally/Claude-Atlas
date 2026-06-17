@@ -56,7 +56,7 @@ Desktop.ini
 # Exclude projects with their own repos (not part of Claude-Atlas)
 Proyectos internos/
 conexo-web/
-lucas-rojo-web/web/.git/
+lucas-rojo-web/web/
 
 # Test databases and temp data
 *.db
