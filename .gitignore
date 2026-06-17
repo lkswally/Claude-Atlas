@@ -26,7 +26,7 @@ dist/
 build/
 
 # ATLAS runtime state (Bloque 1D.1)
-.pipeline/delegation-state.json
+.pipeline/
 
 # Virtual environments
 venv/
@@ -74,6 +74,10 @@ _test_runs/
 .claude/shell-snapshots/
 .claude/snapshots/
 .claude/projects/
+
+# QA evidence directories (binarios y evidencia histórica — conservados en disco, no en git)
+qa/
+_qa/conexo-2026-05-21/
 
 # User-specific settings (keep settings.json out if it has API keys)
 # .claude/settings.json is commented out — include it in version control for team alignment
