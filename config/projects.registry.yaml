@@ -1,13 +1,19 @@
 # ATLAS Projects Registry
 # ========================
-# Catalogo de proyectos externos conocidos por ATLAS.
-# No modifica los proyectos — solo los registra.
+# Catalogo de proyectos conocidos por ATLAS.
+# No modifica los proyectos — solo los registra para evitar perdida de contexto.
 #
 # SCHEMA POR ENTRY:
 #   id:               str unico, snake_case
 #   name:             str nombre legible
 #   path:             str path absoluto en disco (no asumir portabilidad)
 #   type:             "sibling_repo" | "embedded" | "submodule"
+#                     - sibling_repo: repo git independiente, hermano del ATLAS repo
+#                     - embedded: vive dentro del CWD de ATLAS (puede ser gitignored)
+#                     - submodule: registrado como git submodule (en .gitmodules)
+#   category:         (opcional) "ATLAS_PROJECT" | "ATLAS_EXTENSION"
+#                     - ATLAS_PROJECT: proyecto de producto gestionado por ATLAS
+#                     - ATLAS_EXTENSION: herramienta/addon conectado a ATLAS runtime
 #   status:           "active" | "paused" | "archived" | "broken"
 #   last_known_phase: str, ultimo bloque o fase conocido
 #   summary:          str descripcion de 1-3 lineas
@@ -18,6 +24,7 @@
 #
 # Para agregar un proyecto: append una entry. NO modificar codigo.
 # Para marcar como archivado: cambiar status a "archived". No borrar.
+# Proyectos gitignored NO son basura — son proyectos activos fuera del core.
 
 version: 1
 projects:
@@ -26,6 +33,7 @@ projects:
     name: "MARKETING-AGENCY-OS"
     path: "D:\\ProyectosIA\\MARKETING-AGENCY-OS"
     type: sibling_repo
+    category: ATLAS_PROJECT
     status: active
     last_known_phase: "MKT-9A — Portal MVP + Alpha Pilot readiness"
     summary: >
@@ -45,3 +53,99 @@ projects:
       - "Registrar proyecto en Engram: abrir Claude Code desde el repo MKT"
     confidence: high
     registered_at: "2026-06-11"
+
+  - id: conexo_web
+    name: "Conexo Web"
+    path: "D:\\ProyectosIA\\ProyectosClaude\\conexo-web"
+    type: embedded
+    category: ATLAS_PROJECT
+    status: paused
+    last_known_phase: "Fase 3 — Dev completado, pendiente de resolver Engram MCP bug"
+    summary: >
+      Sitio web de Conexo Consultora. Next.js 16 App Router. Vive dentro del CWD de ATLAS
+      como directorio gitignored (.gitignore linea 58). Tiene PENDING.md activo con deuda
+      tecnica de Engram MCP. Sin sprint activo al momento del registro.
+    known_risks:
+      - "Engram MCP no reconoce proyecto conexo-web (autodetecta project por CWD del MCP = system32). Workaround: topic_key 'conexo-web/*' como prefix"
+      - "node_modules/ presente pero .next/build puede estar desactualizado — verificar antes de deploy"
+      - "PENDING.md documenta bug de Engram — no es codigo roto, es deuda de infraestructura"
+    next_steps:
+      - "Decidir si retomar sprint de conexo-web"
+      - "Si retoma: leer PENDING.md y resolver bug de Engram MCP (Opcion A: reiniciar MCP con cwd=conexo-web)"
+      - "Verificar build: cd conexo-web && npm run build"
+    confidence: high
+    registered_at: "2026-06-17"
+
+  - id: lucas_rojo_web
+    name: "Lucas Rojo Web"
+    path: "D:\\ProyectosIA\\ProyectosClaude\\lucas-rojo-web"
+    type: embedded
+    category: ATLAS_PROJECT
+    status: active
+    last_known_phase: "v3.5 — Simplificacion de arquitectura completada (2026-05-31)"
+    summary: >
+      Portfolio personal de Lucas Rojo (lucasrojo.com). Next.js 16 App Router.
+      La fundacion del proyecto (architecture.md, design-system.md, tokens.css) esta
+      trackeada en el repo ATLAS bajo lucas-rojo-web/foundation/. El codigo del sitio
+      vive en lucas-rojo-web/web/ como gitlink a un nested repo (no registrado como submodule).
+      El subdirectorio web/ es un nested git repo sin .gitmodules — esto genera un gitlink
+      roto en git status pero no afecta el runtime ATLAS ni el deploy.
+    known_risks:
+      - "lucas-rojo-web/web es un gitlink sin .gitmodules — git status lo muestra como 'modified content' de forma permanente. No es un error de ATLAS, es una deuda de git hygiene (F12C pendiente)"
+      - "BACKLOG.md y brand/brand.v1L.json estan untracked — no estan en git del ATLAS repo"
+      - "git submodule update --init falla con 'no submodule mapping' — no ejecutar hasta resolver F12C"
+    next_steps:
+      - "F12C: resolver gitlink — opcion A: git rm --cached lucas-rojo-web/web + agregar a .gitignore"
+      - "Registrar lucas-rojo-web/web como submodule formal si el repo tiene remote publico (Opcion B)"
+      - "Deploy: verificar que el nested repo en web/ tiene las dependencias instaladas antes de npm run build"
+    confidence: high
+    registered_at: "2026-06-17"
+
+  - id: reyesoft_internal
+    name: "REYESOFT Internal"
+    path: "D:\\ProyectosIA\\ProyectosClaude\\Proyectos internos\\REYESOFT"
+    type: embedded
+    category: ATLAS_PROJECT
+    status: active
+    last_known_phase: "Gestion operativa activa — minutas, areas, agentes"
+    summary: >
+      Sistema de gestion interna de REYESOFT. Documentos de operacion empresarial:
+      minutas, areas funcionales (CFO, tesoreria, etc.), contratos de datos, agentes
+      y responsabilidades. No es un proyecto de codigo — es documentacion operativa.
+      Vive en Proyectos internos/REYESOFT/, directorio gitignored (.gitignore linea 57).
+      Sin PENDING.md ni BACKLOG.md — la estructura es _archive/_inbox/_meta/templates.
+    known_risks:
+      - "Sin PENDING.md ni BACKLOG.md — no hay tracking formal de deuda tecnica"
+      - "Directorio gitignored: los archivos no tienen backup en git. Depende de backup externo"
+      - "opencode-config presente — puede haber configuracion especifica de otra herramienta AI"
+    next_steps:
+      - "Evaluar si se crea PENDING.md para tracking de deuda operativa"
+      - "Verificar que opencode-config no contiene API keys u otro dato sensible"
+    confidence: medium
+    registered_at: "2026-06-17"
+
+  - id: pixel_bridge
+    name: "Pixel Bridge"
+    path: "D:\\ProyectosIA\\ProyectosClaude\\pixel-bridge"
+    type: embedded
+    category: ATLAS_EXTENSION
+    status: paused
+    last_known_phase: "Initial setup — standalone viewer, assets pendientes de descarga"
+    summary: >
+      Dashboard visual de agentes ATLAS como personajes en una oficina pixel art.
+      Servidor Node.js + React en localhost:3456. Lee archivos JSONL de ~/.claude/projects/
+      y anima la actividad de cada agente. Adaptacion standalone de pixel-agents (pablodelucca).
+      Trackeado en el repo ATLAS bajo pixel-bridge/ (webview-ui version) y tambien
+      instalado como .claude/pixel-bridge/ (standalone version).
+      DESACOPLADO del runtime ATLAS: ningun hook, tool ni config lo referencia.
+      Requiere descarga manual de assets de sprites (no incluidos en repo por tamano).
+    known_risks:
+      - "Assets de sprites no incluidos — requiere: git clone pixel-agents y copiar assets"
+      - "Dos versiones en disco (pixel-bridge/ webview-ui y .claude/pixel-bridge/ standalone) sin mecanismo de sync"
+      - "Completamente desacoplado del runtime — si no se usa, no afecta nada"
+    next_steps:
+      - "Decidir version canonica (webview-ui vs standalone)"
+      - "Descargar assets si se quiere usar: ver pixel-bridge/README.md"
+      - "No prioritario — no afecta runtime ATLAS"
+    confidence: high
+    registered_at: "2026-06-17"

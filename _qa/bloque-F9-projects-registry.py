@@ -228,6 +228,108 @@ def test_11_disabled_flag_returns_empty():
     print("[OK]")
 
 
+def test_13_embedded_projects_registered():
+    print("\n=== TEST 13: proyectos embedded registrados (conexo_web, lucas_rojo_web, reyesoft_internal) ===")
+    data = _load_yaml_raw()
+    if data is None:
+        print("  [SKIP] PyYAML no instalado")
+        return
+    projects = {p["id"]: p for p in data.get("projects", []) if "id" in p}
+    for pid in ("conexo_web", "lucas_rojo_web", "reyesoft_internal"):
+        assert pid in projects, \
+            f"'{pid}' no encontrado en registry. ids: {list(projects.keys())}"
+        p = projects[pid]
+        assert p.get("type") == "embedded", \
+            f"{pid}: type esperado 'embedded', got {p.get('type')!r}"
+        for field in ("id", "name", "path", "type", "status",
+                      "last_known_phase", "summary", "confidence"):
+            assert field in p, f"{pid}: falta campo '{field}'"
+    print(f"  conexo_web: status={projects['conexo_web']['status']}")
+    print(f"  lucas_rojo_web: status={projects['lucas_rojo_web']['status']}")
+    print(f"  reyesoft_internal: status={projects['reyesoft_internal']['status']}")
+    print("[OK]")
+
+
+def test_14_embedded_projects_paths_exist():
+    print("\n=== TEST 14: paths de proyectos embedded existen en disco ===")
+    data = _load_yaml_raw()
+    if data is None:
+        print("  [SKIP] PyYAML no instalado")
+        return
+    projects = {p["id"]: p for p in data.get("projects", []) if "id" in p}
+    for pid in ("conexo_web", "lucas_rojo_web", "reyesoft_internal"):
+        p = projects.get(pid)
+        assert p is not None, f"'{pid}' no en registry"
+        path = Path(p["path"])
+        assert path.exists() and path.is_dir(), \
+            f"{pid}: path no encontrado en disco: {path}"
+        print(f"  {pid}: {path} ✓")
+    print("[OK]")
+
+
+def test_15_lucas_rojo_web_gitlink_warn_documented():
+    print("\n=== TEST 15: lucas_rojo_web documenta el gitlink roto en known_risks ===")
+    data = _load_yaml_raw()
+    if data is None:
+        print("  [SKIP] PyYAML no instalado")
+        return
+    projects = {p["id"]: p for p in data.get("projects", []) if "id" in p}
+    lrw = projects.get("lucas_rojo_web")
+    assert lrw is not None, "lucas_rojo_web no en registry"
+    risks = lrw.get("known_risks", [])
+    assert any("gitlink" in r.lower() or "submodule" in r.lower() for r in risks), \
+        f"lucas_rojo_web.known_risks no documenta el problema del gitlink. risks={risks}"
+    print(f"  known_risks documenta el gitlink: True")
+    print(f"  risks={risks[:1]}")
+    print("[OK]")
+
+
+def test_16_embedded_health_check_no_git_fail():
+    print("\n=== TEST 16: check_project_health para embedded no falla por ausencia de .git ===")
+    mod = _import_loader()
+    for pid in ("conexo_web", "lucas_rojo_web"):
+        health = mod.check_project_health(pid)
+        if health["path"] is None:
+            print(f"  [INFO] {pid} no en loader (PyYAML ausente) — acceptable")
+            continue
+        # Para embedded, is_git_repo debe ser None (no aplica), no False
+        assert health["checks"].get("is_git_repo") is None, \
+            f"{pid}: is_git_repo esperado None para embedded, got {health['checks'].get('is_git_repo')}"
+        # path_exists debe ser True
+        assert health["checks"].get("path_exists") is True, \
+            f"{pid}: path_exists debe ser True. checks={health['checks']}"
+        # No debe haber warning sobre .git ausente
+        git_warnings = [w for w in health["warnings"] if ".git" in w.lower() and "ausente" in w.lower()]
+        assert not git_warnings, \
+            f"{pid}: warnings inesperados sobre .git: {git_warnings}"
+        print(f"  {pid}: path_exists=True, is_git_repo=None, warnings={health['warnings']}")
+    print("[OK]")
+
+
+def test_17_category_field_valid():
+    print("\n=== TEST 17: campo category valido en todos los proyectos que lo tienen ===")
+    data = _load_yaml_raw()
+    if data is None:
+        print("  [SKIP] PyYAML no instalado")
+        return
+    VALID = {"ATLAS_PROJECT", "ATLAS_EXTENSION"}
+    for p in data.get("projects", []):
+        cat = p.get("category")
+        if cat is not None:
+            assert cat in VALID, \
+                f"project {p.get('id')!r}: category invalida {cat!r} (esperado {VALID})"
+    # Al menos los proyectos clave deben tener category
+    projects = {p["id"]: p for p in data.get("projects", []) if "id" in p}
+    for pid in ("marketing_agency_os", "conexo_web", "lucas_rojo_web",
+                "reyesoft_internal", "pixel_bridge"):
+        assert pid in projects, f"'{pid}' no en registry"
+        assert "category" in projects[pid], \
+            f"{pid}: campo 'category' ausente (se requiere para taxonomia F12B)"
+    cats = {p.get("id"): p.get("category") for p in data["projects"]}
+    print(f"  categorias: {cats}")
+    print("[OK]")
+
+
 def test_12_healthcheck_includes_projects_registry():
     print("\n=== TEST 12: healthcheck de ATLAS incluye check de projects registry ===")
     healthcheck = PROJECT_ROOT / "tools" / "atlas_healthcheck.py"
@@ -281,6 +383,12 @@ def main():
         test_10_dubious_ownership_is_warning_not_fail,
         test_11_disabled_flag_returns_empty,
         test_12_healthcheck_includes_projects_registry,
+        # F12C.1 — registry expansion
+        test_13_embedded_projects_registered,
+        test_14_embedded_projects_paths_exist,
+        test_15_lucas_rojo_web_gitlink_warn_documented,
+        test_16_embedded_health_check_no_git_fail,
+        test_17_category_field_valid,
     ]
 
     passed = failed = 0
@@ -317,6 +425,11 @@ def main():
         print("[OK] check_project_health reporta dubious ownership como warning")
         print("[OK] ATLAS_PROJECTS_REGISTRY_DISABLED=1 hace fail-open limpio")
         print("[OK] atlas_healthcheck incluye check de projects registry")
+        print("[OK] conexo_web / lucas_rojo_web / reyesoft_internal registrados como embedded")
+        print("[OK] paths de proyectos embedded existen en disco")
+        print("[OK] lucas_rojo_web gitlink documentado en known_risks — no FAIL")
+        print("[OK] embedded health check: is_git_repo=None, path_exists=True")
+        print("[OK] campo category valido en todos los proyectos (ATLAS_PROJECT / ATLAS_EXTENSION)")
     return 1 if failed > 0 else 0
 
 

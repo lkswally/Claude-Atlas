@@ -36,6 +36,7 @@ REQUIRED_FIELDS = ("id", "name", "path", "type", "status",
 VALID_TYPES = {"sibling_repo", "embedded", "submodule"}
 VALID_STATUSES = {"active", "paused", "archived", "broken"}
 VALID_CONFIDENCE = {"high", "medium", "low"}
+VALID_CATEGORIES = {"ATLAS_PROJECT", "ATLAS_EXTENSION"}  # opcional en cada entry
 
 _CACHED_PROJECTS: Optional[List[Dict[str, Any]]] = None
 _CACHED_PATH: Optional[Path] = None
@@ -82,6 +83,10 @@ def _validate_entry(entry: Dict[str, Any]) -> Optional[str]:
         return f"status invalido: {entry.get('status')!r} (esperado {VALID_STATUSES})"
     if entry.get("confidence") not in VALID_CONFIDENCE:
         return f"confidence invalido: {entry.get('confidence')!r} (esperado {VALID_CONFIDENCE})"
+    # category es opcional; si esta presente debe ser valido
+    cat = entry.get("category")
+    if cat is not None and cat not in VALID_CATEGORIES:
+        return f"category invalida: {cat!r} (esperado {VALID_CATEGORIES} o ausente)"
     return None
 
 
