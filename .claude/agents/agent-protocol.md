@@ -1336,6 +1336,96 @@ from tools.contracts import (
 - Refactor de `verify_*` helpers a Pydantic — no es necesario, siguen usando dict
 - Migración masiva de tests existentes — explícitamente fuera de scope
 
+## 4.18. Design Criterion Hardening (Bloques 1L.1 → 1L.4)
+
+**Alcance**: bloque consolidado de 4 sub-bloques que endurece la barra de calidad visual en el pipeline. Cierra los gaps A.1 (especialización), A.2 (routing), A.3 (referencias planas) del diagnóstico de fase 0.6.
+
+### 4.18.1 — Intent Classifier (1L.1)
+
+`dispatcher.classify_user_intent(prompt)` clasifica el pedido del usuario en 4 buckets antes de delegar a project-manager-senior:
+
+- `audit` — solo análisis, sin tocar código
+- `redesign` — Fase 2 + 3 completas
+- `implement` — solo Fase 3 sobre diseño existente
+- `validate` — solo evidence-collector + reality-checker
+
+Confidence `high|medium|low`. En `low` el orquestador DEBE escalar al usuario con `escalation_question`, NO decidir solo.
+
+Rollback: `ATLAS_INTENT_CLASSIFIER_DISABLED=1`.
+
+### 4.18.2 — design_quality bloqueante (1L.2)
+
+En `mode="design_strict"`, `validate_return_envelope` ejecuta `design_quality_enforcement` sobre los archivos declarados. **HIGH findings rechazan el envelope** con error accionable (file:line + suggestion).
+
+Whitelist anti-disguise por `brand.style`: solo fonts canónicas en `{brutalism, editorial-raw, neo-grotesque}` se degradan. Colors / layouts / opacity / radius **nunca** se whitelistan.
+
+Solo extensiones UI relevantes se escanean (`.css .scss .tsx .jsx .ts .js .vue .svelte .html .astro`).
+
+Rollback: `enforce_design_quality=False` (param) o `ATLAS_DESIGN_QUALITY_BLOCKING_DISABLED=1` (env).
+
+### 4.18.3 — reference-driven-design obligatorio (1L.3)
+
+`brand.references` es obligatorio en `design_strict`:
+- 2 ≤ len(references) ≤ 5
+- cada entry: `url` (con `.` o `://`), `rationale` ≥ 10 chars, `take` lista no-vacía, `skip` opcional lista
+
+ui-designer (detectado por heurística) DEBE incluir `references_used: [url]`:
+- list[str] no-vacía
+- subset estricto de `brand.references[].url`
+
+NO se valida URL viva (sin HTTP en runtime).
+
+Resolución de `references`: `response.brand.references` → `response.references` → `{root}/brand.json` → `{root}/.pipeline/brand.json`.
+
+Rollback: `enforce_references=False` (param) o `ATLAS_REFERENCES_ENFORCEMENT_DISABLED=1` (env).
+
+### 4.18.4 — Refuerzo editorial obligatorio (1L.4)
+
+En `design_strict` para ui-designer, el envelope DEBE incluir `editorial_compliance`:
+
+```yaml
+editorial_compliance:
+  asymmetric_section: {present: bool, where: str, rationale: str (>=20 chars)}
+  typography_mix: {display: str, body: str, justified: bool=true}
+  references_cited: [url]              # subset estricto de references_used
+  boilerplate_avoided: {explained: str (>=20 chars)}
+  whitespace_intentional: {documented: bool=true}
+```
+
+Reglas duras:
+- 5 sub-campos obligatorios
+- `typography_mix.display.lower() != typography_mix.body.lower()` (anti-monotypo)
+- `rationale` / `explained` ≥ 20 chars (anti-teatro)
+- `references_cited` subset estricto de `references_used`
+- `justified` y `documented` deben ser `true`
+
+Rollback: `enforce_editorial_compliance=False` (param) o `ATLAS_EDITORIAL_ENFORCEMENT_DISABLED=1` (env).
+
+### 4.18.5 — Cascada de validación en design_strict
+
+Orden de checks en `validate_return_envelope(mode="design_strict")`:
+
+```
+1. STATUS valido (completado | fallido)
+2. archivos / bloqueadores tipados
+3. design_intelligence consultado (Bloque 1C.1)
+4. design_quality_enforcement (1L.2)
+5. references schema + references_used subset (1L.3)
+6. editorial_compliance schema (1L.4, solo ui-designer)
+7. Hard enforcement de helpers (1K.3 / 1K.4 si aplica)
+```
+
+Todos los modos NO-design_strict mantienen backward compat estricta. Ningún sub-bloque 1L se activa automáticamente fuera de `design_strict`.
+
+### 4.18.6 — Helpers públicos agregados
+
+- `classify_user_intent(prompt, context=None) → dict`
+- `verify_design_quality(response) → (errores, warnings)`
+- `verify_references(response) → (errores, warnings)`
+- `verify_editorial_compliance(response) → (errores, warnings)`
+
+Más helpers internos: `_resolve_brand_style`, `_resolve_brand_references`, `_looks_like_ui_designer`.
+
 ---
 
 ## 4.17. Auto-Invocation of Missing Helpers (Bloque 1K.4)

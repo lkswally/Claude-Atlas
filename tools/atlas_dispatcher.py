@@ -42,6 +42,12 @@ except ImportError:
     _LegacyShapeError = None  # type: ignore
     _CONTRACTS_AVAILABLE = False
 
+# Bloque 1L.1: Intent Classifier (opt-in, default ON)
+try:
+    from intent_classifier import classify_user_intent as _classify_user_intent
+except ImportError:
+    _classify_user_intent = None  # disponible solo si intent_classifier.py esta presente
+
 # Bloque 1B.1: Engram Strategy Pattern (preparacion para MCP real en 1B.2)
 # Por defecto se usa DiskFallbackStrategy — NO es Engram real, es disk fallback.
 # El orquestador puede inyectar un callback (CallbackStrategy) que conecte
@@ -115,6 +121,16 @@ class ATLASDispatcher:
         # Valores: "active" | "disabled_by_env" | "disabled_by_param" |
         #          "unavailable: {reason}" | "disabled_default"
         self.engram_mcp_status: str = "disabled_default"
+
+        # Bloque 1L.1: Intent Classifier (opt-in via env var)
+        # Default ON si _classify_user_intent fue importado.
+        # Desactivable con ATLAS_INTENT_CLASSIFIER_DISABLED=1
+        intent_disabled = os.environ.get(
+            "ATLAS_INTENT_CLASSIFIER_DISABLED", ""
+        ).lower() in ("1", "true", "yes")
+        self.intent_classifier_enabled: bool = bool(
+            _classify_user_intent is not None and not intent_disabled
+        )
 
         # Bloque 1B.5: auto-enable de Engram MCP al construir.
         # Decision matrix:
@@ -713,6 +729,9 @@ class ATLASDispatcher:
         enforce_helpers: bool = False,
         agent_name: Optional[str] = None,
         try_auto_invoke: bool = False,
+        enforce_design_quality: Optional[bool] = None,
+        enforce_references: Optional[bool] = None,
+        enforce_editorial_compliance: Optional[bool] = None,
     ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
@@ -751,6 +770,46 @@ class ATLASDispatcher:
           path dict puro sin error.
         - Disable runtime: env var ATLAS_PYDANTIC_CONTRACTS_DISABLED=1 fuerza
           el path dict legacy aun con contracts instalado.
+
+        Bloque 1L.2 — design_quality bloqueante (opt-in con default por modo):
+        - enforce_design_quality=None (default):
+            * mode="design_strict" -> True (active por defecto en design_strict)
+            * otros modos -> False (backward compat estricto, sin cambios)
+        - enforce_design_quality=True forzado: rechaza HIGH findings de
+          design_quality_enforcement aunque mode != design_strict (uso avanzado,
+          NO recomendado).
+        - enforce_design_quality=False forzado: skip total (rollback runtime).
+        - Whitelist por brand.style: SOLO fonts canonicos en estilos
+          {brutalism, editorial-raw, neo-grotesque} se degradan HIGH->whitelisted
+          warning. Colors/layouts/etc. NUNCA se whitelistan (anti-disguise).
+
+        Bloque 1L.3 — reference-driven-design obligatorio (opt-in con default por modo):
+        - enforce_references=None (default):
+            * mode="design_strict" -> True (active por defecto)
+            * otros modos -> False (backward compat estricto)
+        - enforce_references=True/False forzados -> override explicito.
+        - Env var ATLAS_REFERENCES_ENFORCEMENT_DISABLED=1 desactiva runtime.
+        - Schema validado:
+            * brand.references: list de 2..5 entries
+            * cada entry: {url:str, rationale:str (>=10 chars),
+                           take:[str] no-vacio, skip:[str] opcional}
+        - ui-designer: response.references_used: [url] no-vacio Y subset de
+          brand.references URLs.
+        - NO se valida URL vivo (no HTTP en runtime — fuera de scope).
+
+        Bloque 1L.4 — refuerzo editorial obligatorio (opt-in con default por modo):
+        - enforce_editorial_compliance=None (default):
+            * mode="design_strict" + envelope parece ui-designer -> True
+            * otros casos -> False (backward compat)
+        - Env var ATLAS_EDITORIAL_ENFORCEMENT_DISABLED=1 desactiva runtime.
+        - Schema editorial_compliance obligatorio:
+            * asymmetric_section: {present, where, rationale (>=20 chars)}
+            * typography_mix: {display, body, justified}; display!=body
+            * references_cited: lista de URLs, subset de references_used
+            * boilerplate_avoided: {explained (>=20 chars)}
+            * whitespace_intentional: {documented: bool=True}
+        - Anti-teatro: rationale/explained con < 20 chars REJECT.
+        - Anti-monotypo: display == body REJECT.
         """
         # Bloque F1.1: coercion / shape-validation transparente
         # IMPORTANTE: NO reasignar response cuando ya es dict — preservamos
@@ -902,6 +961,56 @@ class ATLASDispatcher:
                 errores.append("archivos debe ser lista")
             if not isinstance(response.get("bloqueadores"), (list, type(None))):
                 errores.append("bloqueadores debe ser lista o null")
+
+        # Bloque 1L.2: design_quality bloqueante con whitelist por brand.style
+        # Resolver default si enforce_design_quality=None
+        if enforce_design_quality is None:
+            effective_enforce_dq = (mode == "design_strict")
+        else:
+            effective_enforce_dq = bool(enforce_design_quality)
+
+        # Permitir rollback runtime via env var
+        if os.environ.get("ATLAS_DESIGN_QUALITY_BLOCKING_DISABLED", "").lower() in ("1", "true", "yes"):
+            effective_enforce_dq = False
+
+        if effective_enforce_dq and response.get("status") == "completado":
+            dq_errores, dq_warnings = self.verify_design_quality(response)
+            errores.extend(dq_errores)
+            if dq_warnings:
+                response.setdefault("_dispatcher_warnings", []).extend(dq_warnings)
+
+        # Bloque 1L.3: references obligatorias en design_strict
+        if enforce_references is None:
+            effective_enforce_refs = (mode == "design_strict")
+        else:
+            effective_enforce_refs = bool(enforce_references)
+
+        if os.environ.get("ATLAS_REFERENCES_ENFORCEMENT_DISABLED", "").lower() in ("1", "true", "yes"):
+            effective_enforce_refs = False
+
+        if effective_enforce_refs and response.get("status") == "completado":
+            ref_errores, ref_warnings = self.verify_references(response)
+            errores.extend(ref_errores)
+            if ref_warnings:
+                response.setdefault("_dispatcher_warnings", []).extend(ref_warnings)
+
+        # Bloque 1L.4: editorial_compliance obligatorio en design_strict para ui-designer
+        if enforce_editorial_compliance is None:
+            effective_enforce_ec = (
+                mode == "design_strict"
+                and self._looks_like_ui_designer(response)
+            )
+        else:
+            effective_enforce_ec = bool(enforce_editorial_compliance)
+
+        if os.environ.get("ATLAS_EDITORIAL_ENFORCEMENT_DISABLED", "").lower() in ("1", "true", "yes"):
+            effective_enforce_ec = False
+
+        if effective_enforce_ec and response.get("status") == "completado":
+            ec_errores, ec_warnings = self.verify_editorial_compliance(response)
+            errores.extend(ec_errores)
+            if ec_warnings:
+                response.setdefault("_dispatcher_warnings", []).extend(ec_warnings)
 
         # Bloque 1K.3 + 1K.4: Hard Enforcement Escalation con auto-invoke opcional
         # Solo aplica si enforce_helpers=True Y se proveyo agent_name.
@@ -1350,6 +1459,749 @@ class ATLASDispatcher:
                 "loop_count": {},
                 "note": f"Error en cross-session check: {type(e).__name__}: {e}",
                 "history_entries": [],
+            }
+
+    # ============================================================
+    #  Bloque 1L.2: Design Quality Blocking en design_strict
+    # ============================================================
+
+    # Whitelist anti-disguise: SOLO fonts canonicos por estilo declarado.
+    # Colors / layouts / opacity / radius / components NUNCA se whitelistan
+    # (un brutalism real puede usar Helvetica, pero NO un Tailwind blue #3b82f6).
+    STYLE_FONT_WHITELIST: Dict[str, set] = {
+        "brutalism": {"helvetica", "arial", "times new roman"},
+        "editorial-raw": {"helvetica", "times new roman", "verdana"},
+        "neo-grotesque": {"helvetica", "arial"},
+    }
+
+    def _resolve_brand_style(
+        self,
+        response: Dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Bloque 1L.2: resuelve el style declarado.
+        Fuentes (en orden de prioridad):
+        1. response["brand"]["style"]  (inline para tests / overrides)
+        2. response["brand_style"]     (alias corto)
+        3. {project_root}/brand.json -> "style"
+        4. {project_root}/.pipeline/brand.json -> "style"
+
+        Retorna el style normalizado (lowercase + trim) o None.
+        """
+        # Inline en envelope
+        brand_inline = response.get("brand")
+        if isinstance(brand_inline, dict):
+            style = brand_inline.get("style")
+            if isinstance(style, str) and style.strip():
+                return style.strip().lower()
+
+        brand_style_short = response.get("brand_style")
+        if isinstance(brand_style_short, str) and brand_style_short.strip():
+            return brand_style_short.strip().lower()
+
+        # Disco
+        for candidate in (
+            self.project_root / "brand.json",
+            self.project_root / ".pipeline" / "brand.json",
+        ):
+            if not candidate.exists():
+                continue
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                style = data.get("style")
+                if isinstance(style, str) and style.strip():
+                    return style.strip().lower()
+                # Algunos brand.json anidan: {"brand": {"style": ...}}
+                inner = data.get("brand")
+                if isinstance(inner, dict):
+                    style = inner.get("style")
+                    if isinstance(style, str) and style.strip():
+                        return style.strip().lower()
+        return None
+
+    def verify_design_quality(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1L.2: Re-ejecuta design_quality_enforcement sobre los archivos
+        declarados en el envelope y devuelve (errores_bloqueantes, warnings).
+
+        - Por cada archivo en response['archivos']: corre DesignQualityEnforcer.
+        - Filtra HIGH findings por STYLE_FONT_WHITELIST si brand.style se resuelve.
+        - HIGH no-whitelistados -> bloquean (errores).
+        - HIGH whitelistados -> warnings (visibles en _dispatcher_warnings).
+        - MEDIUM/LOW -> warnings informativos.
+
+        Fail-open: si design_quality_enforcement no disponible (import error)
+        retorna ([], []) y deja un warning explicito.
+
+        Args:
+            response: envelope del subagente
+
+        Returns:
+            (errores: List[str], warnings: List[str])
+        """
+        self._record_invocation(
+            "verify_design_quality",
+            context={"archivos_count": len(response.get("archivos") or [])},
+        )
+
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        try:
+            from design_quality_enforcement import DesignQualityEnforcer
+        except ImportError as e:
+            warnings.append(
+                f"design_quality_enforcement no disponible ({type(e).__name__}: {e}). "
+                f"Verificacion 1L.2 skipped."
+            )
+            return errores, warnings
+
+        archivos = response.get("archivos") or []
+        if not isinstance(archivos, list) or not archivos:
+            # Sin archivos para escanear, no bloquea (otros validadores ya
+            # rechazaron envelope si era obligatorio).
+            return errores, warnings
+
+        style = self._resolve_brand_style(response)
+        whitelist_fonts = self.STYLE_FONT_WHITELIST.get(style, set()) if style else set()
+
+        enforcer = DesignQualityEnforcer()
+        scanned = 0
+        skipped: List[str] = []
+        for f in archivos:
+            if not isinstance(f, str):
+                continue
+            path = Path(f)
+            if not path.is_absolute():
+                path = self.project_root / path
+            # Solo extensiones relevantes para evitar escanear binarios/configs
+            suffix = path.suffix.lower()
+            if suffix not in (".css", ".scss", ".sass", ".less",
+                              ".tsx", ".jsx", ".ts", ".js",
+                              ".vue", ".svelte", ".html", ".astro"):
+                skipped.append(f)
+                continue
+            if not path.exists():
+                # No bloqueamos por archivo missing — pre_return_audit /
+                # verify_declared_files ya cubren ese caso en dev_strict.
+                continue
+            findings = enforcer.analyze_file(path)
+            enforcer.findings.extend(findings)
+            scanned += 1
+
+        if scanned == 0:
+            warnings.append(
+                "design_quality: 0 archivos UI escaneados "
+                f"(de {len(archivos)} declarados; skipped por extension: {len(skipped)}). "
+                "Sin enforcement aplicable."
+            )
+            return errores, warnings
+
+        # Particionar HIGH findings: whitelistados vs bloqueantes
+        blocking: List[Any] = []
+        whitelisted: List[Any] = []
+        for finding in enforcer.findings:
+            if finding.severity != "HIGH":
+                continue
+            if (finding.pattern_type == "font"
+                    and finding.pattern.lower() in whitelist_fonts):
+                whitelisted.append(finding)
+            else:
+                blocking.append(finding)
+
+        if whitelisted:
+            warnings.append(
+                f"design_quality: {len(whitelisted)} HIGH finding(s) degradados a "
+                f"warning por whitelist de estilo '{style}' "
+                f"(solo fonts whitelistados): "
+                + ", ".join(
+                    f"{f.pattern}@{f.file_path}:{f.line_number}"
+                    for f in whitelisted
+                )
+            )
+
+        if blocking:
+            # Mensaje accionable: file:line + tipo + sugerencia explicita
+            lines = [
+                f"design_quality (Bloque 1L.2): {len(blocking)} HIGH finding(s) "
+                f"bloquean envelope en mode='design_strict'. "
+                f"Fix obligatorio antes de re-enviar."
+                f"{' Style declarado: ' + style + '.' if style else ' Sin brand.style declarado.'}"
+            ]
+            for f in blocking:
+                lines.append(
+                    f"  - [{f.pattern_type}] '{f.pattern}' @ "
+                    f"{f.file_path or '<unknown>'}:{f.line_number or '?'} "
+                    f"-> {f.suggestion}"
+                )
+            errores.append("\n".join(lines))
+
+        # MEDIUM / LOW como informativos (no bloquean)
+        med = sum(1 for f in enforcer.findings if f.severity == "MEDIUM")
+        low = sum(1 for f in enforcer.findings if f.severity == "LOW")
+        if med or low:
+            warnings.append(
+                f"design_quality: {med} MEDIUM + {low} LOW findings "
+                f"(no bloquean, pero conviene revisar)."
+            )
+
+        return errores, warnings
+
+    # ============================================================
+    #  Bloque 1L.3: reference-driven-design obligatorio
+    # ============================================================
+
+    REFERENCES_MIN = 2
+    REFERENCES_MAX = 5
+    REFERENCE_RATIONALE_MIN_CHARS = 10
+    REFERENCE_URL_MIN_CHARS = 4  # ej: "x.io"
+
+    def _resolve_brand_references(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[Optional[List[Dict[str, Any]]], str]:
+        """
+        Bloque 1L.3: resuelve la lista de references desde varias fuentes,
+        en orden de prioridad:
+
+        1. response["brand"]["references"]  (inline)
+        2. response["references"]           (alias short)
+        3. {project_root}/brand.json -> "references"
+           (o brand.json -> "brand" -> "references" si esta anidado)
+        4. {project_root}/.pipeline/brand.json idem
+
+        Returns:
+            (references: List[dict] | None, origin: str)
+            origin in {"inline-brand", "inline-references", "disk:brand.json",
+                       "disk:.pipeline/brand.json", "missing"}
+        """
+        # Si el campo existe pero NO es lista, lo devolvemos como esta y
+        # verify_references reporta "debe ser lista" en vez de "ausente".
+        brand_inline = response.get("brand")
+        if isinstance(brand_inline, dict):
+            if "references" in brand_inline:
+                return brand_inline.get("references"), "inline-brand"
+
+        if "references" in response:
+            return response.get("references"), "inline-references"
+
+        for candidate, origin in (
+            (self.project_root / "brand.json", "disk:brand.json"),
+            (self.project_root / ".pipeline" / "brand.json", "disk:.pipeline/brand.json"),
+        ):
+            if not candidate.exists():
+                continue
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            if "references" in data:
+                return data.get("references"), origin
+            inner = data.get("brand")
+            if isinstance(inner, dict) and "references" in inner:
+                return inner.get("references"), origin
+
+        return None, "missing"
+
+    def verify_references(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1L.3: valida que brand.references este presente, bien formado
+        y que (si es ui-designer envelope) references_used cite un subset.
+
+        Retorna (errores_bloqueantes, warnings).
+
+        REGLAS:
+        - references debe ser lista de 2..5 entries.
+        - Cada entry:
+            * url: str no-vacio (>=4 chars), contiene "." o "://" (heuristica
+              minima, NO http check)
+            * rationale: str (>=10 chars)
+            * take: list[str] con al menos 1 string no-vacio
+            * skip: opcional, si presente debe ser list[str]
+        - references_used (cuando aplica, ie agente UI):
+            * presente como list[str] no-vacio
+            * cada URL DEBE estar en references (subset)
+
+        NOTA: ui-designer SIEMPRE debe citar references_used. Para detectar
+        si el envelope es ui-designer, miramos response['agent'] o
+        response['design_intelligence'].queried (heuristica suave). Si no
+        podemos decidir, solo se valida que references_used (si esta) sea
+        consistente, sin obligar a estar presente.
+        """
+        self._record_invocation(
+            "verify_references",
+            context={"has_inline_brand": isinstance(response.get("brand"), dict)},
+        )
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        refs, origin = self._resolve_brand_references(response)
+
+        if refs is None:
+            errores.append(
+                "design_strict (Bloque 1L.3): brand.references ausente. "
+                "Requerido: lista de 2..5 entries. "
+                "Fuentes admitidas: response.brand.references, response.references, "
+                "{root}/brand.json, {root}/.pipeline/brand.json."
+            )
+            return errores, warnings
+
+        if not isinstance(refs, list):
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references debe ser lista; "
+                f"recibido {type(refs).__name__} ({origin})."
+            )
+            return errores, warnings
+
+        n = len(refs)
+        if n < self.REFERENCES_MIN:
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references tiene {n} entries; "
+                f"minimo {self.REFERENCES_MIN}. Origen: {origin}."
+            )
+            return errores, warnings
+        if n > self.REFERENCES_MAX:
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references tiene {n} entries; "
+                f"maximo {self.REFERENCES_MAX}. Acotar a las mas relevantes. "
+                f"Origen: {origin}."
+            )
+            return errores, warnings
+
+        # Validar shape de cada entry
+        bad_entries: List[str] = []
+        seen_urls: List[str] = []
+        for idx, entry in enumerate(refs):
+            if not isinstance(entry, dict):
+                bad_entries.append(
+                    f"  - entry[{idx}]: no es dict (recibido {type(entry).__name__})"
+                )
+                continue
+
+            url = entry.get("url")
+            rationale = entry.get("rationale")
+            take = entry.get("take")
+            skip = entry.get("skip")
+
+            entry_errs: List[str] = []
+            if not isinstance(url, str) or len(url.strip()) < self.REFERENCE_URL_MIN_CHARS:
+                entry_errs.append(
+                    f"url ausente o invalido (recibido: {url!r})"
+                )
+            elif ("." not in url) and ("://" not in url):
+                entry_errs.append(
+                    f"url '{url}' no parece URL (sin '.' ni '://')"
+                )
+            else:
+                seen_urls.append(url.strip())
+
+            if not isinstance(rationale, str) or len(rationale.strip()) < self.REFERENCE_RATIONALE_MIN_CHARS:
+                entry_errs.append(
+                    f"rationale ausente o < {self.REFERENCE_RATIONALE_MIN_CHARS} chars "
+                    f"(recibido: {rationale!r})"
+                )
+
+            if not isinstance(take, list) or not take:
+                entry_errs.append(
+                    f"take debe ser lista no-vacia (recibido: {take!r})"
+                )
+            else:
+                non_empty = [t for t in take if isinstance(t, str) and t.strip()]
+                if not non_empty:
+                    entry_errs.append(
+                        "take debe tener al menos 1 string no-vacio"
+                    )
+
+            if skip is not None and not isinstance(skip, list):
+                entry_errs.append(
+                    f"skip (opcional) debe ser lista si esta presente "
+                    f"(recibido: {type(skip).__name__})"
+                )
+
+            if entry_errs:
+                bad_entries.append(
+                    f"  - entry[{idx}] (url={url!r}): " + "; ".join(entry_errs)
+                )
+
+        if bad_entries:
+            errores.append(
+                f"design_strict (Bloque 1L.3): brand.references tiene "
+                f"{len(bad_entries)} entries con shape invalido (origen: {origin}):\n"
+                + "\n".join(bad_entries)
+            )
+            return errores, warnings
+
+        # Detectar duplicados de URL (warning, no bloqueo)
+        if len(seen_urls) != len(set(seen_urls)):
+            warnings.append(
+                "brand.references contiene URLs duplicadas — revisar."
+            )
+
+        # Validar references_used si esta presente
+        used = response.get("references_used")
+        is_ui_agent = self._looks_like_ui_designer(response)
+
+        if used is None:
+            if is_ui_agent:
+                errores.append(
+                    "design_strict (Bloque 1L.3): ui-designer envelope no "
+                    "incluye references_used. Requerido: lista no-vacia de "
+                    "URLs citadas de brand.references."
+                )
+            # Si no parece ui-designer (ej brand-agent generando el brief),
+            # no es obligatorio que cite.
+            return errores, warnings
+
+        if not isinstance(used, list):
+            errores.append(
+                f"design_strict (Bloque 1L.3): references_used debe ser lista; "
+                f"recibido {type(used).__name__}."
+            )
+            return errores, warnings
+
+        if not used:
+            errores.append(
+                "design_strict (Bloque 1L.3): references_used vacio. "
+                "ui-designer debe citar al menos 1 URL de brand.references."
+            )
+            return errores, warnings
+
+        valid_urls = {
+            entry["url"].strip()
+            for entry in refs
+            if isinstance(entry, dict) and isinstance(entry.get("url"), str)
+        }
+        out_of_set: List[str] = []
+        for u in used:
+            if not isinstance(u, str):
+                out_of_set.append(repr(u))
+                continue
+            if u.strip() not in valid_urls:
+                out_of_set.append(u)
+
+        if out_of_set:
+            errores.append(
+                f"design_strict (Bloque 1L.3): references_used contiene URLs "
+                f"que NO estan en brand.references: {out_of_set}. "
+                f"references_used debe ser subset estricto."
+            )
+
+        return errores, warnings
+
+    def _looks_like_ui_designer(self, response: Dict[str, Any]) -> bool:
+        """
+        Bloque 1L.3: heuristica suave para detectar si el envelope viene de
+        ui-designer (o equivalente) y por tanto debe citar references_used.
+
+        Senales (cualquiera suficiente):
+        - response['agent'] in {"ui-designer", "ux-architect"}
+        - response['design_intelligence'].queried == True
+        - response['references_used'] esta presente (lista o no)
+        - cajon engram menciona 'design-system' o 'visual-direction'
+        """
+        agent = response.get("agent")
+        if isinstance(agent, str) and agent.lower() in ("ui-designer", "ux-architect"):
+            return True
+        di = response.get("design_intelligence")
+        if isinstance(di, dict) and di.get("queried") is True:
+            return True
+        if "references_used" in response:
+            return True
+        cajon = response.get("engram", "")
+        if isinstance(cajon, str):
+            low = cajon.lower()
+            if "design-system" in low or "visual-direction" in low or "ui-designer" in low:
+                return True
+        return False
+
+    # ============================================================
+    #  Bloque 1L.4: Refuerzo editorial obligatorio
+    # ============================================================
+
+    EDITORIAL_RATIONALE_MIN_CHARS = 20
+    EDITORIAL_REQUIRED_KEYS = (
+        "asymmetric_section",
+        "typography_mix",
+        "references_cited",
+        "boilerplate_avoided",
+        "whitespace_intentional",
+    )
+
+    def verify_editorial_compliance(
+        self,
+        response: Dict[str, Any],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Bloque 1L.4: valida que el envelope de ui-designer incluya
+        editorial_compliance con compromisos verificables (no teatro).
+
+        Reglas duras (todas rechazan envelope):
+        1. campo editorial_compliance presente y dict
+        2. 5 sub-campos obligatorios: asymmetric_section, typography_mix,
+           references_cited, boilerplate_avoided, whitespace_intentional
+        3. asymmetric_section:
+            - present: bool
+            - where: str no-vacio
+            - rationale: str >= EDITORIAL_RATIONALE_MIN_CHARS (anti-teatro)
+        4. typography_mix:
+            - display: str no-vacio
+            - body: str no-vacio
+            - display.lower() != body.lower() (anti-monotypo: Inter+Inter REJECT)
+            - justified: bool == True (si False, debe justificarse en notas
+              -- no soportado en 1L.4, simple True)
+        5. references_cited:
+            - list[str] no-vacia
+            - subset estricto de response.references_used
+        6. boilerplate_avoided:
+            - explained: str >= EDITORIAL_RATIONALE_MIN_CHARS
+        7. whitespace_intentional:
+            - documented: bool == True
+
+        Returns:
+            (errores: List[str], warnings: List[str])
+        """
+        self._record_invocation(
+            "verify_editorial_compliance",
+            context={
+                "has_ec": "editorial_compliance" in response,
+                "has_ru": "references_used" in response,
+            },
+        )
+
+        errores: List[str] = []
+        warnings: List[str] = []
+
+        ec = response.get("editorial_compliance")
+        if ec is None:
+            errores.append(
+                "design_strict (Bloque 1L.4): editorial_compliance ausente. "
+                "ui-designer DEBE incluir editorial_compliance con 5 sub-campos: "
+                + ", ".join(self.EDITORIAL_REQUIRED_KEYS) + "."
+            )
+            return errores, warnings
+
+        if not isinstance(ec, dict):
+            errores.append(
+                f"design_strict (Bloque 1L.4): editorial_compliance debe ser dict; "
+                f"recibido {type(ec).__name__}."
+            )
+            return errores, warnings
+
+        missing = [k for k in self.EDITORIAL_REQUIRED_KEYS if k not in ec]
+        if missing:
+            errores.append(
+                f"design_strict (Bloque 1L.4): editorial_compliance falta sub-campos: "
+                f"{missing}."
+            )
+            # Continuamos validando los presentes (mas info accionable)
+
+        # --- asymmetric_section -----------------------------------------
+        asym = ec.get("asymmetric_section")
+        if isinstance(asym, dict):
+            asym_errs = []
+            if not isinstance(asym.get("present"), bool):
+                asym_errs.append("present debe ser bool")
+            where = asym.get("where")
+            if not isinstance(where, str) or not where.strip():
+                asym_errs.append("where ausente o vacio (donde aplica la asimetria)")
+            rationale = asym.get("rationale")
+            if not isinstance(rationale, str) or len(rationale.strip()) < self.EDITORIAL_RATIONALE_MIN_CHARS:
+                asym_errs.append(
+                    f"rationale debe ser str >= {self.EDITORIAL_RATIONALE_MIN_CHARS} chars "
+                    f"(anti-teatro). Recibido: {rationale!r}"
+                )
+            if asym.get("present") is False:
+                # Layout simetrico SIN justificacion -> REJECT
+                # Si es simetrico intencional, rationale debe explicarlo (y ya pasa el >=20 chars)
+                # Solo bloqueamos si rationale no convence (heuristica simple: presencia)
+                pass
+            if asym_errs:
+                errores.append(
+                    "design_strict (Bloque 1L.4) asymmetric_section: "
+                    + "; ".join(asym_errs)
+                )
+        elif "asymmetric_section" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): asymmetric_section debe ser dict; "
+                f"recibido {type(asym).__name__}."
+            )
+
+        # --- typography_mix ---------------------------------------------
+        typo = ec.get("typography_mix")
+        if isinstance(typo, dict):
+            typo_errs = []
+            display = typo.get("display")
+            body = typo.get("body")
+            justified = typo.get("justified")
+            if not isinstance(display, str) or not display.strip():
+                typo_errs.append("display ausente o vacio")
+            if not isinstance(body, str) or not body.strip():
+                typo_errs.append("body ausente o vacio")
+            if (isinstance(display, str) and isinstance(body, str)
+                    and display.strip().lower() == body.strip().lower()):
+                typo_errs.append(
+                    f"display ('{display}') == body ('{body}'). "
+                    f"Anti-monotypo: ui-designer debe mezclar al menos 2 familias distintas."
+                )
+            if not isinstance(justified, bool) or justified is not True:
+                typo_errs.append(
+                    "justified debe ser bool=True (el ui-designer afirma haber "
+                    "justificado el mix tipografico contra brand.references)."
+                )
+            if typo_errs:
+                errores.append(
+                    "design_strict (Bloque 1L.4) typography_mix: "
+                    + "; ".join(typo_errs)
+                )
+        elif "typography_mix" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): typography_mix debe ser dict; "
+                f"recibido {type(typo).__name__}."
+            )
+
+        # --- references_cited (alineado con references_used) -----------
+        refs_cited = ec.get("references_cited")
+        if "references_cited" in ec:
+            if not isinstance(refs_cited, list):
+                errores.append(
+                    f"design_strict (Bloque 1L.4): references_cited debe ser lista; "
+                    f"recibido {type(refs_cited).__name__}."
+                )
+            elif not refs_cited:
+                errores.append(
+                    "design_strict (Bloque 1L.4): references_cited vacio. "
+                    "Debe contener al menos 1 URL del envelope.references_used."
+                )
+            else:
+                used = response.get("references_used") or []
+                if not isinstance(used, list) or not used:
+                    errores.append(
+                        "design_strict (Bloque 1L.4): references_cited no puede "
+                        "validarse: references_used ausente o vacio. "
+                        "Bloque 1L.3 ya deberia haber rechazado este envelope."
+                    )
+                else:
+                    used_set = {u for u in used if isinstance(u, str)}
+                    bad = [u for u in refs_cited
+                           if not (isinstance(u, str) and u in used_set)]
+                    if bad:
+                        errores.append(
+                            f"design_strict (Bloque 1L.4): references_cited contiene "
+                            f"URLs que NO estan en references_used: {bad}. "
+                            f"references_cited debe ser subset estricto."
+                        )
+
+        # --- boilerplate_avoided ----------------------------------------
+        bp = ec.get("boilerplate_avoided")
+        if isinstance(bp, dict):
+            explained = bp.get("explained")
+            if not isinstance(explained, str) or len(explained.strip()) < self.EDITORIAL_RATIONALE_MIN_CHARS:
+                errores.append(
+                    f"design_strict (Bloque 1L.4) boilerplate_avoided.explained: "
+                    f"debe ser str >= {self.EDITORIAL_RATIONALE_MIN_CHARS} chars "
+                    f"(anti-teatro). Recibido: {explained!r}"
+                )
+        elif "boilerplate_avoided" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): boilerplate_avoided debe ser dict; "
+                f"recibido {type(bp).__name__}."
+            )
+
+        # --- whitespace_intentional -------------------------------------
+        ws = ec.get("whitespace_intentional")
+        if isinstance(ws, dict):
+            documented = ws.get("documented")
+            if not isinstance(documented, bool) or documented is not True:
+                errores.append(
+                    "design_strict (Bloque 1L.4) whitespace_intentional.documented: "
+                    "debe ser bool=True (el ui-designer afirma haber documentado "
+                    "el ritmo de whitespace por seccion)."
+                )
+        elif "whitespace_intentional" in ec:
+            errores.append(
+                f"design_strict (Bloque 1L.4): whitespace_intentional debe ser dict; "
+                f"recibido {type(ws).__name__}."
+            )
+
+        return errores, warnings
+
+    # ============================================================
+    #  Bloque 1L.1: Intent Classifier (Design Criterion Hardening)
+    # ============================================================
+
+    def classify_user_intent(
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Bloque 1L.1: Clasifica el prompt del usuario en uno de 4 buckets
+        antes de delegar a project-manager-senior.
+
+        Buckets: audit | redesign | implement | validate
+
+        Comportamiento:
+        - Si intent_classifier_enabled=False -> devuelve resultado neutro
+          (intent=None, confidence=low, rationale=disabled).
+        - Si modulo no importado -> idem disabled.
+        - Si confidence='low' -> el orquestador DEBE escalar al usuario con
+          escalation_question.
+
+        Args:
+            prompt: texto del usuario (string).
+            context: dict opcional con DAG state (reservado para futuro).
+
+        Returns:
+            dict con shape (ver intent_classifier.classify_user_intent):
+            {"intent", "confidence", "signals", "fallback_intent",
+             "rationale", "escalation_question"}
+        """
+        self._record_invocation(
+            "classify_user_intent",
+            context={
+                "enabled": self.intent_classifier_enabled,
+                "prompt_len": len(prompt) if isinstance(prompt, str) else 0,
+            },
+        )
+
+        if not self.intent_classifier_enabled or _classify_user_intent is None:
+            return {
+                "intent": None,
+                "confidence": "low",
+                "signals": [],
+                "fallback_intent": None,
+                "rationale": (
+                    "intent_classifier disabled "
+                    f"(enabled={self.intent_classifier_enabled}, "
+                    f"module_imported={_classify_user_intent is not None})"
+                ),
+                "escalation_question": None,
+            }
+
+        try:
+            return _classify_user_intent(prompt, context=context)
+        except Exception as e:
+            # Fail-open: no romper el pipeline si el classifier falla
+            return {
+                "intent": None,
+                "confidence": "low",
+                "signals": [],
+                "fallback_intent": None,
+                "rationale": (
+                    f"intent_classifier raised {type(e).__name__}: {e}"
+                ),
+                "escalation_question": None,
             }
 
     # ============================================================
@@ -2414,7 +3266,7 @@ def main():
     """Punto de entrada del dispatcher"""
     if len(sys.argv) < 2:
         print("Uso: python tools/atlas_dispatcher.py <command> [args...]")
-        print("Comandos: check-phase FROM_PHASE TO_PHASE, validate-envelope, report")
+        print("Comandos: check-phase FROM_PHASE TO_PHASE, validate-envelope, report, classify-intent, audit-agent")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -2452,6 +3304,24 @@ def main():
             result = json.load(sys.stdin)
             report = dispatcher.report(sys.argv[2] if len(sys.argv) > 2 else "unknown", result)
             print(json.dumps(report, ensure_ascii=False, indent=2))
+
+        elif command == "classify-intent":
+            # Bloque 1L.1: clasifica intent del prompt del usuario.
+            # Usage:
+            #   python tools/atlas_dispatcher.py classify-intent "<prompt>"
+            #   echo "<prompt>" | python tools/atlas_dispatcher.py classify-intent -
+            if len(sys.argv) < 3:
+                print(json.dumps({
+                    "ok": False,
+                    "error": "missing prompt argument (use '-' to read from stdin)",
+                }, ensure_ascii=False), file=sys.stderr)
+                sys.exit(1)
+            if sys.argv[2] == "-":
+                prompt = sys.stdin.read()
+            else:
+                prompt = " ".join(sys.argv[2:])
+            result = dispatcher.classify_user_intent(prompt)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
 
         elif command == "audit-agent":
             # Bloque 1K.1: usado por hook PostToolUse para auditar helpers

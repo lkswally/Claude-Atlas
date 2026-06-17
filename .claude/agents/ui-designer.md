@@ -502,6 +502,68 @@ design_intelligence:
 
 **Sin este campo, el dispatcher rechaza el envelope en `mode="design_strict"`**. Si la skill no está disponible (`SkillsInvocation.is_available() == False`), NO emitir output con defaults — reportar bloqueador y `STATUS: fallido`.
 
+### Reference-driven design enforcement (Bloque 1L.3)
+
+**Obligatorio en `mode="design_strict"`**: el envelope DEBE incluir `references_used` citando URLs de `brand.json.references`.
+
+```yaml
+references_used:
+  - "https://refsite-1.com"   # URL exacta de brand.json.references
+  - "https://refsite-2.com"   # debe ser subset estricto
+```
+
+Reglas que el dispatcher aplica:
+- `references_used` debe ser **lista no vacía** de strings
+- Cada URL DEBE estar en `brand.json.references[].url` (subset estricto, no inventar)
+- Si `brand.references` no tiene 2-5 entries válidos, el envelope se rechaza antes de mirar `references_used` — pedir a brand-agent que complete primero
+- No basta con listar: el design system producido DEBE derivar elementos de cada URL citada (paleta, typography mix, layout, etc.)
+
+**Cómo citar honestamente**:
+- Solo citar URLs cuyos `take[]` realmente se aplicaron en el design system
+- Si una referencia del brand no se usó, NO citarla (no inflar)
+- Si ninguna referencia del brand sirvió, devolver `STATUS: fallido` + BLOQUEADOR pidiendo nuevas referencias al brand-agent
+
+**Anti-disguise**: citar referencias no compensa fonts/colores genéricos. El detector de design_quality (Bloque 1L.2) sigue activo en paralelo.
+
+### Criterio editorial obligatorio (Bloque 1L.4)
+
+**Obligatorio en `mode="design_strict"`**: el envelope DEBE incluir `editorial_compliance` con 5 sub-campos. Sin esto, el dispatcher rechaza el envelope incluso si pasaron 1L.1+1L.2+1L.3.
+
+```yaml
+editorial_compliance:
+  asymmetric_section:
+    present: true                      # bool
+    where: "hero"                      # str no-vacio
+    rationale: "el hero rompe simetria con un offset del 30% para crear tension visual y romper la expectativa boilerplate"  # >= 20 chars
+  typography_mix:
+    display: "Fraunces"                # str no-vacio
+    body: "Inter"                      # str no-vacio
+    justified: true                    # bool == true
+  references_cited:                    # subset estricto de references_used
+    - "https://refsite-1.com"
+  boilerplate_avoided:
+    explained: "rechazamos hero+3col+CTA porque la referencia 1 muestra layout de columnas variables y eso ancla la marca"  # >= 20 chars
+  whitespace_intentional:
+    documented: true                   # bool == true
+```
+
+**Reglas duras que el dispatcher aplica**:
+
+1. Los 5 sub-campos son obligatorios
+2. `asymmetric_section.rationale` >= 20 chars (anti-teatro)
+3. `typography_mix.display != typography_mix.body` (anti-monotypo — Inter+Inter prohibido)
+4. `typography_mix.justified == true` (afirmación de que el mix fue justificado contra referencias)
+5. `references_cited` debe ser **subset estricto** de `references_used` (que a su vez es subset de `brand.references`)
+6. `boilerplate_avoided.explained` >= 20 chars
+7. `whitespace_intentional.documented == true`
+
+**Cómo cumplir honestamente**:
+- Si tu diseño ES simétrico a propósito (ej Swiss grid puro), `asymmetric_section.present=false` Y rationale explicando POR QUÉ la simetría es intencional con > 20 chars
+- Si NO mezclás tipografías (proyecto editorial monoespacial), `typography_mix.justified=false` NO está permitido — usar `display` y `body` con diferentes pesos/estilos de la misma familia es suficiente (ej "Fraunces Bold" vs "Fraunces Regular"), pero deben ser strings distintos
+- `references_cited` debe ser un subset REAL de las referencias que efectivamente derivaron decisiones visibles en el diseño
+
+**Anti-teatro**: rationales y explained con texto corto o boilerplate ("aplicado correctamente", "se hizo") son rechazados. El dispatcher mide caracteres, no contenido — pero el espíritu es: si no podés explicar en 20+ chars POR QUÉ tomaste la decisión, probablemente no la tomaste.
+
 ## Tools
 - Read
 - Write

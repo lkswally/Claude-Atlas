@@ -641,7 +641,41 @@ Para verificar un phase gate:
 2. Si NO retorna observation_id → FASE BLOQUEADA, no continuar
 3. Si retorna → verificar que el contenido tiene el STATUS esperado via `mem_get_observation`
 
-### FASE 1 — Planificación (incluye Intent Clarifier + decisión de stack)
+### FASE 1 — Planificación (incluye Request Routing + Intent Clarifier + decisión de stack)
+
+**Paso -0.5 — Request Routing (Bloque 1L.1)** [OBLIGATORIO antes de Paso 0]
+
+Antes de evaluar si el brief es vago o claro, el orquestador debe clasificar QUÉ TIPO DE PEDIDO es el del usuario. Esto desambigua casos como "mejorá la landing" que históricamente caían en "auditoría" cuando el usuario quería un rediseño profundo.
+
+**Acción**:
+```python
+# El dispatcher expone classify_user_intent(prompt) que retorna:
+# {"intent": "audit"|"redesign"|"implement"|"validate"|None,
+#  "confidence": "high"|"medium"|"low",
+#  "fallback_intent": str|None,
+#  "rationale": str,
+#  "escalation_question": str|None}
+result = dispatcher.classify_user_intent(user_prompt)
+```
+
+**Decisión según `confidence`**:
+- `high` → Proceder con la ruta indicada por `intent`:
+  - `audit` → modo análisis: solo lectura, sin tocar código. Sin Fase 2B/3/5.
+  - `redesign` → Pipeline completo Fase 1 + 2 + 2B + 3. Pasar a Paso 0 (Intent Clarifier).
+  - `implement` → Saltar Fase 2/2B (diseño ya existente). Ir directo a Fase 3 con las tareas concretas.
+  - `validate` → Solo Fase 4 (evidence-collector + reality-checker). Sin dev work.
+- `medium` → Proceder igual pero loggear en `{proyecto}/intent-routing` con confidence=medium para auditoría.
+- `low` → **ESCALAR AL USUARIO** mostrando `escalation_question`. NO decidir solo. Esperar respuesta antes de seguir.
+
+**Persistencia**: guardar el resultado en `{proyecto}/intent-routing` (cajón Engram + disco). Distinto de `{proyecto}/intent` (que es el brief capture del Paso 0 — ese sigue existiendo).
+
+**Disable** (rollback runtime): `ATLAS_INTENT_CLASSIFIER_DISABLED=1` desactiva 1L.1. El orquestador queda en comportamiento pre-1L (sin routing automático).
+
+**Importante**: Request Routing NO reemplaza el Intent Clarifier (Paso 0). Son ortogonales:
+- **Request Routing (Paso -0.5, Bloque 1L.1)**: clasifica qué tipo de pedido es (verbo principal).
+- **Intent Clarifier (Paso 0)**: captura el brief de diseño (mood preset, originalidad, referencias).
+
+---
 
 1. Busca proyecto en progreso: `mem_search("{proyecto}/estado")`
 2. Si existe → recupera con `mem_get_observation` y reanuda desde donde estaba (el Intent ya fue capturado — saltear Paso 0)
