@@ -1,0 +1,351 @@
+# ATLAS MCP Registry
+# Inventario declarativo de todos los MCP relevantes para el sistema.
+# Actualizado: 2026-06-18
+#
+# Status values:
+#   LIVE          — herramientas mcp__*__ detectadas en sesión activa
+#   CONFIG_ONLY   — configurado en .mcp.json pero no visible en sesión actual
+#   CLI_ONLY      — binario CLI disponible, sin MCP server configurado
+#   MISSING       — ni CLI ni config
+#   OPTIONAL      — no requerido por ningún agente core
+
+version: "1.0"
+updated: "2026-06-18"
+
+mcps:
+
+  # ─── MEMORIA ────────────────────────────────────────────────────────────────
+
+  - id: engram
+    name: "Engram Memory"
+    provider: "Gentleman-Programming"
+    status: CONFIG_ONLY
+    config_scope: project
+    command: "C:\\Users\\lksro\\go\\bin\\engram.exe"
+    args: ["mcp", "--tools=agent"]
+    live_tool_prefix: "mcp__engram__"
+    config_file: ".mcp.json"
+    capabilities:
+      - save_memory
+      - search_memories
+      - list_memories
+      - delete_memory
+    required_for:
+      - orquestador
+      - project-manager-senior
+      - ux-architect
+      - ui-designer
+      - frontend-developer
+      - backend-architect
+      - evidence-collector
+      - reality-checker
+    validation_command: "C:\\Users\\lksro\\go\\bin\\engram.exe search atlas"
+    cli_available: true
+    cli_version: "1.16.3"
+    cli_path: "C:\\Users\\lksro\\go\\bin\\engram.exe"
+    db_path: "C:\\Users\\lksro\\.engram\\engram.db"
+    install_notes: |
+      Instalado via: go install github.com/Gentleman-Programming/engram@latest
+      Para LIVE: .mcp.json debe estar en el CWD raíz de la sesión.
+      CWD actual: D:\ProyectosIA — .mcp.json debe estar ahí, no en ProyectosClaude.
+    risks:
+      - "DB lock en Windows si proceso engram MCP y CLI corren simultáneamente"
+      - "engram-sync.js requiere ~/.engram como git repo para sync remoto"
+    note: "CONFIG_ONLY porque .mcp.json está en subdirectorio, no en CWD raíz"
+
+  # ─── DOCUMENTACIÓN / NOTAS ──────────────────────────────────────────────────
+
+  - id: notion
+    name: "Notion"
+    provider: "Notion Labs"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__52722bcc-d6c5-4bf4-8d79-ccad7a479b8f__notion-"
+    capabilities:
+      - create_page
+      - update_page
+      - fetch_page
+      - search
+      - create_database
+      - create_comment
+      - get_comments
+    required_for:
+      - project-manager-senior
+      - orquestador
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin instalado via Claude Code marketplace"
+    risks:
+      - "Rate limits en búsquedas masivas"
+      - "Acceso limitado a workspaces privados no conectados"
+
+  # ─── BROWSER / QA VISUAL ────────────────────────────────────────────────────
+
+  - id: claude_in_chrome
+    name: "Claude in Chrome"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__Claude_in_Chrome__"
+    capabilities:
+      - navigate
+      - screenshot
+      - click
+      - form_input
+      - javascript_eval
+      - read_dom
+      - network_monitoring
+    required_for:
+      - evidence-collector
+      - reality-checker
+      - codepen-explorer
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code — requiere extensión Chrome"
+    risks:
+      - "Requiere extensión Chrome instalada y activa"
+      - "No soporta Firefox/Safari"
+
+  - id: claude_preview
+    name: "Claude Preview"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__Claude_Preview__"
+    capabilities:
+      - preview_start
+      - preview_stop
+      - preview_screenshot
+      - preview_logs
+      - preview_click
+      - preview_eval
+    required_for:
+      - frontend-developer
+      - evidence-collector
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks:
+      - "Solo disponible en Claude Desktop (Windows/Mac), no en CLI"
+
+  - id: playwright
+    name: "Playwright MCP"
+    provider: "Microsoft"
+    status: CLI_ONLY
+    config_scope: unknown
+    live_tool_prefix: "mcp__playwright__"
+    capabilities:
+      - browser_navigate
+      - browser_screenshot
+      - browser_click
+      - browser_evaluate
+      - browser_wait_for
+    required_for:
+      - evidence-collector
+      - reality-checker
+      - performance-benchmarker
+    validation_command: "npx playwright --version"
+    cli_available: true
+    cli_version: "1.61.0"
+    install_notes: |
+      CLI disponible. Para MCP server:
+      npx @playwright/mcp@latest
+      Agregar a .mcp.json: { "playwright": { "command": "npx", "args": ["@playwright/mcp"] } }
+    risks:
+      - "Requiere navegadores instalados: npx playwright install chromium"
+
+  # ─── COMPUTER CONTROL ───────────────────────────────────────────────────────
+
+  - id: computer_use
+    name: "Computer Use"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__computer-use__"
+    capabilities:
+      - screenshot
+      - click
+      - type
+      - scroll
+      - key_press
+      - open_application
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code (desktop)"
+    risks:
+      - "Acciones destructivas posibles — requiere aprobación explícita por app"
+      - "Browsers en tier 'read' (no click/type)"
+      - "Terminales/IDEs en tier 'click' (no type)"
+
+  # ─── REPOSITORIOS / CONTROL DE VERSIONES ────────────────────────────────────
+
+  - id: github
+    name: "GitHub CLI / MCP"
+    provider: "GitHub"
+    status: CLI_ONLY
+    config_scope: unknown
+    live_tool_prefix: "mcp__github__"
+    capabilities:
+      - create_pr
+      - list_issues
+      - create_issue
+      - review_pr
+      - push_code
+      - run_workflow
+    required_for:
+      - git
+    validation_command: "gh --version"
+    cli_available: true
+    cli_version: "2.93.0"
+    install_notes: |
+      gh CLI operativo. Para MCP server:
+      npx @modelcontextprotocol/server-github
+      Requiere: GITHUB_TOKEN env var
+    risks:
+      - "GITHUB_TOKEN necesario para autenticación MCP"
+
+  # ─── SISTEMA / AUTOMATIZACIÓN ───────────────────────────────────────────────
+
+  - id: scheduled_tasks
+    name: "Scheduled Tasks"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__scheduled-tasks__"
+    capabilities:
+      - create_scheduled_task
+      - list_scheduled_tasks
+      - update_scheduled_task
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks: []
+
+  # ─── VISUALIZACIÓN ──────────────────────────────────────────────────────────
+
+  - id: visualize
+    name: "Visualize / Render"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__visualize__"
+    capabilities:
+      - show_widget
+      - render_svg
+      - render_html
+      - render_chart
+    required_for:
+      - ui-designer
+      - brand-agent
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks: []
+
+  # ─── SESSION / CONTEXTO ─────────────────────────────────────────────────────
+
+  - id: ccd_session
+    name: "CCD Session"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__ccd_session__"
+    capabilities:
+      - mark_chapter
+      - spawn_task
+      - dismiss_task
+      - read_widget_context
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks: []
+
+  - id: ccd_session_mgmt
+    name: "CCD Session Management"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__ccd_session_mgmt__"
+    capabilities:
+      - list_sessions
+      - archive_session
+      - search_session_transcripts
+      - send_message
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks: []
+
+  - id: ccd_directory
+    name: "CCD Directory"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__ccd_directory__"
+    capabilities:
+      - request_directory
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks: []
+
+  - id: mcp_registry
+    name: "MCP Registry"
+    provider: "Anthropic"
+    status: LIVE
+    config_scope: plugin
+    live_tool_prefix: "mcp__mcp-registry__"
+    capabilities:
+      - list_connectors
+      - search_mcp_registry
+      - suggest_connectors
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: "Plugin nativo Claude Code"
+    risks: []
+
+  # ─── OPCIONALES / FUTUROS ───────────────────────────────────────────────────
+
+  - id: context7
+    name: "Context7 (Library Docs)"
+    provider: "Upstash"
+    status: MISSING
+    config_scope: unknown
+    live_tool_prefix: "mcp__context7__"
+    capabilities:
+      - resolve_library_id
+      - get_library_docs
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: |
+      npx -y @upstash/context7-mcp
+      Útil para: documentación de librerías en tiempo real (Next.js, React, etc.)
+    risks: []
+
+  - id: magic_21st
+    name: "21st.dev Magic"
+    provider: "21st.dev"
+    status: MISSING
+    config_scope: unknown
+    live_tool_prefix: "mcp__21st_magic__"
+    capabilities:
+      - generate_ui_component
+      - search_components
+    required_for:
+      - ui-designer
+      - frontend-developer
+    validation_command: null
+    cli_available: false
+    install_notes: |
+      Requiere API key de 21st.dev.
+      Útil para: generación de componentes UI de alta calidad.
+    risks:
+      - "Requiere API key de pago"
+      - "Componentes pueden no seguir design system de ATLAS"

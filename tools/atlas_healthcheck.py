@@ -483,6 +483,48 @@ def check_engram() -> None:
         WARN("Engram", f"ENGRAM_FAIL_OPEN — {e}")
 
 
+def check_mcp_registry() -> None:
+    """Valida config/mcp.registry.yaml y distingue estados de Engram."""
+    reg_file = PROJECT_ROOT / "config" / "mcp.registry.yaml"
+    if not reg_file.exists():
+        WARN("MCP Registry", f"config/mcp.registry.yaml no encontrado")
+        return
+
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+        from mcp_registry import load_registry, validate_registry, summary
+
+        errors = validate_registry()
+        if errors:
+            FAIL("MCP Registry", f"{len(errors)} errores: {errors[0]}")
+            return
+
+        s = summary()
+        live = s.get("live", [])
+        missing_req = s.get("missing_required", [])
+
+        # Engram status específico
+        from mcp_registry import get_mcp
+        engram = get_mcp("engram")
+        engram_status = engram.get("status", "UNKNOWN") if engram else "NOT_IN_REGISTRY"
+
+        detail = (
+            f"{s['total']} MCPs, {len(live)} LIVE, "
+            f"{len(missing_req)} missing-required | "
+            f"engram={engram_status}"
+        )
+
+        if missing_req and any(m in missing_req for m in ["engram"]):
+            WARN("MCP Registry", detail + " (engram requerido no LIVE)")
+        else:
+            PASS("MCP Registry", detail)
+
+    except ImportError:
+        WARN("MCP Registry", "PyYAML no disponible — skip registry validation")
+    except Exception as e:
+        WARN("MCP Registry", f"error al cargar: {e}")
+
+
 def check_dispatcher() -> None:
     """tools/atlas_dispatcher.py debe existir e importarse sin error."""
     dp = PROJECT_ROOT / "tools" / "atlas_dispatcher.py"
@@ -558,6 +600,7 @@ def run_all() -> int:
     check_skills_registry()
     check_projects_registry()
     check_engram()
+    check_mcp_registry()
     check_dispatcher()
 
     # --- Reporte ---
