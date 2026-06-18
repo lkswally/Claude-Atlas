@@ -4,6 +4,26 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [v0.23.0] — 2026-06-18 — Runtime Settings Separation
+
+### Problem Solved
+`.claude/settings.json` is managed by Claude Desktop on Windows and may appear/disappear between tool calls, causing 5 QA suites and the healthcheck to emit false FAIL results (race condition).
+
+### Changes
+- `tools/atlas_healthcheck.py`: `check_settings_json()` emits WARN (not FAIL) when settings.json absent; `--strict` flag and `ATLAS_HEALTHCHECK_STRICT=1` env var restore FAIL behavior for release validation
+- `config/atlas.runtime.expected.yaml`: new stable reference — lists expected hooks by event type, expected MCP servers, ownership model, escape hatch documentation
+- `_qa/bloque-F5-settings-wiring-validation.py`: falls back to `templates/settings.json` with `__CLAUDE_HOME__` → `.claude` resolution when runtime absent
+- `_qa/bloque-F10-sot-drift.py TC03`: skips (not FAILs) when `.claude/settings.json` is absent
+- `tools/run_all.py`: passes `--strict` to healthcheck in `--release` mode; removed `HEALTHCHECK_DEPENDENT_SUITES` classification (suites now tolerate the race)
+- `_qa/bloque-F23-runtime-settings-separation.py`: 14 new tests validating all F23 changes
+
+### QA
+- `bloque-F23-runtime-settings-separation.py`: 14/14 PASS
+- `atlas_healthcheck.py`: HEALTHY (21 PASS, 2 WARN, 0 FAIL)
+- `bloque-F22-command-audit.py`, `bloque-F14-mcp-registry.py`, `bloque-F15-context7.py`, `bloque-F15-playwright.py`: all PASS
+
+---
+
 ## [v0.21.0] — 2026-06-18 — Developer Experience + Open Source Readiness
 
 ### Documentation — New Files

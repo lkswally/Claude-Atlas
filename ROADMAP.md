@@ -1,10 +1,11 @@
 # ATLAS Roadmap
 
-## Current State — v0.21.0
+## Current State — v0.23.0
 
-**Architecture maturity: ~82%**  
-**Open Source DX readiness: ~88%**  
-**v1.0 readiness: ~65%**
+**Architecture maturity: ~87%**  
+**Open Source DX readiness: ~91%**  
+**System reliability: ~85%**  
+**v1.0 readiness: ~73%**
 
 ### What's Solid (production-ready)
 - 5-phase pipeline with phase gates and retry logic
@@ -16,11 +17,13 @@
 - Python tools layer: healthcheck (25 checks), dispatcher, metrics, dependency graph
 - Engram MCP: persistent memory, dual-write, cross-session continuity
 
+### What's Solid (production-ready — additions since v0.22.0)
+- **Runtime settings separation (F23)**: healthcheck tolerates Windows/Claude Desktop race condition; WARN not FAIL when settings.json absent; `--strict` mode for release validation; `config/atlas.runtime.expected.yaml` as stable config reference
+
 ### What's Incomplete
 - No public install script (installation is manual)
 - Context7 and GitHub MCP require manual token configuration
 - Python tools are invoked manually (no auto-trigger on agent completion)
-- No automated regression suite that runs all QA suites end-to-end
 
 ---
 
@@ -72,23 +75,30 @@ A single `atlas` command that replaces the current manual incantations.
 
 ## Planned Feature Blocs
 
-### F22 — Atlas CLI + Automated Regression Suite
-- `atlas` shell wrapper with all 6 commands above
-- `tools/run_all.py`: discovers all `bloque-F*.py` files, runs them, reports totals
-- Exit code: 0 = all pass, 1 = any fail
-- GitHub Actions integration template
+### F22 — System Integrity Audit ✅ Completed v0.22.0
+- `tools/run_all.py` unified QA runner with --quick/--full/--release/--json/--list modes
+- `tools/secrets_check.py` token classifier with no-leakage guarantee
+- 4 new QA suites (56 tests): command-audit, runtime-truth, run-all, secrets-check
+- Fixed: context7 MCP registry CONFIG_ONLY → LIVE; JSONL corrupted lines cleaned
 
-### F23 — Capability Auto-Discovery
+### F23 — Runtime Settings Separation ✅ Completed v0.23.0
+- `config/atlas.runtime.expected.yaml` stable config reference (source of truth)
+- Healthcheck: WARN (not FAIL) when `.claude/settings.json` absent; `--strict` for release
+- `_qa/bloque-F5`: fallback to `templates/settings.json` when runtime absent
+- `_qa/bloque-F10 TC03`: skip (not FAIL) when runtime absent
+- `_qa/bloque-F23-runtime-settings-separation.py`: 14 tests, all PASS
+
+### F24 — Capability Auto-Discovery
 - `registry.py` reads `.mcp.json` at startup and supplements hardcoded entries
 - New capabilities added dynamically without code changes
 - Policy file supports `*` wildcard for unknown capabilities
 
-### F24 — Agent Output Contracts
+### F25 — Agent Output Contracts
 - Per-agent schema: what drawers they write, what files they touch
 - Dispatcher validates agent output against contract
 - Violations logged to `.pipeline/contract-violations.jsonl`
 
-### F25 — Token Budget Enforcement
+### F26 — Token Budget Enforcement
 - Per-agent token limits in `config/agent-budgets.yaml`
 - Dispatcher tracks tokens per delegation
 - Auto-escalate to orchestrator when budget exceeded
@@ -99,10 +109,9 @@ A single `atlas` command that replaces the current manual incantations.
 
 | Version | Tag | Focus |
 |---------|-----|-------|
+| v0.23.0 | `v0.23.0-atlas-runtime-settings-separated` | Runtime settings separation, F23 — healthcheck WARN/FAIL split, template fallback |
+| v0.22.0 | `v0.22.0-atlas-integrity-audit` | System Integrity Audit — tools/run_all.py, secrets_check, 56 new QA tests |
 | v0.21.0 | `v0.21.0-atlas-dx` | DX, open source readiness, 12 new docs, install guides fixed |
-
-| Version | Tag | Focus |
-|---------|-----|-------|
 | v0.20.0 | `v0.20.0-atlas-architecture-hardening` | Architecture hardening, docs, ADRs, security |
 | v0.19.0 | `v0.19.0-atlas-capability-policy` | Capability Policy Engine |
 | v0.18.0 | `v0.18.0-atlas-capability-metrics` | Capability Runtime Metrics |

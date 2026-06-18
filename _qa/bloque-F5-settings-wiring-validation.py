@@ -16,12 +16,27 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
+TEMPLATE_PATH = PROJECT_ROOT / "templates" / "settings.json"
 HOOKS_DIR = PROJECT_ROOT / ".claude" / "hooks"
+
+_USING_TEMPLATE = False  # set when runtime absent
 
 
 def load_settings():
-    assert SETTINGS_PATH.exists(), f"settings.json no encontrado: {SETTINGS_PATH}"
-    return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    global _USING_TEMPLATE
+    if SETTINGS_PATH.exists():
+        _USING_TEMPLATE = False
+        return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    # Fallback: runtime absent (Windows/Claude Desktop race condition)
+    assert TEMPLATE_PATH.exists(), (
+        f"Ni .claude/settings.json ni templates/settings.json encontrados."
+    )
+    _USING_TEMPLATE = True
+    raw = TEMPLATE_PATH.read_text(encoding="utf-8")
+    # Resolve placeholder so paths match what .claude/hooks/*.js actually is
+    raw = raw.replace("__CLAUDE_HOME__", ".claude")
+    print("  [WARN] .claude/settings.json ausente — usando templates/settings.json como referencia estable (F23)")
+    return json.loads(raw)
 
 
 def extract_all_commands(settings):

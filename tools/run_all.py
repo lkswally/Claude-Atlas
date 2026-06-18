@@ -40,16 +40,10 @@ LIVE_BINARY_SUITES = {
 # Suites that need network/external APIs — skip with --no-network
 NETWORK_SUITES: set[str] = set()  # currently none hit real network in test mode
 
-# Suites that embed a healthcheck call — they fail if .claude/settings.json is
-# being managed by Claude Desktop/Code (Windows: file gets deleted between calls).
-# These always pass in CI or on Linux where settings.json is stable.
-HEALTHCHECK_DEPENDENT_SUITES = {
-    "bloque-F5-settings-wiring-validation",
-    "bloque-F7-healthcheck-validation",
-    "bloque-F9-projects-registry",
-    "bloque-F10-sot-drift",
-    "bloque-F11-skills-registry-runtime",
-}
+# F23: .claude/settings.json race condition resolved.
+# Healthcheck now WARNs (not FAILs) when settings.json is absent in non-strict mode.
+# All suites that previously depended on a stable settings.json now tolerate
+# the Windows/Claude Desktop race condition and run without special handling.
 
 # Suites that are "live session only" (validate MCP tools registered in Claude)
 # These can't be run standalone — they document their own skip
@@ -146,11 +140,14 @@ def run_suite(path: Path, timeout: int = 60) -> dict:
 # Healthcheck integration
 # ---------------------------------------------------------------------------
 
-def run_healthcheck() -> dict:
+def run_healthcheck(strict: bool = False) -> dict:
     hc_path = PROJECT_ROOT / "tools" / "atlas_healthcheck.py"
     start = time.monotonic()
+    cmd = [sys.executable, str(hc_path)]
+    if strict:
+        cmd.append("--strict")
     result = subprocess.run(
-        [sys.executable, str(hc_path)],
+        cmd,
         capture_output=True,
         text=True,
         timeout=30,
@@ -263,10 +260,10 @@ def main() -> int:
         print(f"\n{_c(BOLD, 'ATLAS QA Runner')} — mode: {mode}")
         print(f"Running {len(selected)} suites ({len(skipped)} skipped)\n")
 
-    # Healthcheck first in release mode
+    # Healthcheck first in release mode (--strict: settings.json FAIL not WARN)
     if args.release and not args.json_output:
         print("  [....] healthcheck", end="\r", flush=True)
-        hc_result = run_healthcheck()
+        hc_result = run_healthcheck(strict=True)
         print_result(hc_result)
 
     for suite_path in selected:

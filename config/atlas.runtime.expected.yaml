@@ -1,0 +1,57 @@
+# ATLAS — Expected Runtime Configuration (F23)
+# ===============================================
+#
+# Stable, committed source of truth for what ATLAS's runtime settings.json
+# should contain. Used when .claude/settings.json is temporarily unavailable
+# (Windows/Claude Desktop race condition).
+#
+# Source of truth : templates/settings.json (with __CLAUDE_HOME__ placeholders)
+# Runtime file    : .claude/settings.json   (managed by Claude Desktop on Windows)
+#
+# Escape hatch:
+#   ATLAS_HEALTHCHECK_STRICT=1  or  --strict flag
+#   → restores FAIL behavior for missing/corrupt settings.json
+#   → required before tagging a release
+
+version: "1.0"
+updated: "2026-06-18"
+
+# Hook filenames expected to be registered in settings.json
+# and to exist as .claude/hooks/{name}.js on disk.
+expected_hooks:
+  PreToolUse:
+    - block-no-verify.js
+    - pipeline-rules.js
+    - config-protection.js
+  PostToolUse:
+    - quality-gate.js
+    - console-log-warning.js
+    - delegation-tracker.js
+    - qa-auto-audit.js
+    - cost-tracker.js
+    - suggest-compact.js
+  PreCompact:
+    - pre-compact-engram.js
+  Stop:
+    - session-summary.js
+    - engram-sync.js
+  Notification:
+    - session-start-context.js
+
+# MCP servers expected in .mcp.json (CWD root)
+expected_mcp_servers:
+  - engram
+  - context7
+
+# Settings.json ownership model
+ownership:
+  managed_by: claude_desktop_on_windows
+  race_condition: true
+  stable_reference: templates/settings.json
+  note: >
+    On Windows with Claude Desktop, .claude/settings.json is managed by the
+    runtime and may appear/disappear between tool calls. Healthcheck and QA
+    suites must not FAIL when this file is temporarily absent — use
+    templates/settings.json as the stable reference for hook content validation.
+    Use --strict or ATLAS_HEALTHCHECK_STRICT=1 to restore FAIL behavior
+    (required before release tags).

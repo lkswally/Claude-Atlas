@@ -49,6 +49,11 @@ SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
 
 _results: list[dict] = []
 
+# Set to True via --strict / ATLAS_HEALTHCHECK_STRICT=1
+# Non-strict (default): missing/corrupt settings.json → WARN (Windows race condition)
+# Strict: missing/corrupt settings.json → FAIL  (required before release tags)
+_STRICT_MODE: bool = False
+
 
 def _record(status: str, check: str, detail: str) -> None:
     _results.append({"status": status, "check": check, "detail": detail})
@@ -110,19 +115,42 @@ def check_npm() -> None:
 
 
 def check_settings_json() -> list[dict] | None:
-    """settings.json existe, es JSON válido y tiene sección hooks."""
+    """
+    settings.json existe, es JSON válido y tiene sección hooks.
+
+    Non-strict (default): archivo ausente/corrupto → WARN.
+    El archivo runtime puede desaparecer temporalmente en Windows/Claude Desktop.
+
+    Strict (--strict / ATLAS_HEALTHCHECK_STRICT=1): ausente/corrupto → FAIL.
+    Usar en modo release antes de taggear.
+    """
+    _runtime_mutable_msg = (
+        "RUNTIME_MUTABLE — archivo gestionado por Claude Desktop en Windows | "
+        "usar --strict o ATLAS_HEALTHCHECK_STRICT=1 para validación de release"
+    )
+
     if not SETTINGS_PATH.exists():
-        FAIL(".claude/settings.json", f"no encontrado en {SETTINGS_PATH}")
+        if _STRICT_MODE:
+            FAIL(".claude/settings.json", f"no encontrado en {SETTINGS_PATH}")
+        else:
+            WARN(".claude/settings.json", _runtime_mutable_msg)
         return None
+
     try:
         data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        FAIL(".claude/settings.json", f"JSON inválido: {e}")
+        if _STRICT_MODE:
+            FAIL(".claude/settings.json", f"JSON inválido: {e}")
+        else:
+            WARN(".claude/settings.json", f"RUNTIME_CORRUPT — JSON inválido: {e} | {_runtime_mutable_msg}")
         return None
 
     hooks = data.get("hooks", {})
     if not hooks:
-        FAIL(".claude/settings.json", "sección 'hooks' ausente o vacía")
+        if _STRICT_MODE:
+            FAIL(".claude/settings.json", "sección 'hooks' ausente o vacía")
+        else:
+            WARN(".claude/settings.json", f"sección 'hooks' ausente o vacía | {_runtime_mutable_msg}")
         return None
 
     # Contar todas las entradas de hook
@@ -815,12 +843,14 @@ def check_dispatcher() -> None:
 # ---------------------------------------------------------------------------
 
 def run_all() -> int:
+    global _STRICT_MODE
     # Forzar UTF-8 en stdout/stderr para que tildes y símbolos funcionen en Windows
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+    _STRICT_MODE = "--strict" in sys.argv or os.environ.get("ATLAS_HEALTHCHECK_STRICT") == "1"
     quiet  = "--quiet" in sys.argv
     as_json = "--json" in sys.argv
 
