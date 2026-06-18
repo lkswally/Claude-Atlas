@@ -15,5 +15,10 @@ Provider resolution order: LIVE > CONFIG_ONLY > CLI_ONLY
 """
 
 from .registry import get_capability, list_capabilities, capability_status
+from .router import resolve_capability, CapabilityRouter, router, Resolution, CRITICAL_CAPABILITIES
 
-__all__ = ["get_capability", "list_capabilities", "capability_status"]
+__all__ = [
+    "get_capability", "list_capabilities", "capability_status",
+    "resolve_capability", "CapabilityRouter", "router", "Resolution",
+    "CRITICAL_CAPABILITIES",
+]

@@ -2262,3 +2262,75 @@ FASE X ESCALACIÓN (Max reintentos alcanzado):
 - Cargar counter en Boot Sequence
 - Detectar si cajon ya falló 2+ veces en sesión anterior
 - Bloque 1A.13+: implementará persistencia entre sesiones
+
+---
+
+## F16. Capability Router — Protocolo de solicitud de providers
+
+> **Bloque F16** — A partir de esta versión, los agentes NO hardcodean MCPs concretos. En su lugar, solicitan capabilities por nombre. El router resuelve qué provider usar.
+
+### Regla fundamental
+
+```
+INCORRECTO: "usar Context7 para buscar docs de React"
+CORRECTO:   "solicitar capability documentation para buscar docs de React"
+
+INCORRECTO: "llamar mcp__engram__mem_save"
+CORRECTO:   "solicitar capability memory para guardar observación"
+
+INCORRECTO: "usar Playwright para navegar"
+CORRECTO:   "solicitar capability browser para navegar a URL"
+```
+
+### API de resolución (para agentes que ejecutan Python)
+
+```python
+from core.capabilities import resolve_capability
+
+# Resolver un provider
+r = resolve_capability("documentation")
+# r.provider     → "context7"
+# r.status       → "LIVE" | "CONFIG_ONLY" | "PENDING_TOKEN" | ...
+# r.tool_prefix  → "mcp__context7__"
+# r.fallback     → Resolution del siguiente provider disponible
+# r.action       → "use" | "restart_session" | "set_token" | ...
+# r.is_usable    → True si LIVE o CONFIG_ONLY
+
+# Resolver múltiples capabilities
+from core.capabilities import CapabilityRouter
+rt = CapabilityRouter()
+results = rt.resolve_many(["memory", "browser", "documentation"])
+```
+
+### Tabla de capabilities → providers
+
+| Capability | Provider primario | Status esperado |
+|---|---|---|
+| `memory` | engram | LIVE |
+| `documentation` | context7 | LIVE (MCP activo) |
+| `browser` | playwright | LIVE (MCP activo) |
+| `project_management` | notion | LIVE |
+| `repository` | github | PENDING_TOKEN (necesita GITHUB_TOKEN) |
+| `deployment` | vercel | PENDING_TOKEN (necesita VERCEL_TOKEN) |
+| `design` | magic_21st | DEFERRED_PAID |
+| `visualization` | visualize | LIVE |
+| `scheduling` | scheduled_tasks | LIVE |
+| `computer_control` | computer_use | LIVE |
+
+### Capabilities críticas (nunca deben quedar sin provider)
+
+Las capabilities `memory`, `browser`, y `documentation` son críticas. Si alguna retorna `UNAVAILABLE`, el agente debe:
+
+1. Reportar en Return Envelope: `BLOQUEADORES: [capability {name}=UNAVAILABLE]`
+2. No continuar con fallback silencioso
+3. Escalar al orquestador
+
+### Qué hacer según status
+
+| Status | Acción |
+|---|---|
+| `LIVE` | Usar directamente los tools `mcp__{tool_prefix}__*` |
+| `CONFIG_ONLY` | Informar al usuario que se necesita reiniciar la sesión |
+| `PENDING_TOKEN` | Informar qué variable de entorno falta (ver `config/mcp.registry.yaml`) |
+| `DEFERRED_PAID` | Reportar como no disponible, no intentar usar |
+| `UNAVAILABLE` | Escalar como bloqueador |

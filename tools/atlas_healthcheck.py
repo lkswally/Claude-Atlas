@@ -588,6 +588,53 @@ def check_capabilities_layer() -> None:
         WARN("Capabilities layer", f"error loading: {e}")
 
 
+def check_capability_router() -> None:
+    """
+    F16: Capability Router — valida que resolve_capability() funciona
+    y que capabilities críticas tienen provider LIVE o fallback.
+    """
+    cap_dir = PROJECT_ROOT / "core" / "capabilities"
+    if not (cap_dir / "router.py").exists():
+        FAIL("Capability router", "core/capabilities/router.py no encontrado")
+        return
+
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from core.capabilities.router import resolve_capability, CRITICAL_CAPABILITIES
+
+        # 1. Probes críticas
+        critical_issues = []
+        for cap_name in sorted(CRITICAL_CAPABILITIES):
+            r = resolve_capability(cap_name)
+            if r.status == "UNAVAILABLE":
+                critical_issues.append(f"{cap_name}=UNAVAILABLE (sin provider)")
+            elif r.provider is None:
+                critical_issues.append(f"{cap_name}=sin provider")
+
+        # 2. Prueba capability inexistente no rompe
+        r_missing = resolve_capability("__nonexistent_capability__")
+        if r_missing.status != "UNAVAILABLE":
+            critical_issues.append("capability desconocida no retorna UNAVAILABLE")
+
+        # 3. Prueba capability conocida retorna provider
+        r_mem = resolve_capability("memory")
+        if r_mem.provider != "engram":
+            critical_issues.append(f"memory debería resolverse a engram, got={r_mem.provider}")
+
+        if critical_issues:
+            FAIL("Capability router", "; ".join(critical_issues))
+        else:
+            # Resumen de resoluciones críticas
+            summary_parts = []
+            for cap_name in sorted(CRITICAL_CAPABILITIES):
+                r = resolve_capability(cap_name)
+                summary_parts.append(f"{cap_name}={r.status}")
+            PASS("Capability router", f"resolve_capability OK | {' | '.join(summary_parts)}")
+
+    except Exception as e:
+        FAIL("Capability router", f"error loading router: {e}")
+
+
 def check_mcp_json() -> None:
     """.mcp.json en CWD raíz — verifica servidores configurados."""
     mcp_file = PROJECT_ROOT.parent / ".mcp.json"
@@ -681,6 +728,7 @@ def run_all() -> int:
     check_mcp_registry()
     check_mcp_json()
     check_capabilities_layer()
+    check_capability_router()
     check_dispatcher()
 
     # --- Reporte ---
