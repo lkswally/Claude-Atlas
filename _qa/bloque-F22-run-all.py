@@ -17,7 +17,7 @@ TC3:  --list discovers all existing suites
 TC4:  --json exits with code 0 or 1 (never 2)
 TC5:  --json output is valid JSON with required keys
 TC6:  --json total matches discovered suite count (within --quick scope)
-TC7:  --quick mode runs in under 120s
+TC7:  --quick mode runs in under 360s (F23 suite has per-suite timeout override of 300s)
 TC8:  --quick exit code is 0 (all suites pass)
 TC9:  LIVE_BINARY_SUITES are skipped in --quick
 TC10: --list --no-network excludes network suites
@@ -135,23 +135,26 @@ try:
 except Exception as e:
     FAIL("TC6 JSON total", str(e))
 
-# TC7 — --quick runs in under 120s
+# TC7 — --quick runs in under 360s
+# F23 suite (bloque-F23-runtime-settings-separation) has a 300s override in
+# SUITE_TIMEOUTS because it renames settings.json multiple times and runs the
+# healthcheck multiple times. Total expected time: 200-300s on Windows.
 try:
     start = time.monotonic()
-    r = run("--quick", timeout=180)
+    r = run("--quick", timeout=450)
     elapsed = time.monotonic() - start
-    if elapsed < 120:
-        PASS("TC7 --quick completes in under 120s", f"{elapsed:.1f}s")
+    if elapsed < 360:
+        PASS("TC7 --quick completes in under 360s", f"{elapsed:.1f}s")
     else:
-        FAIL("TC7 --quick under 120s", f"took {elapsed:.1f}s")
+        FAIL("TC7 --quick under 360s", f"took {elapsed:.1f}s")
 except subprocess.TimeoutExpired:
-    FAIL("TC7 --quick timeout", "exceeded 180s")
+    FAIL("TC7 --quick timeout", "exceeded 450s")
 except Exception as e:
     FAIL("TC7 --quick", str(e))
 
 # TC8 — --quick exit code is 0
 try:
-    r = run("--quick", timeout=180)
+    r = run("--quick", timeout=450)
     if r.returncode == 0:
         PASS("TC8 --quick exit code 0 (all suites pass)")
     else:

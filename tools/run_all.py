@@ -45,6 +45,12 @@ NETWORK_SUITES: set[str] = set()  # currently none hit real network in test mode
 # All suites that previously depended on a stable settings.json now tolerate
 # the Windows/Claude Desktop race condition and run without special handling.
 
+# Per-suite timeout overrides (seconds).
+# Use when a suite legitimately takes longer than the default 60s.
+SUITE_TIMEOUTS: dict[str, int] = {
+    "bloque-F23-runtime-settings-separation": 300,  # renames settings.json multiple times
+}
+
 # Suites that are "live session only" (validate MCP tools registered in Claude)
 # These can't be run standalone — they document their own skip
 LIVE_SESSION_ONLY: set[str] = set()
@@ -270,7 +276,8 @@ def main() -> int:
         stem = suite_stem(suite_path)
         if not args.json_output:
             print(f"  [....] {stem}", end="\r", flush=True)
-        r = run_suite(suite_path, timeout=args.timeout)
+        suite_timeout = SUITE_TIMEOUTS.get(stem, args.timeout)
+        r = run_suite(suite_path, timeout=suite_timeout)
         results.append(r)
         if not args.json_output:
             print_result(r)
