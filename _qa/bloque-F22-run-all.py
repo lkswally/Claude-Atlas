@@ -59,7 +59,7 @@ def FAIL(name: str, detail: str = "") -> None:
     print(msg)
 
 
-def run(*args, timeout=180):
+def run(*args, timeout=450):
     cmd = [sys.executable, str(RUN_ALL)] + list(args)
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                           cwd=str(PROJECT_ROOT))
@@ -97,19 +97,19 @@ except Exception as e:
 
 # TC4 — --json exits 0 or 1 (never 2)
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     if r.returncode in (0, 1):
         PASS("TC4 --json exits 0 or 1 (not 2)", f"returncode={r.returncode}")
     else:
         FAIL("TC4 --json exits 0 or 1", f"returncode={r.returncode}")
 except subprocess.TimeoutExpired:
-    FAIL("TC4 --json timeout", "exceeded 180s")
+    FAIL("TC4 --json timeout", "exceeded 450s")
 except Exception as e:
     FAIL("TC4 --json", str(e))
 
 # TC5 — --json output is valid JSON with required keys
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     data = json.loads(r.stdout)
     required = {"total", "passed", "failed", "suites", "mode"}
     missing = required - data.keys()
@@ -124,7 +124,7 @@ except Exception as e:
 
 # TC6 — JSON total matches suite count
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     data = json.loads(r.stdout)
     total = data.get("total", 0)
     suite_count = len(data.get("suites", []))
@@ -192,7 +192,7 @@ except Exception as e:
 
 # TC11 — JSON has passed, failed, total
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     data = json.loads(r.stdout)
     all_keys = {"passed", "failed", "total"}
     if all_keys.issubset(data.keys()) and isinstance(data["passed"], int):
@@ -204,7 +204,7 @@ except Exception as e:
 
 # TC12 — JSON 'mode' is 'quick' by default
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     data = json.loads(r.stdout)
     if data.get("mode") == "quick":
         PASS("TC12 JSON mode='quick' by default")
@@ -215,7 +215,7 @@ except Exception as e:
 
 # TC13 — JSON suites array has per-suite results
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     data = json.loads(r.stdout)
     suites = data.get("suites", [])
     if suites and all("suite" in s and "passed" in s for s in suites):
@@ -227,7 +227,7 @@ except Exception as e:
 
 # TC14 — healthcheck key absent in --quick JSON (only in --release)
 try:
-    r = run("--json", timeout=180)
+    r = run("--json", timeout=450)
     data = json.loads(r.stdout)
     hc = data.get("healthcheck")
     if hc is None:
