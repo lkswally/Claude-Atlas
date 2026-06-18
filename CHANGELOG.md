@@ -4,6 +4,40 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [v0.21.0] — 2026-06-18 — Developer Experience + Open Source Readiness
+
+### Documentation — New Files
+- `VISION.md`: one-sentence mission, 5 core principles, 5 non-negotiables, v1.0 success definition
+- `INSTALL.md`: cross-platform installation from zero (all 11 steps + dependency table)
+- `FIRST_RUN.md`: first project walkthrough, key commands, what ATLAS can't do
+- `TROUBLESHOOTING.md`: categorized fixes for healthcheck, Claude, Python, and Windows issues
+- `FAQ.md`: 30+ questions covering general, installation, usage, capabilities, hooks, contributing
+- `GLOSSARY.md`: 27 terms defined — ADR through v0.x→v1.0
+- `docs/AGENTS.md`: full catalog of all 25 agents, communication contract, add-agent checklist
+- `docs/HOOKS.md`: all 16 hooks documented, hook types table, safe hook writing guide
+- `docs/SKILLS.md`: all 10 skills by domain, API examples, adding a new skill
+- `docs/SECURITY.md`: all 6 security layers explained with escape hatches and philosophy
+
+### Documentation — Updated
+- `README.md`: complete rewrite — sell the concept, full architecture diagram, quick start in 5 commands
+- `CONTRIBUTING.md`: updated with all new documents, atlas CLI design, full commit checklist
+- `ROADMAP.md`: Atlas CLI design section (6 commands), updated maturity metrics, F22-F25 planned blocs
+
+### Install Guides — Fixed
+- `install/linux.sh`: Python 3.10+ check added, correct counts (25 agents, 38 files, 13 hooks), removed "Vibecoding" branding
+- `install/windows.md`: Python step added, clone URL placeholder corrected, all counts updated (38 files, 16 hooks), added healthcheck verification step
+- `.env.example`: new file — template for all 5 token variables + all 5 `ATLAS_*_DISABLED` escape hatches
+
+### DX Audit (Part 1 findings resolved)
+- P0: Wrong clone URL fixed (placeholder + instructions)
+- P0: Python 3.10+ now documented in both install guides
+- P0: Hook count inconsistency fixed (16 = 13 reactive + 3 manual utilities)
+- P0: `.env.example` created
+- P1: `install/linux.sh` header updated (correct counts, removed legacy naming)
+- P1: All missing docs created (FIRST_RUN, TROUBLESHOOTING, FAQ, GLOSSARY, VISION)
+
+---
+
 ## [v0.20.0] — 2026-06-18 — Architecture Hardening + Open Source Readiness
 
 ### Security

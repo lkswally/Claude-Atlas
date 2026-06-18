@@ -1,8 +1,10 @@
 # ATLAS Roadmap
 
-## Current State — v0.20.0
+## Current State — v0.21.0
 
-**Architecture maturity: ~72%**
+**Architecture maturity: ~82%**  
+**Open Source DX readiness: ~88%**  
+**v1.0 readiness: ~65%**
 
 ### What's Solid (production-ready)
 - 5-phase pipeline with phase gates and retry logic
@@ -43,24 +45,50 @@
 
 ---
 
+---
+
+## Atlas CLI Design (F22 target)
+
+A single `atlas` command that replaces the current manual incantations.  
+**Design only — not yet implemented.**
+
+| Command | What it does | Current equivalent |
+|---------|-------------|-------------------|
+| `atlas doctor` | Run all 25 healthcheck tests, report PASS/FAIL with fix hints | `python tools/atlas_healthcheck.py` |
+| `atlas install` | Copy agents/hooks to `~/.claude/`, configure `settings.json`, verify MCPs | Manual copy + `install/linux.sh` |
+| `atlas update` | Pull latest, re-copy agents/hooks, run drift check, healthcheck | `git pull` + manual copy + QA |
+| `atlas qa` | Run all `_qa/bloque-F*.py` suites, report totals | `for f in _qa/bloque-F*.py; do python "$f"; done` |
+| `atlas health` | Live capability status — which MCPs are LIVE/WARN/BLOCK right now | `python tools/capability_metrics.py --report` |
+| `atlas bootstrap` | Interactive first-run: verify prerequisites, configure tokens, set up MCPs, run doctor | FIRST_RUN.md walkthrough |
+
+**Implementation notes for F22:**
+- `atlas` should be a shell wrapper (`atlas.sh` / `atlas.ps1`) — no new runtime dependency
+- Commands must work without ATLAS being "installed" (pre-install scenario)
+- `atlas doctor` exit code must be: 0 = all PASS, 1 = any FAIL
+- `atlas qa` must discover suites dynamically via glob, not a hardcoded list
+- `atlas bootstrap` should call `atlas doctor` at the end and show the result
+
+---
+
 ## Planned Feature Blocs
 
-### F21 — Automated Regression Suite
+### F22 — Atlas CLI + Automated Regression Suite
+- `atlas` shell wrapper with all 6 commands above
 - `_qa/run_all.py`: discovers all `bloque-F*.py` files, runs them in parallel, reports totals
 - Exit code: 0 = all pass, 1 = any fail
 - GitHub Actions integration template
 
-### F22 — Capability Auto-Discovery
+### F23 — Capability Auto-Discovery
 - `registry.py` reads `.mcp.json` at startup and supplements hardcoded entries
 - New capabilities added dynamically without code changes
 - Policy file supports `*` wildcard for unknown capabilities
 
-### F23 — Agent Output Contracts
+### F24 — Agent Output Contracts
 - Per-agent schema: what drawers they write, what files they touch
 - Dispatcher validates agent output against contract
 - Violations logged to `.pipeline/contract-violations.jsonl`
 
-### F24 — Token Budget Enforcement
+### F25 — Token Budget Enforcement
 - Per-agent token limits in `config/agent-budgets.yaml`
 - Dispatcher tracks tokens per delegation
 - Auto-escalate to orchestrator when budget exceeded
@@ -68,6 +96,10 @@
 ---
 
 ## Version History
+
+| Version | Tag | Focus |
+|---------|-----|-------|
+| v0.21.0 | `v0.21.0-atlas-dx` | DX, open source readiness, 12 new docs, install guides fixed |
 
 | Version | Tag | Focus |
 |---------|-----|-------|

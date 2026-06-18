@@ -1,91 +1,135 @@
 # Contributing to ATLAS
 
-## Before Making Changes
+Thank you for contributing. ATLAS has layered invariants — a change to one layer can cascade. Read this guide before making any changes.
 
-**Read the architecture first.** ATLAS has layered invariants. A change to one layer can cascade:
+---
+
+## Before Making Any Change
+
+**Read the architecture first.**
 
 1. Read [ARCHITECTURE.md](ARCHITECTURE.md) — understand the layers
-2. Read the relevant ADR in `ADR/` — understand why the design is the way it is
-3. Run the healthcheck: `python tools/atlas_healthcheck.py` — baseline must be 25/25 PASS
-4. Run relevant QA suites — all must pass before and after your change
+2. Read [GLOSSARY.md](GLOSSARY.md) — understand the terminology
+3. Read the relevant ADR in `ADR/` — understand why the design is the way it is
+4. Run the baseline: `python tools/atlas_healthcheck.py` — must be 25/25 PASS
+5. Run relevant QA suites — all must pass before and after your change
+
+---
 
 ## Invariants That Must Never Break
 
-- `python tools/atlas_healthcheck.py` exits 0 with all 25 checks PASS
-- All `_qa/bloque-F*.py` suites exit 0
-- `agents/` and `~/.claude/agents/` are identical (checked by F10 drift test)
-- `hooks/` and `~/.claude/hooks/` are identical
-- Every ACCEPTED ADR references files that exist on disk
-- `config/capability.policy.yaml` has an entry for every capability in the registry
-- No agent file uses raw MCP tool prefixes — use capability names
+These hold at all times. A PR that violates any of these will not be merged:
+
+1. `python tools/atlas_healthcheck.py` exits 0 with all 25 checks PASS
+2. All `_qa/bloque-F*.py` suites exit 0
+3. `agents/` and `~/.claude/agents/` are identical (checked by F10 drift test)
+4. `hooks/` and `~/.claude/hooks/` are identical
+5. Every ACCEPTED ADR references files that exist on disk (checked by self-auditor T9)
+6. `config/capability.policy.yaml` has an entry for every capability in the registry
+7. No agent file references raw MCP tool prefixes — always use capability names
+8. Every hook exits 0 on empty input (`echo '{}' | node ~/.claude/hooks/<name>.js`)
+
+---
+
+## Setting Up for Development
+
+```bash
+git clone https://github.com/your-org/atlas.git
+cd atlas
+
+# Install Python dependencies
+pip install pyyaml
+
+# Verify baseline
+python tools/atlas_healthcheck.py   # must be 25/25 PASS
+python _qa/bloque-F20-capability-contracts.py   # must PASS
+```
+
+---
 
 ## Adding a New Agent
 
-1. Create `.claude/agents/<name>.md` with frontmatter: `name`, `description`, `model`
-2. Reference `agent-protocol.md` in the file
+1. Create `.claude/agents/<name>.md` with required frontmatter:
+   ```yaml
+   ---
+   name: my-agent
+   description: One-line description of what this agent does
+   model: sonnet
+   ---
+   ```
+2. Reference the shared protocol: `> **Shared protocol:** See agent-protocol.md`
 3. Add a `## Tools` section
 4. Copy to mirror: `cp .claude/agents/<name>.md agents/<name>.md`
 5. Add to the agent table in `CLAUDE.md`
-6. Run `_qa/bloque-F10-sot-drift.py` — must pass
+6. Add to the agent table in `docs/AGENTS.md`
+7. Run drift check: `python _qa/bloque-F10-sot-drift.py` — must PASS
+
+---
 
 ## Adding a New Capability
 
-1. Add to `core/capabilities/registry.py` — new `Capability` entry with providers
-2. Add to `config/capability.policy.yaml` — mandatory policy entry
-3. Update `core/capabilities/__init__.py` if new public symbols are added
-4. Add contract test in `_qa/bloque-F20-capability-contracts.py` (or new suite)
-5. Run all F16–F19 QA suites
+1. Add to `core/capabilities/registry.py` — new `Capability` entry with at least one `Provider`
+2. Add to `config/capability.policy.yaml` — a policy entry is **mandatory**
+3. Update `core/capabilities/__init__.py` if new public symbols are exported
+4. Add contract test in `_qa/bloque-F20-capability-contracts.py`
+5. Update `docs/CAPABILITIES.md`
+6. Run: `python tools/atlas_healthcheck.py` — must stay 25/25 PASS
+
+---
 
 ## Adding a New Hook
 
 1. Create `.claude/hooks/<name>.js`
-2. Hook must be **fail-open**: uncaught exceptions must not block tool calls
-3. Test with empty input: `echo '{}' | node .claude/hooks/<name>.js` must exit 0
+2. **Must be fail-open**: uncaught exceptions must exit 0, not crash
+3. **Must handle empty input**: `echo '{}' | node .claude/hooks/<name>.js` must exit 0
 4. Copy to mirror: `cp .claude/hooks/<name>.js hooks/<name>.js`
-5. Register in `~/.claude/settings.json`
-6. If the hook blocks commands, add tests to `_qa/bloque-F20-security-hooks.py`
+5. Register in `templates/settings.json` (and `~/.claude/settings.json` for local testing)
+6. If hook blocks commands → add tests to `_qa/bloque-F20-security-hooks.py`
+7. Add to `docs/HOOKS.md`
 
-## Adding a New Tool
+---
 
-Tools live in `tools/`. They are Python scripts invoked via Bash by Claude.
+## Adding a New Python Tool
 
-- Must be runnable standalone: `python tools/<name>.py --help`
-- Must fail gracefully (no unhandled exceptions on bad input)
-- Exit code conventions: 0 = OK, 1 = error/warning, 2 = critical
-- Add a healthcheck check in `tools/atlas_healthcheck.py`
+1. Create `tools/<name>.py` — must run standalone: `python tools/<name>.py --help` works
+2. Must fail gracefully on bad input (no unhandled exceptions)
+3. Exit code conventions: `0` = OK, `1` = error/warning, `2` = critical
+4. Add a healthcheck check in `tools/atlas_healthcheck.py`
+5. Document in `README.md` tools table
+
+---
 
 ## Writing QA Suites
 
-Each feature bloc (`F16`, `F17`, ...) has a corresponding QA suite in `_qa/bloque-F<N>-<slug>.py`.
+QA suites are in `_qa/bloque-F<N>-<slug>.py`. Convention:
 
-- **14 tests per suite** (convention — not enforced)
-- Use the PASS/FAIL pattern from existing suites (no external test runner)
+- **14 tests per suite** (convention, not hard rule)
+- Use the PASS/FAIL pattern from existing suites — no external test runner
 - Tests must be self-contained: no live MCPs, no network, use `tempfile` for isolation
 - Cache resets: call `_reset_cache()` between tests that share module-level state
-- Disable via env var: set `ATLAS_*_DISABLED=1` to test fail-open behavior
+- Disable via env var: test `ATLAS_*_DISABLED=1` for fail-open behavior
+
+```python
+def PASS(name, detail=""): ...
+def FAIL(name, detail=""): ...
+# Each test: call PASS() or FAIL()
+# main() returns: 0 = all PASS, 1 = any FAIL
+```
+
+---
 
 ## Architecture Decision Records
 
-When making a significant architectural decision (new pattern, replacing an existing approach, adding a layer):
+When making a significant decision (new pattern, replacing existing approach, adding a layer):
 
 1. Copy `ADR/0000-adr-template.md`
-2. Number sequentially, add a descriptive slug
-3. Fill: Date, Status (ACCEPTED / DEPRECATED / SUPERSEDED), Context, Decision, Alternatives, Consequences, Rollback
-4. Status starts as PROPOSED; change to ACCEPTED once implemented and tested
-5. Add a row to the ADR table in `README.md`
+2. Number sequentially: `ADR/0005-slug.md`
+3. Fill: Date, Status (`PROPOSED`), Context, Decision, Alternatives Considered, Consequences, Rollback
+4. Change Status to `ACCEPTED` once implemented and tested
+5. Add row to the ADR table in `README.md`
 6. Self-auditor T9 will verify referenced files exist at every health check
 
-## Commit Convention
-
-```
-feat(F21): add X
-fix(F19): resolve Y
-docs: update README capability counts
-test(F20): add TC15 for Z
-refactor(capabilities): extract W to separate module
-```
-
-Scope = feature bloc (`F20`), layer (`capabilities`, `hooks`, `tools`), or `docs`/`test`.
+---
 
 ## Sync Mirrors After Any Change
 
@@ -93,20 +137,61 @@ After modifying agents or hooks:
 ```bash
 cp .claude/agents/<modified>.md agents/
 cp .claude/hooks/<modified>.js hooks/
-python _qa/bloque-F10-sot-drift.py  # must pass
+python _qa/bloque-F10-sot-drift.py   # must PASS
 ```
 
-## Final Checklist Before Committing
+---
+
+## Commit Convention
+
+```
+feat(F21): add INSTALL.md and DX documentation
+fix(hooks): close chmod bypass in block-no-verify.js
+docs: update README with capability system section
+test(F20): add TC15 for visualization contract
+refactor(capabilities): extract policy cache to separate module
+chore: sync agent mirrors after self-auditor update
+```
+
+Scope = feature bloc (`F21`), layer (`capabilities`, `hooks`, `tools`), or `docs`/`test`/`chore`.
+
+---
+
+## Final Checklist Before Every Commit
 
 ```bash
-python tools/atlas_healthcheck.py          # 25/25 PASS
-python _qa/bloque-F10-sot-drift.py        # no drift
+# Run these all — all must exit 0
+python tools/atlas_healthcheck.py
+python _qa/bloque-F10-sot-drift.py
 python _qa/bloque-F16-capability-router.py
-python _qa/bloque-F17-capability-protocol.py
+python _qa/bloque-F17-agent-capability-migration.py
 python _qa/bloque-F18-capability-metrics.py
 python _qa/bloque-F19-capability-policy.py
 python _qa/bloque-F20-security-hooks.py
 python _qa/bloque-F20-capability-contracts.py
 ```
 
-All must exit 0 before pushing.
+One-liner to run all F-series suites:
+```bash
+for f in _qa/bloque-F*.py; do echo "=== $f ==="; python "$f" 2>/dev/null | grep "RESULTADO"; done
+```
+
+---
+
+## What Not to Do
+
+- **Don't skip QA** — even for "trivial" changes. The healthcheck exists for a reason.
+- **Don't edit agent files without syncing the mirror** — drift is detected and will fail CI.
+- **Don't weaken security hooks** — you can add patterns, never remove them.
+- **Don't remove capabilities** — deprecate with `NOT_RECOMMENDED` status first.
+- **Don't add optional dependencies** — if Python stdlib doesn't have it, question whether you need it.
+- **Don't commit `.env.local`** — it's gitignored for a reason. Double-check before `git add`.
+
+---
+
+## Getting Help
+
+Open an issue with:
+- `python tools/atlas_healthcheck.py` output
+- The exact change you're trying to make
+- What's failing and what you've tried

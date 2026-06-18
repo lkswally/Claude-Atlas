@@ -1,8 +1,9 @@
 #!/bin/bash
 # ============================================================
-# Claude Code — Vibecoding Agent System v3
-# 25 agentes + 12 referencias = 37 archivos | Pipeline de 5 fases
-# Instalacion automatica para Linux / Claude Code
+# ATLAS — AI Engineering Operating System
+# 25 agentes + 13 referencias = 38 archivos | Pipeline de 5 fases
+# 13 hooks reactivos + 3 utilidades | Python tools layer
+# Instalacion automatica para Linux / macOS / Claude Code
 # ============================================================
 
 set -e
@@ -19,10 +20,10 @@ error() { echo -e "${RED}[X]${NC} $1"; exit 1; }
 
 echo ""
 echo -e "${CYAN}============================================${NC}"
-echo -e "${CYAN}  Claude Code — Vibecoding Agent System v3${NC}"
-echo -e "${CYAN}  25 agentes + 12 referencias = 37 archivos${NC}"
-echo -e "${CYAN}  Pipeline de 5 fases | 13 hooks reactivos${NC}"
-echo -e "${CYAN}  Instalacion automatica (Linux)${NC}"
+echo -e "${CYAN}  ATLAS — AI Engineering Operating System${NC}"
+echo -e "${CYAN}  25 agentes + 13 referencias = 38 archivos${NC}"
+echo -e "${CYAN}  Pipeline de 5 fases | 13 hooks reactivos + 3 utilidades${NC}"
+echo -e "${CYAN}  Instalacion automatica (Linux / macOS)${NC}"
 echo -e "${CYAN}============================================${NC}"
 echo ""
 
@@ -60,7 +61,27 @@ if ! command -v claude &>/dev/null; then
   fi
 fi
 
-# -- 1. Verificar dependencias basicas --
+# -- 1. Verificar Python 3.10+ (requerido para tools/) --
+if command -v python3 &>/dev/null; then
+  PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+  PYTHON_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
+  PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+  if [[ "$PYTHON_MAJOR" -lt 3 ]] || [[ "$PYTHON_MAJOR" -eq 3 && "$PYTHON_MINOR" -lt 10 ]]; then
+    error "Python 3.10+ requerido (encontrado: $PYTHON_VERSION). Actualizalo desde python.org"
+  fi
+  info "Python: $PYTHON_VERSION"
+  # Install PyYAML if missing
+  python3 -c "import yaml" 2>/dev/null || { warn "Instalando PyYAML..."; pip3 install pyyaml --quiet; }
+elif command -v python &>/dev/null; then
+  PYTHON_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+  info "Python: $PYTHON_VERSION (via 'python')"
+  python -c "import yaml" 2>/dev/null || { warn "Instalando PyYAML..."; pip install pyyaml --quiet; }
+else
+  warn "Python no encontrado. Instalalo desde https://python.org/downloads/ (version 3.10+)"
+  warn "Sin Python, las herramientas en tools/ no funcionaran (healthcheck, dispatcher, capabilities)."
+fi
+
+# -- 1b. Verificar dependencias basicas --
 for cmd in git curl; do
   if ! command -v $cmd &>/dev/null; then
     case "$PKG_MGR" in
@@ -152,7 +173,7 @@ else
   info "Clave SSH existente: $SSH_KEY"
 fi
 
-# -- 8. Instalar 25 agentes + 12 referencias en ~/.claude/agents/ --
+# -- 8. Instalar 25 agentes + 13 referencias en ~/.claude/agents/ --
 CLAUDE_AGENTS="$HOME/.claude/agents"
 mkdir -p "$CLAUDE_AGENTS/skills"
 

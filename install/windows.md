@@ -1,20 +1,21 @@
 # Instalacion en Windows — Claude Desktop
 
-Esta guia te lleva paso a paso desde cero hasta tener el sistema completo funcionando en Windows con Claude Desktop.
+Esta guia te lleva paso a paso desde cero hasta tener ATLAS completamente funcionando en Windows con Claude Desktop.
 
 ---
 
 ## Lo que vas a instalar
 
-- **37 archivos de agentes** (25 agentes + 12 referencias tecnicas): los especialistas del sistema + documentacion tecnica que usan internamente
-- **13 hooks reactivos**: interceptan operaciones en tiempo real para seguridad y calidad
+- **38 archivos de agentes** (25 agentes + 13 referencias tecnicas): los especialistas del sistema + documentacion tecnica que usan internamente
+- **16 hooks** (13 reactivos + 3 utilidades): interceptan operaciones en tiempo real para seguridad y calidad
 - **CLAUDE.md global**: le dice a Claude como coordinar el pipeline de 5 fases
 - **MCPs**: Engram (memoria persistente), Context7 (docs), Playwright (QA visual)
-- **Node.js + npm**: para levantar previews locales
+- **Python 3.10+**: para todas las herramientas del sistema (healthcheck, capabilities, dispatcher)
+- **Node.js + npm**: para levantar previews locales y ejecutar MCPs via npx
 - **Git + GitHub CLI**: para guardar y publicar codigo
 - **Vercel CLI**: para publicar en internet
 
-Tiempo estimado: 20-30 minutos.
+Tiempo estimado: 30-45 minutos.
 
 ---
 
@@ -41,7 +42,27 @@ Antes de empezar, necesitas tener **Claude Desktop** instalado:
 
 ---
 
-## Paso 2: Instalar Node.js
+## Paso 2: Instalar Python 3.10+
+
+Python es requerido por todas las herramientas del sistema: healthcheck, dispatcher, capability stack, metricas, dependency graph.
+
+1. Ir a [python.org/downloads](https://www.python.org/downloads/)
+2. Descargar la ultima version estable (3.12 o superior recomendado)
+3. Durante la instalacion, **marcar la opcion "Add Python to PATH"** — es critico
+4. Verificar en Git Bash:
+   ```bash
+   python --version   # debe mostrar 3.10 o superior
+   ```
+5. Instalar PyYAML (requerido para capability policies):
+   ```bash
+   pip install pyyaml
+   ```
+
+> **Si Python no aparece en Git Bash**: cerrar y volver a abrir Git Bash despues de instalar.
+
+---
+
+## Paso 3: Instalar Node.js
 
 1. Ir a [nodejs.org](https://nodejs.org)
 2. Descargar la version **LTS** (la recomendada)
@@ -50,7 +71,7 @@ Antes de empezar, necesitas tener **Claude Desktop** instalado:
 
 ---
 
-## Paso 3: Instalar GitHub CLI
+## Paso 4: Instalar GitHub CLI
 
 1. Ir a [cli.github.com](https://cli.github.com)
 2. Descargar el instalador para Windows
@@ -63,7 +84,7 @@ Antes de empezar, necesitas tener **Claude Desktop** instalado:
 
 ---
 
-## Paso 4: Instalar Vercel CLI
+## Paso 5: Instalar Vercel CLI
 
 En Git Bash:
 ```bash
@@ -73,7 +94,7 @@ vercel login
 
 ---
 
-## Paso 5: Configurar git
+## Paso 6: Configurar git
 
 En Git Bash:
 ```bash
@@ -84,60 +105,63 @@ git config --global init.defaultBranch main
 
 ---
 
-## Paso 6: Descargar el sistema
+## Paso 7: Descargar ATLAS
 
 En Git Bash, navega a tu Escritorio (o donde prefieras guardar el repo):
 ```bash
 cd ~/Desktop
-git clone https://github.com/Emaleo0522/claude-vibecoding.git
-cd claude-vibecoding
+git clone https://github.com/your-org/atlas.git
+cd atlas
 ```
 
-> Esto descarga todos los archivos del sistema a una carpeta llamada `claude-vibecoding` en tu Escritorio.
+> Reemplaza la URL con la URL real del repositorio ATLAS.
+> Esto descarga todos los archivos del sistema a una carpeta llamada `atlas` en tu Escritorio.
 
 ---
 
-## Paso 7: Copiar los 37 archivos de agentes (25 agentes + 12 referencias)
+## Paso 8: Copiar los 38 archivos de agentes (25 agentes + 13 referencias)
 
-En Git Bash, **dentro de la carpeta `claude-vibecoding`**:
+En Git Bash, **dentro de la carpeta `atlas`**:
 ```bash
 # Crear la carpeta de agentes
 mkdir -p ~/.claude/agents/skills
 
-# Copiar los 37 archivos
+# Copiar los 38 archivos
 cp agents/*.md ~/.claude/agents/
 
 # Copiar skills si hay
 cp agents/skills/*.md ~/.claude/agents/skills/ 2>/dev/null
 
-# Verificar — debe decir 37
+# Verificar — debe decir 38
 ls ~/.claude/agents/*.md | wc -l
 ```
 
 Los 25 agentes: orquestador, project-manager-senior, ux-architect, ui-designer, security-engineer, frontend-developer, backend-architect, rapid-prototyper, mobile-developer, game-designer, xr-immersive-developer, codepen-explorer, build-resolver, brand-agent, image-agent, logo-agent, video-agent, evidence-collector, reality-checker, seo-discovery, api-tester, performance-benchmarker, git, deployer, self-auditor.
 
-Las 12 referencias: agent-protocol, better-auth-reference, better-gsap-reference, react-patterns-reference, redis-patterns-reference, pocketbase-reference, devops-vps-reference, nothing-design-reference, scroll-storytelling-reference, advanced-effects-reference, creative-coding-reference, reactive-audio-reference.
+Las 13 referencias: agent-protocol, better-auth-reference, better-gsap-reference, react-patterns-reference, redis-patterns-reference, pocketbase-reference, devops-vps-reference, nothing-design-reference, scroll-storytelling-reference, advanced-effects-reference, creative-coding-reference, reactive-audio-reference, y una referencia adicional.
 
 ---
 
-## Paso 7b: Copiar hooks reactivos
+## Paso 8b: Copiar hooks
 
 ```bash
 # Crear la carpeta de hooks
 mkdir -p ~/.claude/hooks
 
-# Copiar los 13 hooks
+# Copiar todos los hooks (13 reactivos + 3 utilidades = 16 archivos)
 cp hooks/*.js ~/.claude/hooks/
 
-# Verificar — debe decir 13
+# Verificar — debe decir 16
 ls ~/.claude/hooks/*.js | wc -l
 ```
 
-Los hooks interceptan operaciones en tiempo real: bloquean comandos peligrosos (git --no-verify, rm -rf), advierten sobre debugger/.only()/@ts-ignore, trackean costos, y gestionan contexto automaticamente.
+Los 13 hooks reactivos interceptan operaciones en tiempo real: bloquean comandos peligrosos (`git push --force`, `rm -rf`, `chmod 777`), advierten sobre `debugger`/`.only()`/`@ts-ignore`, trackean costos, y gestionan contexto automaticamente.
+
+Las 3 utilidades manuales: `audit-system.js`, `cost-report.js`, `learning-index.js`.
 
 ---
 
-## Paso 7c: Configurar settings.json y permisos
+## Paso 8c: Configurar settings.json y permisos
 
 ```bash
 # Instalar settings.json (hooks + Engram MCP)
@@ -149,13 +173,13 @@ sed "s|__CLAUDE_HOME__|$CLAUDE_HOME|g" templates/settings.json > ~/.claude/setti
 cp templates/settings.local.json ~/.claude/settings.local.json
 ```
 
-> Esto configura los 10 hooks automaticos (los otros 3 son manuales) y los permisos para que los agentes puedan usar sus herramientas.
+> Esto configura los 13 hooks reactivos y los permisos para que los agentes puedan usar sus herramientas.
 
 > **Si ya tenias una instalacion anterior**: los archivos existentes se sobreescriben. Si los habias personalizado, hace un backup antes: `cp ~/.claude/settings.json ~/.claude/settings.json.bak`
 
 ---
 
-## Paso 8: Instalar CLAUDE.md global
+## Paso 9: Instalar CLAUDE.md global
 
 ```bash
 cp templates/windows-claude.md ~/CLAUDE.md
@@ -165,7 +189,7 @@ cp templates/windows-claude.md ~/CLAUDE.md
 
 ---
 
-## Paso 9: Configurar MCPs para Claude Desktop
+## Paso 10: Configurar MCPs para Claude Desktop
 
 En Windows, los MCPs se configuran en un archivo especifico de Claude Desktop — **diferente** al de Linux.
 
@@ -233,7 +257,7 @@ Dentro de Claude Desktop puedes instalar MCPs adicionales desde **Settings > Ext
 
 ---
 
-## Paso 10: Configurar preview servers (launch.json)
+## Paso 11: Configurar preview servers (launch.json)
 
 Para que `preview_start` funcione correctamente en Windows:
 
@@ -246,7 +270,7 @@ Edita `~/.claude/launch.json` y cambia `"mi-proyecto"` por el nombre de tu proye
 
 ---
 
-## Paso 11: Variables de entorno para assets creativos (opcional)
+## Paso 12: Variables de entorno para assets creativos (opcional)
 
 Si tu proyecto va a usar el pipeline creativo (logos, imagenes, videos generados con IA), necesitas configurar al menos una de estas API keys:
 
@@ -275,14 +299,14 @@ echo "HF_TOKEN=tu-token-aqui" >> ~/.claude/.env
 
 ---
 
-## Paso 12: Verificar la instalacion
+## Paso 13: Verificar la instalacion
 
 En Git Bash:
 ```bash
-# Agentes instalados (deben ser 37)
+# Agentes instalados (deben ser 38: 25 agentes + 13 referencias)
 ls ~/.claude/agents/*.md | wc -l
 
-# Hooks instalados (deben ser 13)
+# Hooks instalados (deben ser 16: 13 reactivos + 3 utilidades)
 ls ~/.claude/hooks/*.js | wc -l
 
 # CLAUDE.md global
@@ -290,18 +314,27 @@ head -5 ~/CLAUDE.md
 
 # Herramientas disponibles
 git --version
+python --version   # debe ser 3.10+
 node --version
 gh --version
 vercel --version
 ```
 
-**Verificacion completa (opcional pero recomendado):**
+**Healthcheck completo del sistema (recomendado):**
+```bash
+# Desde la carpeta atlas/
+python tools/atlas_healthcheck.py
+```
+Resultado esperado: `RESULTADO: PASS=25 WARN=0 FAIL=0 / 25 checks`
+
+**Verificacion de sistema (manual):**
 ```bash
 node ~/.claude/hooks/audit-system.js
 ```
-Esto valida agentes, hooks, settings y protocolos. Resultado esperado: `HEALTHY (6/6)`.
 
 En Claude Desktop: abri una nueva conversacion y escribi `modo orquestador — hola` — si responde describiendo el pipeline de 5 fases, todo funciona.
+
+Si algo falla, ver [TROUBLESHOOTING.md](../TROUBLESHOOTING.md).
 
 ---
 
@@ -337,8 +370,8 @@ El sistema se encarga del resto:
 **Claude no reconoce los agentes**
 -> Reinicia Claude Desktop. Los agentes se cargan al iniciar.
 
-**No aparecen los 37 archivos de agentes**
--> Verifica con `ls ~/.claude/agents/*.md | wc -l`. Debe dar **37** (25 agentes + 12 referencias).
+**No aparecen los 38 archivos de agentes**
+-> Verifica con `ls ~/.claude/agents/*.md | wc -l`. Debe dar **38** (25 agentes + 13 referencias).
 
 **MCPs no aparecen en Claude Desktop**
 -> Verifica que `claude_desktop_config.json` tenga JSON valido y reinicia. Verificar rutas absolutas.

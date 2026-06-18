@@ -1,414 +1,327 @@
-# ATLAS — AI Development OS
+# ATLAS — AI Engineering Operating System
 
-**An autonomous multi-agent system for building complete software projects from idea to deployment.**
+> **Give Claude a nervous system.**
 
-A central orchestrator coordinates 24 specialized AI sub-agents (25 entities total) through a 5-phase pipeline: planning, architecture, development with visual QA, certification, and deployment. 13 reactive hooks enforce security, quality gates, and cost tracking in real time. A capability abstraction layer decouples agents from provider internals, with declarative policies and full observability. Persistent memory via Engram MCP enables session continuity and cross-agent coordination.
+ATLAS is not a chatbot wrapper. It's not a prompt template. It's not another collection of agent definitions.
 
-Compatible with **Linux (Claude Code CLI)** and **Windows (Claude Desktop)**.
+ATLAS is an **operating system layer** built on top of Claude that transforms it into a structured, disciplined, multi-agent engineering team — with memory, security enforcement, capability abstractions, quality gates, and full observability.
 
----
-
-## Key Features
-
-- **25 specialized agents** — 1 orchestrator + 24 sub-agents, each with defined tools and responsibilities
-- **13 references** — shared protocol, auth, animation, design systems, creative coding, and more (38 files total)
-- **5-phase pipeline** — Planning, Architecture, Dev+QA loop, Certification, Deployment
-- **13 reactive hooks + 3 utilities** — Security blocks, quality gates, cost tracking, context management
-- **Capability system** — Stable API over MCPs with fallback chains, policy engine, and metrics (F16–F19)
-- **Persistent memory** — Engram MCP for cross-session state, DAG-based progress tracking
-- **Python tools layer** — Healthcheck, dispatcher, capability metrics, dependency graph, skills registry
-- **Adaptive stack** — Next.js, React Native, Phaser.js, Hono, Drizzle, and more, chosen per project
-- **Creative pipeline** — AI-generated brand identity, logos, images, and video with fallback chains
+You describe what you want to build. ATLAS plans it, architects it, builds it with visual QA, certifies it, and deploys it — without you writing a single line of code.
 
 ---
 
-## Pipeline
+## The Problem
 
-```
-Phase 1: Planning        -> project-manager-senior
-Phase 2: Architecture    -> ux-architect -> ui-designer + security-engineer
-Phase 2B: Visual Assets  -> brand-agent -> (user approval) -> logo + image -> video
-Phase 3: Dev <-> QA Loop -> dev-agents <-> evidence-collector (max 3 retries)
-Phase 4: Certification   -> seo + api-tester + performance + reality-checker
-Phase 5: Deployment      -> git -> deployer (with user confirmation)
-```
+Claude is extraordinarily capable. But raw Claude has no memory between sessions, no team coordination, no security enforcement, no quality gates, no deployment pipeline, and no way to reliably build a complete software project without constant human steering.
 
----
+Every developer who has tried to build something serious with Claude has hit the same wall:
 
-## Agent Catalog
+- You lose context after 30 minutes
+- Claude starts doing architecture when it should be writing tests
+- Nobody is enforcing that QA passes before code ships
+- One session starts over what the last one decided
+- There's no way to know if the system is healthy
 
-| Phase | Agent | Role |
-|:-----:|-------|------|
-| * | `orquestador` | Central coordinator, manages all 5 phases, never does real work |
-| 1 | `project-manager-senior` | Converts ideas into granular tasks with acceptance criteria |
-| 2 | `ux-architect` | CSS foundation: tokens, layout, themes, breakpoints |
-| 2 | `ui-designer` | Visual design system, components, WCAG AA accessibility |
-| 2 | `security-engineer` | STRIDE threat model, OWASP Top 10, security headers |
-| 2B | `brand-agent` | Brand identity: palette, typography, tone, personality |
-| 2B | `image-agent` | Hero images via Gemini/HuggingFace FLUX.1 |
-| 2B | `logo-agent` | SVG logos (FLUX.1 + vtracer vectorization) |
-| 2B | `video-agent` | Background videos (Replicate LTXVideo / CSS fallback) |
-| 3 | `frontend-developer` | React/Vue/TS, Tailwind, shadcn/ui, Zustand, TanStack Query |
-| 3 | `backend-architect` | Hono/Express, Drizzle/Prisma, tRPC, PostgreSQL, Better Auth |
-| 3 | `rapid-prototyper` | Multi-stack MVPs for fast validation |
-| 3 | `mobile-developer` | React Native + Expo SDK 52+, NativeWind 4, Expo Router |
-| 3 | `game-designer` | Game Design Document: mechanics, loops, economy, balance |
-| 3 | `xr-immersive-developer` | Phaser.js, PixiJS, Canvas API, WebGL standalone games |
-| 3 | `codepen-explorer` | Searches and extracts visual effects from CodePen via Playwright |
-| 3 | `build-resolver` | Diagnoses and fixes build failures automatically |
-| 3 | `evidence-collector` | Visual QA with Playwright MCP, screenshots across 3 viewports |
-| 4 | `seo-discovery` | SEO audit, meta tags, JSON-LD, sitemap, llms.txt, AI discovery |
-| 4 | `api-tester` | Endpoint coverage, OWASP API Top 10, P95 latency |
-| 4 | `performance-benchmarker` | Core Web Vitals, Lighthouse, bundle analysis |
-| 4 | `reality-checker` | Final pre-production gate with visual evidence |
-| 5 | `git` | Commit + push to GitHub, branch management |
-| 5 | `deployer` | Deploy to Vercel + Git Integration for auto-deploy |
-| -- | `self-auditor` | Validates system health: agents, hooks, Engram, ADRs, architecture drift |
-
-### Technical References (13 files)
-
-| File | Content |
-|------|---------|
-| `agent-protocol` | Shared protocol: Engram 2-step reads, Return Envelope, capability API |
-| `better-auth-reference` | Better Auth 1.5 + Supabase + Vercel integration |
-| `better-gsap-reference` | GSAP Tier 3: useGSAP, ScrollTrigger, SplitText, Next.js gotchas |
-| `react-patterns-reference` | React 19, Next.js 15/16, Tailwind 4, Zustand 5 |
-| `redis-patterns-reference` | Cache-aside, Pub/Sub, HyperLogLog, cursor pagination |
-| `pocketbase-reference` | PocketBase boolean gotchas, rules, auth, Docker, HTTPS |
-| `devops-vps-reference` | Mixed Content HTTPS, Oracle Cloud, nginx, Let's Encrypt |
-| `nothing-design-reference` | Nothing Design System v3.0.0 — tokens, components, platform mapping |
-| `scroll-storytelling-reference` | Lenis, GSAP ScrollTrigger pinning, snap, horizontal scroll, parallax |
-| `advanced-effects-reference` | Lottie, Rive, cursor effects, magnetic buttons, micro-interactions |
-| `creative-coding-reference` | p5.js, GLSL shaders, generative art, particle systems |
-| `reactive-audio-reference` | Tone.js, Web Audio API, audio visualization, sound design |
-| `agent-protocol` | Capability system usage, Return Envelope, event log, policy decisions |
+ATLAS exists to eliminate that wall.
 
 ---
 
-## Capability System (F16–F19)
+## What ATLAS Is
 
-ATLAS uses a **capability abstraction layer** that decouples agents from MCP internals. Instead of calling `mcp__playwright__browser_navigate`, agents call `resolve_capability("browser")` and get a `Resolution` with the best available provider, its status, and an optional fallback.
+**An orchestration and enforcement layer** that runs on top of Claude Code or Claude Desktop.
 
-```python
-from core.capabilities.router import resolve_capability, resolve_with_policy
+It adds:
 
-# Basic: get best available provider
-resolution = resolve_capability("browser")
-# -> Resolution(provider="playwright", status="LIVE", fallback=..., action="USE_LIVE")
-
-# Policy-aware: includes decision outcome
-resolution, decision = resolve_with_policy("memory")
-# -> decision.is_usable  # True for ALLOW/WARN/DEGRADED
-# -> decision.is_blocking  # True for BLOCK only
-```
-
-### Capability Status
-
-| Status | Meaning |
-|--------|---------|
-| `LIVE` | Provider is installed and active |
-| `CONFIG_ONLY` | Provider works but needs configuration |
-| `PENDING_TOKEN` | Needs API token or auth |
-| `DEFERRED_PAID` | Available but costs money; not activated by default |
-| `UNAVAILABLE` | Not installed or unreachable |
-
-### Policy Outcomes
-
-Declared in `config/capability.policy.yaml`. Each capability has `critical`, `block_if_unavailable`, `severity`, and `recovery_hint`.
-
-| Outcome | Meaning |
-|---------|---------|
-| `ALLOW` | Provider is LIVE and policy is satisfied |
-| `WARN` | Provider has issues but the task can proceed with care |
-| `DEGRADED` | Fallback provider active — reduced functionality |
-| `BLOCK` | `block_if_unavailable=true` and no usable provider |
-| `MISSING_POLICY` | Capability not declared in policy file |
-
-### Metrics
-
-```bash
-python tools/capability_metrics.py            # summary of all resolution events
-python tools/capability_metrics.py --critical  # check critical capabilities only
-python tools/capability_metrics.py --json      # machine-readable output
-```
+| What | How |
+|------|-----|
+| **Persistent memory** | Engram MCP — decisions survive across sessions |
+| **Team structure** | 25 specialized agents with defined roles and boundaries |
+| **5-phase pipeline** | Plan → Architect → Build+QA → Certify → Deploy |
+| **Security enforcement** | 13 hooks blocking destructive commands in real time |
+| **Capability abstraction** | Stable API over MCPs with fallback chains |
+| **Policy engine** | Declarative rules per capability — ALLOW / WARN / BLOCK |
+| **Quality gates** | Every task goes through visual QA before advancing |
+| **Full observability** | Healthcheck, metrics, dependency graph, event log |
 
 ---
 
-## Hook System
+## What ATLAS Is NOT
 
-13 reactive hooks intercept tool calls in real time. 3 additional utilities run on demand. Configured in `~/.claude/settings.json`, scripts live in `~/.claude/hooks/`.
-
-### Reactive Hooks
-
-| Hook | Type | Action |
-|------|------|--------|
-| `block-no-verify` | PreToolUse | **BLOCKS** `git --no-verify`, `rm -rf`, `git reset --hard`, `DROP TABLE`, `chmod 777`, `curl\|sh`, force-push with `-C` flag, `chown -R` |
-| `config-protection` | PreToolUse | **BLOCKS** edits to `.env`, `.pem`, `.key`, credentials. **WARNS** on linting config changes |
-| `pipeline-rules` | PreToolUse | **BLOCKS** hard rule violations (force-push main, cross-repo commits). **WARNS** on unused skills registry |
-| `delegation-tracker` | PreToolUse | **WARNS** on agent delegation loops: `escalation_needed`, `pause_recommended`, `fresh_review_recommended` |
-| `quality-gate` | PostToolUse | **WARNS** on debugger, `.only()`, `@ts-ignore`, hardcoded secrets |
-| `console-log-warning` | PostToolUse | **WARNS** on `console.log/warn/error` in production code (ignores tests) |
-| `cost-tracker` | PostToolUse | **LOGS** each tool call with category, sub-agent, model (async) |
-| `qa-auto-audit` | PostToolUse | **AUDITS** mandatory helpers after agent spawn; emits WARN if missing |
-| `suggest-compact` | PostToolUse | **WARNS** every ~50 tool calls with pipeline phase context (async) |
-| `pre-compact-engram` | PreCompact | **SAVES** snapshot to disk + **INSTRUCTS** Claude to dual-write DAG State before compaction |
-| `session-summary` | Stop | **LOGS** session activity in JSONL for recovery (async) |
-| `engram-sync` | Stop | **SYNCS** Engram memories to GitHub automatically (async, 60s timeout) |
-| `session-start-context` | Notification | **LOADS** previous session context + hook health check at startup |
-
-### Manual Utilities
-
-| Utility | Command | Purpose |
-|---------|---------|---------|
-| `audit-system` | `node ~/.claude/hooks/audit-system.js` | Validates system integrity: agents, hooks, settings, protocols |
-| `cost-report` | `node ~/.claude/hooks/cost-report.js` | Tool usage breakdown by category, sub-agent, frequency |
-| `learning-index` | `node ~/.claude/hooks/learning-index.js` | Local discovery index with auto-tagging by technology |
-
-**Behavior**: Exit 2 = BLOCK | Exit 0 + stderr = WARN | Fail-open (never breaks the flow)
+- **Not a replacement for Claude.** ATLAS extends Claude; it requires Claude Code or Claude Desktop.
+- **Not a framework you import.** It's a configuration layer — agents, hooks, CLAUDE.md.
+- **Not opinionated about your stack.** It adapts: Next.js, React Native, Phaser.js, Hono, Drizzle, whatever the project needs.
+- **Not magic.** If Claude can't do something, ATLAS can't either. It makes Claude more reliable, not more capable.
+- **Not a SaaS.** It runs entirely locally.
 
 ---
 
-## Python Tools
+## Why This Is Not Just "Another Agent System"
 
-The `tools/` layer handles complex runtime logic that JS hooks cannot: registries, metrics, graph analysis, health checks, dispatch validation.
+Most agent repositories are collections of prompts. They add agents, but not discipline.
 
-| Tool | Command | Purpose |
-|------|---------|---------|
-| `atlas_healthcheck.py` | `python tools/atlas_healthcheck.py` | 25-check system health gate (capabilities, hooks, MCPs, QA) |
-| `atlas_dispatcher.py` | `python tools/atlas_dispatcher.py check-phase ...` | Phase gate enforcement, Return Envelope validation, E2E flows |
-| `capability_metrics.py` | `python tools/capability_metrics.py` | Resolution event reader: rates, fallback usage, critical status |
-| `dependency_graph.py` | `python tools/dependency_graph.py` | Agent→Capability→Policy→Provider→MCP→CLI→Binary tree |
-| `skills_registry.py` | `python tools/skills_registry.py stats` | Skills catalog lookup and usage logging |
-| `design_quality_enforcement.py` | `python tools/design_quality_enforcement.py src/` | Anti-generic detector: fonts, colors, layouts, patterns |
+ATLAS adds **structural guarantees**:
 
-### Healthcheck
+1. **A hook that fires before every command** — and blocks `git push --force`, `rm -rf`, `chmod 777`, and other destructive patterns before they execute.
+2. **A capability router** — so agents never call `mcp__playwright__browser_navigate` directly. They call `resolve_capability("browser")` and the system selects the best available provider with fallback.
+3. **A policy engine** — so if the browser MCP goes down, ATLAS knows whether to WARN, DEGRADE, or BLOCK based on a declared policy, not per-agent ad-hoc logic.
+4. **Phase gates** — the pipeline cannot advance from Architecture to Development until Architecture artifacts exist in memory. No skipping.
+5. **A healthcheck with 25 checks** that validates the entire system state in one command.
+6. **Architecture Decision Records** monitored by the self-auditor — if a decision's referenced files disappear, drift is detected automatically.
 
-```bash
-# Full system health (25 checks)
-python tools/atlas_healthcheck.py
+These aren't features you configure. They're invariants the system enforces.
 
-# Expected output: 25/25 PASS, exit code 0
-# Any FAIL = something needs attention before production use
-```
+---
+
+## ATLAS vs. Everything Else
+
+| | Claude Code | Cursor / Copilot | Other agent repos | **ATLAS** |
+|---|---|---|---|---|
+| Persistent memory | No | No | Rarely | Yes (Engram MCP) |
+| Multi-agent pipeline | No | No | Sometimes | Yes (25 agents, 5 phases) |
+| Security hooks | No | No | No | Yes (13 hooks, real-time) |
+| Capability abstraction | No | No | No | Yes (F16–F19) |
+| Policy engine | No | No | No | Yes (declarative YAML) |
+| Phase gates | No | No | No | Yes (enforced) |
+| Observability | No | No | No | Yes (metrics, graph, healthcheck) |
+| Visual QA | No | No | No | Yes (Playwright, 3 viewports) |
+| Architecture drift detection | No | No | No | Yes (ADR + self-auditor T9) |
+
+Claude Code is the runtime. ATLAS is the operating system on top of it.
+
+---
+
+## Philosophy
+
+**1. Fail-open.** Every feature has an `ATLAS_*_DISABLED=1` env var. Nothing ATLAS adds can break your base Claude. If a hook crashes, Claude proceeds. If a capability resolves wrong, the escape hatch is always available.
+
+**2. Declarative over imperative.** Policies are YAML files. Agent behaviors are markdown files. Hard rules are JSON. No hidden logic in unreachable code paths.
+
+**3. Invariants over best practices.** A QA suite, a healthcheck, and a drift detector that runs on every audit are worth more than a style guide that nobody reads.
+
+**4. No agent does real work.** The orchestrator only coordinates. It never writes code, reads files, or makes architectural decisions. Every token the orchestrator uses inline is context wasted.
+
+**5. Memory or it didn't happen.** Every significant decision goes into Engram with a `topic_key`. Every agent writes its result before returning. Every critical path has a disk fallback.
 
 ---
 
 ## Architecture
 
 ```
-~/.claude/
-├── agents/            # 25 agents + 13 references = 38 files
-├── hooks/             # 13 reactive hooks + 3 manual utilities
-├── settings.json      # hook config + Engram MCP
-├── settings.local.json  # agent permissions
-└── codepen-vault/     # approved CodePen effects
-
-{working-directory}/   # ATLAS project root
-├── core/
-│   └── capabilities/  # F16-F19: registry, router, events, policy
-├── tools/             # Python tools layer
-├── config/            # capability.policy.yaml, phase_playbook.json
-├── _qa/               # QA suites (bloque-F*.py)
-├── ADR/               # Architecture Decision Records
-├── agents/            # mirror of ~/.claude/agents/ (drift-detected)
-├── hooks/             # mirror of ~/.claude/hooks/
-└── CLAUDE.md          # system instructions (auto-read by Claude)
+Developer
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Claude Session (Claude Code CLI / Claude Desktop)              │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  CLAUDE.md — System instructions (auto-read by Claude)  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  Orquestador (Opus)                                    │    │
+│  │  Central coordinator — runs the 5-phase pipeline       │    │
+│  │  Reads DAG State from memory. Never does real work.    │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ spawns                                  │
+│                       ▼                                         │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  24 Sub-Agents (Sonnet/Opus, per role)                 │    │
+│  │  Phase 1: project-manager-senior                       │    │
+│  │  Phase 2: ux-architect, ui-designer, security-engineer │    │
+│  │  Phase 3: dev-agents ↔ evidence-collector (QA loop)   │    │
+│  │  Phase 4: seo, api-tester, performance, reality-check  │    │
+│  │  Phase 5: git, deployer                                │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ calls                                   │
+│                       ▼                                         │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  Capability Router  (core/capabilities/router.py)      │    │
+│  │  resolve_capability("browser")                         │    │
+│  │    → Resolution(provider, status, fallback, action)    │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ evaluates                               │
+│                       ▼                                         │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  Policy Engine  (core/capabilities/policy.py)          │    │
+│  │  evaluate_capability("browser")                        │    │
+│  │    → PolicyDecision(ALLOW | WARN | DEGRADED | BLOCK)   │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ logs to                                 │
+│                       ▼                                         │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  Capability Metrics  (.pipeline/capability-events.jsonl)│   │
+│  │  python tools/capability_metrics.py                    │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ backed by                               │
+│                       ▼                                         │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  Registries                                            │    │
+│  │  • Projects Registry  (config/projects.registry.yaml)  │    │
+│  │  • Skills Registry    (config/skills.registry.yaml)    │    │
+│  │  • MCP Registry       (config/mcp.registry.yaml)       │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ connects to                             │
+│                       ▼                                         │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  MCP Layer                                             │    │
+│  │  • engram (memory)       • playwright (browser)        │    │
+│  │  • context7 (docs)       • github (repository)         │    │
+│  │  • computer-use (desktop) • notion (projects)          │    │
+│  └────────────────────┬───────────────────────────────────┘    │
+│                       │ invokes                                 │
+│                       ▼                                         │
+│  Provider → CLI → Runtime                                       │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         │  every tool call intercepted by
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Hook System  (.claude/hooks/)                                  │
+│  block-no-verify.js  — BLOCKS destructive commands             │
+│  config-protection.js — BLOCKS secret file writes              │
+│  quality-gate.js     — WARNS on debugger / @ts-ignore          │
+│  cost-tracker.js     — LOGS every tool call                    │
+│  + 9 more reactive hooks                                        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Model Routing
+### The 5 Phases
 
-| Model | Agents | Criteria |
-|-------|--------|----------|
-| **Opus** | orchestrator, project-manager-senior, security-engineer, game-designer, reality-checker | Complex architectural decisions, planning, threat modeling, final certification |
-| **Sonnet** | All others (20 agents) | Defined task execution, QA, utilities, creative |
+```
+Phase 1  Planning       → project-manager-senior
+                          Tasks, acceptance criteria, stack decision
 
-### Key Rules
+Phase 2  Architecture   → ux-architect → ui-designer + security-engineer (parallel)
+                          CSS foundation, design system, threat model
 
-- The orchestrator **never** does real work — only coordinates
-- Sub-agents return **only short summaries** (status + files + issues)
-- Only `evidence-collector` and `reality-checker` perform visual QA
-- Only `git` makes commits/pushes — never a dev agent
-- Only `deployer` deploys to Vercel
-- `git` and `deployer` act **only with user confirmation**
-- Each dev task passes through `evidence-collector` before advancing (max 3 retries)
-- The orchestrator does not activate `git` until `evidence-collector` returns PASS
+Phase 2B Visual Assets  → brand-agent → logo + image + video (optional)
+                          Brand identity, AI-generated assets
+
+Phase 3  Dev + QA Loop  → dev-agents ↔ evidence-collector
+                          Build → Visual QA → Fix → Repeat (max 3 retries)
+
+Phase 4  Certification  → seo-discovery + api-tester + performance + reality-checker
+                          SEO, API coverage, Core Web Vitals, final gate
+
+Phase 5  Deployment     → git (user confirms) → deployer (user confirms)
+                          Commit, push, deploy to Vercel
+```
 
 ---
 
-## Installation
+## Quick Start
 
-### Prerequisites
-
-| Platform | Required | Download |
-|----------|----------|----------|
-| **Linux** | Claude Code CLI, git, Node.js, Python 3.10+ | [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) |
-| **Windows** | Claude Desktop, Git for Windows (includes Git Bash), Node.js, Python 3.10+ | [Claude Desktop](https://claude.ai/download) |
-
-> Claude Code (Linux) or Claude Desktop (Windows) must be installed first. This system extends Claude with agents and hooks.
-
-### CLAUDE.md — Where It Lives
-
-CLAUDE.md contains all system instructions. Claude reads it automatically from the **working directory** (project folder).
-
-| Platform | Installed to | Notes |
-|----------|-------------|-------|
-| **Linux** | `~/CLAUDE.md` (global) | Claude Code reads it from any directory |
-| **Windows** | `~/CLAUDE.md` (global) | Includes Windows overrides (preview servers, ports, launch.json) |
-
-### Post-Install Verification
+**Prerequisites:** Claude Code CLI (Linux/macOS) or Claude Desktop (Windows), Python 3.10+, Node.js 18+, Go 1.21+ (for Engram), git
 
 ```bash
-# Agents installed (should be 38: 25 agents + 13 references)
-ls ~/.claude/agents/*.md | wc -l
+# 1. Clone
+git clone https://github.com/your-org/atlas.git
+cd atlas
 
-# Hooks installed (should be 16: 13 reactive + 3 utilities)
-ls ~/.claude/hooks/*.js | wc -l
+# 2. Install
+bash install.sh          # Linux/macOS
+# Windows: follow install/windows.md
 
-# System health check
+# 3. Verify
 python tools/atlas_healthcheck.py
 
-# Tools available
-git --version && node --version && python --version
-
-# Manual audit
-node ~/.claude/hooks/audit-system.js
+# 4. Start
+# Open Claude in this directory and say:
+# "modo orquestador — quiero crear [your idea]"
 ```
 
----
-
-## Configuration
-
-### Engram MCP (required)
-
-Engram is the persistent memory system that lets the orchestrator and agents remember decisions, progress, and context across sessions. Configured automatically during installation via `settings.json`.
-
-### Engram Sync (optional)
-
-The `engram-sync` hook automatically pushes Engram memories to a private GitHub repo when a session ends.
-
-1. Create a private GitHub repo (e.g., `my-engram-sync`)
-2. Initialize: `cd ~/.engram && git init && git remote add origin https://github.com/YOUR_USER/my-engram-sync.git`
-3. The hook handles the rest automatically
-
-### Creative Pipeline (optional)
-
-Required only for Phase 2B (AI-generated logos, images, videos).
-
-| Variable | Service | Cost |
-|----------|---------|------|
-| `GEMINI_API_KEY` | Google AI Studio | ~$0.02–0.04/image |
-| `HF_TOKEN` | HuggingFace | Free tier |
-| `REPLICATE_API_TOKEN` | Replicate | ~$0.05/video |
-
-At least one image key (`GEMINI_API_KEY` or `HF_TOKEN`) required. Gemini is primary; HuggingFace is fallback.
-
-### Environment Variables — Escape Hatches
-
-All major features support `ATLAS_*_DISABLED=1` for emergency bypass:
-
-| Variable | Disables |
-|----------|---------|
-| `ATLAS_CAPABILITIES_DISABLED=1` | Capability router (raw MCP calls only) |
-| `ATLAS_CAPABILITY_POLICY_DISABLED=1` | Policy engine (all caps return ALLOW) |
-| `ATLAS_CAPABILITY_EVENTS_DISABLED=1` | Event logging |
-| `ATLAS_HARD_RULES_DISABLED=1` | Hard rules hook |
-| `ATLAS_SKILLS_REGISTRY_DISABLED=1` | Skills registry |
+→ Full installation guide: [INSTALL.md](INSTALL.md)
+→ Post-install checklist: [FIRST_RUN.md](FIRST_RUN.md)
+→ Troubleshooting: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 
 ## Usage
 
-| Mode | When to Use | How to Activate |
-|------|------------|----------------|
-| **Normal** | Questions, fixes, reviews, technical chat | Default — just talk |
-| **Orchestrator** | Complete software projects end-to-end | Say: "modo orquestador", "activa el pipeline", or "nuevo proyecto completo: X" |
+The system has two modes:
 
+| Mode | When | How |
+|------|------|-----|
+| **Normal** | Questions, fixes, reviews | Just talk to Claude |
+| **Orchestrator** | Complete projects end-to-end | Say: *"modo orquestador — quiero crear X"* |
+
+**New project:**
 ```
-modo orquestador -- quiero crear [your idea]
-retomar [project-name]   # resume from where it left off
+modo orquestador — quiero crear un SaaS de gestión de inventario
+```
+
+**Resume existing project:**
+```
+retomar [project-name]
+```
+
+The orchestrator reads project state from memory and resumes exactly where it left off.
+
+---
+
+## System Health
+
+At any time:
+
+```bash
+# Full system health (25 checks, exit 0 = healthy)
+python tools/atlas_healthcheck.py
+
+# Capability status (all 14 capabilities)
+python tools/capability_metrics.py --critical
+
+# Dependency tree
+python tools/dependency_graph.py --broken
+
+# Architecture drift (ADRs vs. runtime)
+# → Self-auditor T9, run via Claude: "ejecuta self-auditor"
 ```
 
 ---
 
-## Pipeline Resilience
+## Extend ATLAS
 
-| Mechanism | What It Solves |
-|-----------|---------------|
-| **Phase Gates** | Verifies outputs from the previous phase exist before advancing |
-| **Capability Fallbacks** | If primary MCP fails, router selects next provider automatically |
-| **Policy Engine** | Declarative BLOCK/WARN/DEGRADED decisions without per-agent logic |
-| **Error Recovery** | Agent crash → orchestrator checks Engram, recovers, re-delegates |
-| **Graceful Degradation** | Engram down → local disk fallback; Playwright unavailable → code-only QA |
-| **Rejection Workflows** | Up to 3 retries for rejected creative assets with strategy changes |
-| **NEEDS WORK Flow** | reality-checker fails → orchestrator returns to Phase 3 for affected tasks only |
-
----
-
-## Adaptive Stack
-
-| Layer | Options | Default |
-|-------|---------|---------|
-| Frontend | Next.js, SvelteKit, Nuxt, Astro, Vite+React | Next.js (apps), Vite+React (landing) |
-| Backend | Hono, Express, Fastify | Hono (edge-ready) |
-| Database | PostgreSQL, SQLite, Supabase | PostgreSQL (prod), Supabase (MVP) |
-| ORM | Drizzle, Prisma | Drizzle (type-safe, edge) |
-| Auth | Better Auth | Always (unless project has existing auth) |
-| Mobile | React Native + Expo SDK 52+ | Expo (iOS + Android from one repo) |
-| Games 2D | Phaser.js 3, PixiJS, Canvas API | Phaser.js |
-| Games 3D | Three.js, Babylon.js | Three.js |
-| Animation | CSS (Tier 1), Framer Motion (Tier 2), GSAP (Tier 3) | Escalate by complexity |
-| Scroll | Lenis + GSAP ScrollTrigger | Lenis (storytelling), GSAP (pinning) |
-| Creative | p5.js, GLSL shaders, Canvas 2D | p5.js (2D), Three.js shaders (3D) |
-| Audio | Tone.js, Web Audio API | Tone.js (complete), Web Audio (simple) |
+| What to extend | Where | Guide |
+|---|---|---|
+| Add a new agent | `.claude/agents/` | [docs/AGENTS.md](docs/AGENTS.md) |
+| Add a new capability | `core/capabilities/registry.py` | [docs/CAPABILITIES.md](docs/CAPABILITIES.md) |
+| Add a new MCP | `config/mcp.registry.yaml` | [docs/MCP.md](docs/MCP.md) |
+| Add a new hook | `.claude/hooks/` | [docs/HOOKS.md](docs/HOOKS.md) |
+| Add a new skill | `config/skills.registry.yaml` | [docs/SKILLS.md](docs/SKILLS.md) |
+| Record an architecture decision | `ADR/` | [ADR/0000-adr-template.md](ADR/0000-adr-template.md) |
 
 ---
 
-## Context Window Management
+## Documentation Map
 
-### Progressive DAG State Loading
-
-| Level | What it loads | Tokens | When |
-|-------|--------------|--------|------|
-| **Light boot** | Current phase, task, stack, timestamp | ~50–100 | Always on resume |
-| **Full boot** | Complete DAG State | ~500–2000 | Phase transitions, scope changes, certification |
-
-### Dual-Write Pattern
-
-```
-Primary:  Engram MCP  ->  {proyecto}/estado  (searchable, cross-session)
-Fallback: Local disk  ->  {project_dir}/.pipeline/estado.yaml
-```
-
-### Token Budget Strategy
-
-| Mechanism | Tokens Saved |
-|-----------|-------------|
-| Light vs full boot | ~400–1900 per resume |
-| Short return envelopes | ~500–2000 per delegation |
-| Screenshots to disk | ~5000+ per QA cycle |
-| PreCompact save-then-compact | 100% context recovery |
-
----
-
-## Architecture Decision Records
-
-Significant architectural decisions are documented in `ADR/` with status, context, alternatives, and rollback plan.
-
-| ADR | Decision | Status |
-|-----|----------|--------|
-| [0001](ADR/0001-capability-router-abstraction.md) | Capability Router Abstraction | ACCEPTED |
-| [0002](ADR/0002-jsonl-event-logging.md) | JSONL Append-Only Event Logging | ACCEPTED |
-| [0003](ADR/0003-declarative-capability-policy.md) | Declarative Capability Policy Engine | ACCEPTED |
-| [0004](ADR/0004-python-tools-layer.md) | Python Tools Layer for Complex Logic | ACCEPTED |
+| Document | Purpose |
+|----------|---------|
+| [VISION.md](VISION.md) | Why ATLAS exists and where it's going |
+| [INSTALL.md](INSTALL.md) | Complete installation guide (all platforms) |
+| [FIRST_RUN.md](FIRST_RUN.md) | What to do right after installing |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Internal design, layers, invariants |
+| [FLOWS.md](FLOWS.md) | End-to-end request flows with diagrams |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common problems and fixes |
+| [FAQ.md](FAQ.md) | Frequently asked questions |
+| [GLOSSARY.md](GLOSSARY.md) | Definitions for all ATLAS concepts |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [ROADMAP.md](ROADMAP.md) | What's coming and what blocks v1.0 |
+| [docs/CAPABILITIES.md](docs/CAPABILITIES.md) | All 14 capabilities, providers, policies |
+| [docs/MCP.md](docs/MCP.md) | MCP inventory with install/verify steps |
+| [docs/AGENTS.md](docs/AGENTS.md) | All 25 agents, roles, tools |
+| [docs/HOOKS.md](docs/HOOKS.md) | All 16 hooks, behavior, writing guide |
+| [docs/SKILLS.md](docs/SKILLS.md) | Skills registry, creating skills |
+| [ADR/](ADR/) | Architecture Decision Records |
 
 ---
 
 ## Credits
 
-- [Engram](https://github.com/Gentleman-Programming/engram) by Gentleman Programming — persistent memory MCP
-- [pixel-agents](https://github.com/pablodelucca/pixel-agents) by @pablodelucca — pixel art office (Pixel Bridge adapted from this)
-- [Agency Agents](https://github.com/msitarzewski/agency-agents) — specialized agents with metrics (inspiration)
-- [Agent Teams Lite](https://github.com/Gentleman-Programming/agent-teams-lite) — DAG State, minimal handoffs, Engram (inspiration)
+- [Engram](https://github.com/Gentleman-Programming/engram) — persistent memory MCP by Gentleman Programming
+- [pixel-agents](https://github.com/pablodelucca/pixel-agents) — pixel art office (Pixel Bridge adapted from this)
+- [Agency Agents](https://github.com/msitarzewski/agency-agents) — specialized agents inspiration
+- [Agent Teams Lite](https://github.com/Gentleman-Programming/agent-teams-lite) — DAG State pattern inspiration
 
 ---
 
