@@ -239,6 +239,65 @@ class CapabilityRouter:
             if c.active_provider and c.active_provider.status == "LIVE"
         ]
 
+    def resolve_with_policy(
+        self,
+        capability: str,
+        policy_file: "Path | None" = None,
+        emit_event: bool = True,
+        _events_file: "Path | None" = None,
+    ) -> "tuple[Resolution, Any]":
+        """
+        Resolve a capability and evaluate it against its declared policy.
+
+        Returns (Resolution, PolicyDecision).
+        Does not change default resolve() behavior — opt-in only.
+        Imports policy lazily to avoid circular dependency.
+        """
+        resolution = self.resolve(capability)
+        try:
+            from .policy import evaluate_capability
+            decision = evaluate_capability(
+                capability,
+                policy_file=policy_file,
+                _emit=emit_event,
+                _events_file=_events_file,
+            )
+        except Exception as e:
+            # Return a safe MISSING_POLICY decision on any error
+            from dataclasses import dataclass as _dc
+            try:
+                from .policy import PolicyDecision
+                decision = PolicyDecision(
+                    capability=capability,
+                    decision="MISSING_POLICY",
+                    provider=resolution.provider,
+                    status=resolution.status,
+                    severity="LOW",
+                    recovery_hint="",
+                    notes=f"Policy evaluation failed: {e}",
+                )
+            except Exception:
+                decision = None
+        return resolution, decision
+
+
+def resolve_with_policy(
+    name: str,
+    policy_file: "Path | None" = None,
+    emit_event: bool = True,
+    _events_file: "Path | None" = None,
+) -> "tuple[Resolution, Any]":
+    """
+    Module-level convenience: resolve_capability + policy evaluation in one call.
+    Returns (Resolution, PolicyDecision).
+    """
+    return _router.resolve_with_policy(
+        name,
+        policy_file=policy_file,
+        emit_event=emit_event,
+        _events_file=_events_file,
+    )
+
 
 # Module-level singleton — use for one-off lookups
 _router = CapabilityRouter()

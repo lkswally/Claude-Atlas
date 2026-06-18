@@ -15,10 +15,18 @@ Provider resolution order: LIVE > CONFIG_ONLY > CLI_ONLY
 """
 
 from .registry import get_capability, list_capabilities, capability_status
-from .router import resolve_capability, CapabilityRouter, router, Resolution, CRITICAL_CAPABILITIES
+from .router import resolve_capability, resolve_with_policy, CapabilityRouter, router, Resolution, CRITICAL_CAPABILITIES
+from .policy import (
+    evaluate_capability, evaluate_all_capabilities,
+    get_policy, load_policy,
+    PolicyDecision, CapabilityPolicy,
+)
 
 __all__ = [
     "get_capability", "list_capabilities", "capability_status",
-    "resolve_capability", "CapabilityRouter", "router", "Resolution",
-    "CRITICAL_CAPABILITIES",
+    "resolve_capability", "resolve_with_policy", "CapabilityRouter", "router",
+    "Resolution", "CRITICAL_CAPABILITIES",
+    "evaluate_capability", "evaluate_all_capabilities",
+    "get_policy", "load_policy",
+    "PolicyDecision", "CapabilityPolicy",
 ]

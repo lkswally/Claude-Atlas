@@ -1,0 +1,170 @@
+# ATLAS Capability Policy — F19
+# ==============================
+#
+# Declarative policies for every registered capability.
+# Evaluated by core/capabilities/policy.py via evaluate_capability(name).
+#
+# Decision outcomes:
+#   ALLOW      — capability is usable as-is, proceed
+#   WARN       — usable but degraded / not ideal; log and continue
+#   DEGRADED   — fallback active or partial functionality; continue with caution
+#   BLOCK      — capability unavailable AND block_if_unavailable=true; halt task
+#   MISSING_POLICY — no policy entry found for capability
+#
+# Fields:
+#   critical             (bool)   capability is essential to ATLAS core operations
+#   required_status      (str)    minimum acceptable provider status:
+#                                   LIVE | CONFIG_ONLY | PENDING_TOKEN
+#   fallback_allowed     (bool)   whether a lower-priority provider is acceptable
+#   allowed_fallbacks    (list)   explicit provider mcp_ids that may serve as fallback
+#   block_if_unavailable (bool)   if true and no usable provider => BLOCK decision
+#   recovery_hint        (str)    human-readable fix suggestion (logged in events)
+#   owner                (str)    which agent/team owns this capability
+#   severity             (str)    CRITICAL | HIGH | MEDIUM | LOW — used in alerting
+
+# ---------------------------------------------------------------------------
+# Core ATLAS capabilities (critical)
+# ---------------------------------------------------------------------------
+
+memory:
+  critical: true
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: true
+  recovery_hint: "Revisar Engram MCP: engram doctor. Asegurar que engram.exe esté en PATH y .mcp.json lo registre."
+  owner: orquestador
+  severity: CRITICAL
+
+project_management:
+  critical: true
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: true
+  recovery_hint: "Verificar Notion MCP en .mcp.json y que NOTION_TOKEN esté configurado."
+  owner: project-manager-senior
+  severity: CRITICAL
+
+documentation:
+  critical: true
+  required_status: LIVE
+  fallback_allowed: true
+  allowed_fallbacks:
+    - context7
+  block_if_unavailable: false
+  recovery_hint: "Context7 MCP necesita npx disponible. Verificar conectividad."
+  owner: frontend-developer
+  severity: HIGH
+
+browser:
+  critical: true
+  required_status: LIVE
+  fallback_allowed: true
+  allowed_fallbacks:
+    - claude_in_chrome
+    - claude_preview
+  block_if_unavailable: false
+  recovery_hint: "Playwright MCP requiere npx. Alternativa: Claude in Chrome extension o Claude Preview."
+  owner: evidence-collector
+  severity: HIGH
+
+# ---------------------------------------------------------------------------
+# Infrastructure capabilities
+# ---------------------------------------------------------------------------
+
+computer_control:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Computer Use MCP debe estar habilitado en la sesión."
+  owner: orquestador
+  severity: MEDIUM
+
+repository:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Configurar GITHUB_TOKEN en .env.local y reiniciar la sesión Claude."
+  owner: git
+  severity: HIGH
+
+deployment:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Configurar VERCEL_TOKEN en .env.local y reiniciar la sesión Claude."
+  owner: deployer
+  severity: HIGH
+
+# ---------------------------------------------------------------------------
+# Productivity capabilities
+# ---------------------------------------------------------------------------
+
+visualization:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Visualize MCP debe estar disponible en la sesión."
+  owner: ui-designer
+  severity: LOW
+
+scheduling:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Scheduled Tasks MCP debe estar disponible en la sesión."
+  owner: orquestador
+  severity: LOW
+
+# ---------------------------------------------------------------------------
+# Deferred / optional capabilities
+# ---------------------------------------------------------------------------
+
+design:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "21st.dev Magic requiere licencia de pago. Diseño manual como alternativa."
+  owner: ui-designer
+  severity: LOW
+
+database:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Supabase MCP requiere proyecto URL y service key. Usar SQL directo como alternativa."
+  owner: backend-architect
+  severity: MEDIUM
+
+filesystem:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Claude Code provee Read/Write/Edit/Glob/Grep de forma nativa. MCP filesystem no requerido."
+  owner: orquestador
+  severity: LOW
+
+storage:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Google Drive MCP requiere OAuth. Alternativa: usar archivos locales."
+  owner: orquestador
+  severity: LOW
+
+messaging:
+  critical: false
+  required_status: LIVE
+  fallback_allowed: false
+  block_if_unavailable: false
+  recovery_hint: "Slack MCP requiere token de Slack. Sin caso de uso crítico actual en ATLAS."
+  owner: orquestador
+  severity: LOW

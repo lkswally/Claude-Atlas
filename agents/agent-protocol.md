@@ -2380,3 +2380,72 @@ python tools/capability_metrics.py --json
 ```
 
 Exit codes del metrics reader: `0` = sano, `1` = crítica degradada, `2` = sin eventos aún.
+
+## F19. Capability Policy Engine — Cuándo actuar, degradar o bloquear
+
+> **Bloque F19** — El router (F16) resuelve *qué provider existe*. La policy engine (F19) decide *si está permitido usarlo*. Los agentes deben escalar o detenerse según la decisión recibida.
+
+### Router vs. Policy: diferencia clave
+
+| Capa | Pregunta | Respuesta |
+|---|---|---|
+| Router (F16) | ¿Qué provider hay disponible? | Resolution con status LIVE / CONFIG_ONLY / UNAVAILABLE |
+| Policy (F19) | ¿Está permitido proceder con ese resultado? | ALLOW / WARN / DEGRADED / BLOCK |
+
+### API de evaluación
+
+```python
+from core.capabilities.policy import evaluate_capability
+from core.capabilities.router import resolve_with_policy
+
+# Solo policy
+decision = evaluate_capability("memory")
+# PolicyDecision(decision="ALLOW", provider="engram", status="LIVE", ...)
+
+# Router + policy en un solo call
+resolution, decision = resolve_with_policy("browser")
+```
+
+### Tabla de decisiones para agentes
+
+| Decision | Significado | Acción del agente |
+|---|---|---|
+| `ALLOW` | Provider LIVE y cumple policy | Proceder normalmente |
+| `WARN` | Provider disponible pero degradado | Continuar; loguear advertencia |
+| `DEGRADED` | Fallback activo, funcionalidad parcial | Continuar con cautela; informar al usuario |
+| `BLOCK` | Sin provider usable y policy crítica | **Detener tarea**; informar al orquestador |
+| `MISSING_POLICY` | Capability sin política declarada | Tratar como WARN; no bloquear |
+
+### Cuándo un agente debe detenerse
+
+Un agente **debe detenerse y escalar** cuando:
+1. `decision.is_blocking is True` (BLOCK)
+2. La capability es crítica para la tarea actual (no opcional)
+3. El `recovery_hint` está disponible — incluirlo en el escalado
+
+```python
+if decision.is_blocking:
+    raise CapabilityBlockedError(
+        f"Capability '{decision.capability}' bloqueada: {decision.recovery_hint}"
+    )
+```
+
+### Cuándo un agente puede degradar
+
+Un agente puede continuar con funcionalidad reducida cuando:
+- `decision.decision == "DEGRADED"` — informar al usuario del proveedor alternativo
+- `decision.decision == "WARN"` — continuar, agregar nota en el output
+
+### Cuándo pedir intervención humana
+
+- Cualquier capability con `severity=CRITICAL` y decision != ALLOW
+- BLOCK en capabilities requeridas por la tarea
+- Múltiples capabilities en WARN al mismo tiempo (degradación sistémica)
+
+### Variables de control
+
+| Variable | Efecto |
+|---|---|
+| `ATLAS_CAPABILITY_POLICY_DISABLED=1` | Desactiva policy engine; todas las capabilities retornan ALLOW |
+| `ATLAS_CAPABILITIES_DISABLED=1` | Desactiva router completo (F16) |
+| `ATLAS_CAPABILITY_EVENTS_DISABLED=1` | Desactiva log de eventos (F18) |

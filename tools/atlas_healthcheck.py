@@ -650,6 +650,67 @@ def check_mcp_json() -> None:
         WARN(".mcp.json (CWD raíz)", f"error: {e}")
 
 
+def check_capability_policy() -> None:
+    """
+    F19: Capability Policy Engine — valida que el policy file existe,
+    parsea correctamente, capabilities críticas tienen policy, y
+    evaluate_all_capabilities no rompe.
+    """
+    policy_file = PROJECT_ROOT / "config" / "capability.policy.yaml"
+    policy_mod  = PROJECT_ROOT / "core" / "capabilities" / "policy.py"
+
+    if not policy_mod.exists():
+        FAIL("Capability policy (F19)", "core/capabilities/policy.py no encontrado")
+        return
+
+    if not policy_file.exists():
+        FAIL("Capability policy (F19)", f"config/capability.policy.yaml no encontrado")
+        return
+
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from core.capabilities.policy import (
+            load_policy, evaluate_all_capabilities, get_policy,
+        )
+        from core.capabilities.router import CRITICAL_CAPABILITIES
+
+        # 1. Policy file parsea
+        policies = load_policy()
+        if not policies:
+            FAIL("Capability policy (F19)", "policy file vacío o no parseable")
+            return
+
+        # 2. Capabilities críticas tienen policy
+        missing_critical = [c for c in CRITICAL_CAPABILITIES if c not in policies]
+        if missing_critical:
+            FAIL("Capability policy (F19)", f"critical capabilities sin policy: {missing_critical}")
+            return
+
+        # 3. evaluate_all_capabilities no rompe
+        results = evaluate_all_capabilities(_emit=False)
+        if not results:
+            WARN("Capability policy (F19)", "evaluate_all_capabilities retornó vacío")
+            return
+
+        # 4. Ninguna capability crítica en BLOCK
+        blocked_critical = [
+            c for c in CRITICAL_CAPABILITIES
+            if c in results and results[c].decision == "BLOCK"
+        ]
+        n_allow = sum(1 for d in results.values() if d.decision == "ALLOW")
+        n_warn  = sum(1 for d in results.values() if d.decision == "WARN")
+        n_block = sum(1 for d in results.values() if d.decision == "BLOCK")
+
+        summary = f"{len(policies)} policies | ALLOW={n_allow} WARN={n_warn} BLOCK={n_block}"
+        if blocked_critical:
+            FAIL("Capability policy (F19)", f"critical capabilities bloqueadas: {blocked_critical} | {summary}")
+        else:
+            PASS("Capability policy (F19)", summary)
+
+    except Exception as e:
+        FAIL("Capability policy (F19)", f"error: {e}")
+
+
 def check_capability_metrics() -> None:
     """
     F18: Capability Metrics — valida que el módulo de eventos existe,
@@ -803,6 +864,7 @@ def run_all() -> int:
     check_mcp_json()
     check_capabilities_layer()
     check_capability_router()
+    check_capability_policy()
     check_capability_metrics()
     check_dispatcher()
 
