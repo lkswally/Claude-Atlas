@@ -107,11 +107,23 @@ def list_live() -> list[dict]:
 
 
 def list_missing_required() -> list[dict]:
-    """Return MCPs that are required by at least one agent but not LIVE."""
+    """Return MCPs that are required by at least one agent but not LIVE.
+    Excludes NOT_RECOMMENDED and DEFERRED_PAID (intentional non-installs).
+    """
+    excluded = {"NOT_RECOMMENDED", "DEFERRED_PAID"}
     results = []
     for m in load_registry():
-        if m.get("status") != "LIVE" and m.get("required_for"):
+        status = m.get("status", "")
+        if status != "LIVE" and status not in excluded and m.get("required_for"):
             results.append(m)
+    return results
+
+
+def find_by_capability(capability: str) -> list[dict]:
+    """Return all MCPs for a given atlas_capability, ordered LIVE first."""
+    order = ["LIVE", "CONFIG_ONLY", "CLI_ONLY", "PENDING_TOKEN", "DEFERRED_PAID", "NOT_RECOMMENDED", "MISSING"]
+    results = [m for m in load_registry() if m.get("atlas_capability") == capability]
+    results.sort(key=lambda m: order.index(m.get("status", "MISSING")) if m.get("status") in order else 99)
     return results
 
 
@@ -128,7 +140,10 @@ def validate_registry() -> list[str]:
         return errors
 
     seen_ids: set[str] = set()
-    valid_statuses = {"LIVE", "CONFIG_ONLY", "CLI_ONLY", "MISSING", "OPTIONAL"}
+    valid_statuses = {
+        "LIVE", "CONFIG_ONLY", "CLI_ONLY", "MISSING", "OPTIONAL",
+        "PENDING_TOKEN", "DEFERRED_PAID", "NOT_RECOMMENDED",
+    }
 
     for i, m in enumerate(registry):
         mid = m.get("id", f"[{i}]")

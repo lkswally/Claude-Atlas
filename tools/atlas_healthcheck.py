@@ -560,6 +560,49 @@ def check_mcp_registry() -> None:
         WARN("MCP Registry", f"error al cargar: {e}")
 
 
+def check_capabilities_layer() -> None:
+    """core/capabilities/ — runtime capability abstraction layer."""
+    cap_dir = PROJECT_ROOT / "core" / "capabilities"
+    required_files = ["__init__.py", "base.py", "registry.py"]
+    missing = [f for f in required_files if not (cap_dir / f).exists()]
+    if missing:
+        WARN("Capabilities layer", f"core/capabilities/ missing: {missing}")
+        return
+
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from core.capabilities import capability_status
+        s = capability_status()
+        live = s.get("live", [])
+        pending = s.get("pending", [])
+        deferred = s.get("deferred", [])
+        detail = (
+            f"{s['total']} capabilities | "
+            f"LIVE={len(live)} | PENDING={len(pending)} | DEFERRED={len(deferred)}"
+        )
+        if live:
+            PASS("Capabilities layer", detail)
+        else:
+            WARN("Capabilities layer", detail + " — no LIVE capabilities")
+    except Exception as e:
+        WARN("Capabilities layer", f"error loading: {e}")
+
+
+def check_mcp_json() -> None:
+    """.mcp.json en CWD raíz — verifica servidores configurados."""
+    mcp_file = PROJECT_ROOT.parent / ".mcp.json"
+    if not mcp_file.exists():
+        WARN(".mcp.json (CWD raíz)", f"no encontrado en {mcp_file}")
+        return
+    try:
+        import json
+        data = json.loads(mcp_file.read_text(encoding="utf-8"))
+        servers = list(data.get("mcpServers", {}).keys())
+        PASS(".mcp.json (CWD raíz)", f"{len(servers)} servidores: {', '.join(servers)}")
+    except Exception as e:
+        WARN(".mcp.json (CWD raíz)", f"error: {e}")
+
+
 def check_dispatcher() -> None:
     """tools/atlas_dispatcher.py debe existir e importarse sin error."""
     dp = PROJECT_ROOT / "tools" / "atlas_dispatcher.py"
@@ -636,6 +679,8 @@ def run_all() -> int:
     check_projects_registry()
     check_engram()
     check_mcp_registry()
+    check_mcp_json()
+    check_capabilities_layer()
     check_dispatcher()
 
     # --- Reporte ---

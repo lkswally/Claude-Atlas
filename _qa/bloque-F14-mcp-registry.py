@@ -79,7 +79,10 @@ def test_load_registry():
 def test_valid_statuses():
     try:
         from mcp_registry import load_registry
-        valid = {"LIVE", "CONFIG_ONLY", "CLI_ONLY", "MISSING", "OPTIONAL"}
+        valid = {
+            "LIVE", "CONFIG_ONLY", "CLI_ONLY", "MISSING", "OPTIONAL",
+            "PENDING_TOKEN", "DEFERRED_PAID", "NOT_RECOMMENDED",
+        }
         bad = []
         for m in load_registry():
             s = m.get("status", "")

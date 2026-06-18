@@ -1,15 +1,23 @@
 # ATLAS MCP Registry
 # Inventario declarativo de todos los MCP relevantes para el sistema.
-# Actualizado: 2026-06-18
+# Actualizado: 2026-06-17
 #
 # Status values:
-#   LIVE          — herramientas mcp__*__ detectadas en sesión activa
-#   CONFIG_ONLY   — configurado en .mcp.json pero no visible en sesión actual
-#   CLI_ONLY      — binario CLI disponible, sin MCP server configurado
-#   MISSING       — ni CLI ni config
-#   OPTIONAL      — no requerido por ningún agente core
+#   LIVE             — herramientas mcp__*__ detectadas en sesión activa
+#   CONFIG_ONLY      — configurado en .mcp.json pero no visible en sesión actual
+#   CLI_ONLY         — binario CLI disponible, sin MCP server configurado
+#   MISSING          — ni CLI ni config
+#   OPTIONAL         — no requerido por ningún agente core
+#   PENDING_TOKEN    — configurado pero necesita token/secret del usuario
+#   DEFERRED_PAID    — requiere licencia/API de pago — no instalar
+#   NOT_RECOMMENDED  — evaluado: no aporta valor diferencial a ATLAS
+#
+# Capability values (atlas_capability field):
+#   memory | project_management | documentation | browser | computer_control
+#   repository | deployment | visualization | scheduling | design
+#   database | filesystem | storage | messaging
 
-version: "1.0"
+version: "1.1"
 updated: "2026-06-17"
 
 mcps:
@@ -20,6 +28,7 @@ mcps:
     name: "Engram Memory"
     provider: "Gentleman-Programming"
     status: LIVE
+    atlas_capability: memory
     config_scope: project
     command: "C:\\Users\\lksro\\go\\bin\\engram.exe"
     args: ["mcp", "--tools=agent"]
@@ -61,6 +70,7 @@ mcps:
     name: "Notion"
     provider: "Notion Labs"
     status: LIVE
+    atlas_capability: project_management
     config_scope: plugin
     live_tool_prefix: "mcp__52722bcc-d6c5-4bf4-8d79-ccad7a479b8f__notion-"
     capabilities:
@@ -133,28 +143,36 @@ mcps:
   - id: playwright
     name: "Playwright MCP"
     provider: "Microsoft"
-    status: CLI_ONLY
-    config_scope: unknown
+    status: CONFIG_ONLY
+    atlas_capability: browser
+    config_scope: project
     live_tool_prefix: "mcp__playwright__"
+    config_file: ".mcp.json"
+    config_file_path: "D:\\ProyectosIA\\.mcp.json"
+    last_confirmed_live: "2026-06-17"
     capabilities:
       - browser_navigate
       - browser_screenshot
       - browser_click
       - browser_evaluate
       - browser_wait_for
+      - browser_network_monitoring
+      - browser_dom_snapshot
     required_for:
       - evidence-collector
       - reality-checker
       - performance-benchmarker
-    validation_command: "npx playwright --version"
+      - codepen-explorer
+    validation_command: "npx @playwright/mcp --version"
     cli_available: true
-    cli_version: "1.61.0"
+    cli_version: "0.0.76"
     install_notes: |
-      CLI disponible. Para MCP server:
-      npx @playwright/mcp@latest
-      Agregar a .mcp.json: { "playwright": { "command": "npx", "args": ["@playwright/mcp"] } }
+      Configurado 2026-06-17: agregado a D:\ProyectosIA\.mcp.json
+      Chromium instalado: npx playwright install chromium (113.6 MB)
+      Browser: chromium_headless_shell v1228 en AppData/Local/ms-playwright/
+      LIVE en próxima sesión. Comando: npx -y @playwright/mcp@latest
     risks:
-      - "Requiere navegadores instalados: npx playwright install chromium"
+      - "Headless shell — algunas páginas requieren headed mode (--headed flag)"
 
   # ─── COMPUTER CONTROL ───────────────────────────────────────────────────────
 
@@ -182,10 +200,11 @@ mcps:
 
   # ─── REPOSITORIOS / CONTROL DE VERSIONES ────────────────────────────────────
 
-  - id: github
-    name: "GitHub CLI / MCP"
+  - id: github_cli_legacy
+    name: "GitHub CLI (legacy entry)"
     provider: "GitHub"
-    status: CLI_ONLY
+    status: NOT_RECOMMENDED
+    atlas_capability: repository
     config_scope: unknown
     live_tool_prefix: "mcp__github__"
     capabilities:
@@ -312,42 +331,254 @@ mcps:
     install_notes: "Plugin nativo Claude Code"
     risks: []
 
-  # ─── OPCIONALES / FUTUROS ───────────────────────────────────────────────────
+  # ─── DOCUMENTACIÓN ──────────────────────────────────────────────────────────
 
   - id: context7
     name: "Context7 (Library Docs)"
     provider: "Upstash"
-    status: MISSING
-    config_scope: unknown
+    status: CONFIG_ONLY
+    atlas_capability: documentation
+    config_scope: project
     live_tool_prefix: "mcp__context7__"
+    config_file: ".mcp.json"
+    config_file_path: "D:\\ProyectosIA\\.mcp.json"
+    last_confirmed_live: "2026-06-17"
     capabilities:
       - resolve_library_id
       - get_library_docs
+      - search_docs
+    required_for:
+      - frontend-developer
+      - backend-architect
+      - ux-architect
+    validation_command: "npx -y @upstash/context7-mcp --version"
+    cli_available: true
+    cli_version: "3.2.1"
+    install_notes: |
+      Configurado 2026-06-17: agregado a D:\ProyectosIA\.mcp.json
+      Comando: npx -y @upstash/context7-mcp@latest
+      API key opcional (CONTEXT7_API_KEY) para rate limits mayores.
+      LIVE en próxima sesión.
+    risks:
+      - "Free tier tiene rate limits — usar CONTEXT7_API_KEY si se necesita más"
+
+  # ─── QA BROWSER ─────────────────────────────────────────────────────────────
+
+  # (playwright entry already updated above — status updated to CONFIG_ONLY pending session restart)
+
+  # ─── REPOSITORIOS ───────────────────────────────────────────────────────────
+
+  - id: github
+    name: "GitHub MCP (oficial)"
+    provider: "GitHub Inc."
+    status: PENDING_TOKEN
+    atlas_capability: repository
+    config_scope: project
+    live_tool_prefix: "mcp__github__"
+    config_file: ".mcp.json"
+    config_file_path: "D:\\ProyectosIA\\.mcp.json"
+    command: "C:\\Users\\lksro\\go\\bin\\github-mcp-server.exe"
+    args: ["stdio"]
+    capabilities:
+      - create_pr
+      - list_issues
+      - create_issue
+      - review_pr
+      - push_code
+      - get_file_contents
+      - search_code
+      - list_repos
+      - create_release
+      - run_workflow
+      - get_commit
+    required_for:
+      - git
+      - orquestador
+      - self-auditor
+      - build-resolver
+    validation_command: "C:\\Users\\lksro\\go\\bin\\github-mcp-server.exe --version"
+    cli_available: true
+    cli_version: "1.3.0"
+    cli_path: "C:\\Users\\lksro\\go\\bin\\github-mcp-server.exe"
+    env_required:
+      - name: GITHUB_TOKEN
+        description: "GitHub PAT o OAuth token con scopes: repo, read:org, workflow"
+        source: "gh auth token (ya autenticado) o github.com/settings/tokens"
+        secret: true
+    install_notes: |
+      Binary oficial descargado 2026-06-17: github.com/github/github-mcp-server v1.3.0
+      Guardado en: C:\Users\lksro\go\bin\github-mcp-server.exe (22MB)
+      .mcp.json configurado — PENDING_TOKEN: necesita GITHUB_TOKEN en .env.local
+      NO usar @modelcontextprotocol/server-github (deprecated).
+    risks:
+      - "GITHUB_TOKEN con scope repo puede leer/escribir en todos tus repos"
+      - "Usar PAT de alcance mínimo si es posible"
+
+  # ─── DEPLOY ─────────────────────────────────────────────────────────────────
+
+  - id: vercel
+    name: "Vercel MCP"
+    provider: "Vercel Inc."
+    status: PENDING_TOKEN
+    atlas_capability: deployment
+    config_scope: project
+    live_tool_prefix: "mcp__vercel__"
+    config_file: ".mcp.json"
+    capabilities:
+      - list_deployments
+      - create_deployment
+      - get_deployment_logs
+      - list_projects
+      - manage_env_vars
+      - get_preview_url
+      - rollback_deployment
+    required_for:
+      - deployer
+      - orquestador
+    validation_command: null
+    cli_available: false
+    env_required:
+      - name: VERCEL_TOKEN
+        description: "Vercel API token — generar en vercel.com/account/tokens"
+        secret: true
+    install_notes: |
+      Package: vercel-mcp-server v1.0.0 (npm)
+      No instalado aún — necesita VERCEL_TOKEN.
+      Comando: npx -y vercel-mcp-server
+    risks:
+      - "VERCEL_TOKEN con Full Account scope puede modificar todos tus proyectos"
+
+  # ─── DATABASE ───────────────────────────────────────────────────────────────
+
+  - id: supabase
+    name: "Supabase MCP"
+    provider: "Supabase Inc."
+    status: NOT_RECOMMENDED
+    atlas_capability: database
+    config_scope: project
+    live_tool_prefix: "mcp__supabase__"
+    capabilities:
+      - sql_query
+      - list_tables
+      - manage_storage
+      - run_migrations
+      - get_logs
     required_for: []
     validation_command: null
     cli_available: false
     install_notes: |
-      npx -y @upstash/context7-mcp
-      Útil para: documentación de librerías en tiempo real (Next.js, React, etc.)
+      Package: @supabase/mcp-server-supabase v0.8.2
+      EVALUACIÓN: Requiere SUPABASE_URL + SUPABASE_SERVICE_KEY por proyecto.
+      ATLAS ya usa Supabase via Drizzle/SQL directo en proyectos que lo necesitan.
+      El MCP agregaría una capa de abstracción sin eliminar la necesidad de SQL.
+      Valor diferencial bajo vs complejidad de configuración por proyecto.
+    risks:
+      - "Service key = acceso total a DB — riesgo alto si se filtra"
+      - "Diferente configuración por proyecto — no global como Engram"
+
+  # ─── FILESYSTEM ─────────────────────────────────────────────────────────────
+
+  - id: filesystem
+    name: "MCP Filesystem"
+    provider: "Anthropic / MCP"
+    status: NOT_RECOMMENDED
+    atlas_capability: filesystem
+    config_scope: unknown
+    live_tool_prefix: "mcp__filesystem__"
+    capabilities:
+      - read_file
+      - write_file
+      - list_directory
+      - create_directory
+      - move_file
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: |
+      Package: @modelcontextprotocol/server-filesystem v1.5.0
+      EVALUACIÓN: Claude Code ya provee Read, Write, Edit, Glob, Grep, Bash nativamente.
+      El MCP Filesystem no agrega capacidades que Claude Code no tenga.
+      Instalar agregaría overhead sin valor diferencial.
+      VEREDICTO: NOT_RECOMMENDED — descartado.
     risks: []
+
+  # ─── STORAGE / DRIVE ────────────────────────────────────────────────────────
+
+  - id: gdrive
+    name: "Google Drive MCP"
+    provider: "Google / Anthropic"
+    status: NOT_RECOMMENDED
+    atlas_capability: storage
+    config_scope: unknown
+    live_tool_prefix: "mcp__gdrive__"
+    capabilities:
+      - read_document
+      - create_document
+      - search_drive
+      - list_files
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: |
+      Package: @modelcontextprotocol/server-gdrive v2026.1.14
+      EVALUACIÓN: Requiere OAuth flow complejo (credentials.json + token.json).
+      Ningún agente ATLAS actual tiene necesidad de leer Google Drive.
+      Use case principal sería importar briefs/specs, pero ATLAS trabaja con
+      archivos locales y Notion para gestión de proyectos.
+      VEREDICTO: NOT_RECOMMENDED — sin caso de uso claro en ATLAS actual.
+    risks:
+      - "OAuth requiere credenciales de Google Cloud Console"
+
+  # ─── MESSAGING ──────────────────────────────────────────────────────────────
+
+  - id: slack
+    name: "Slack MCP"
+    provider: "Anthropic / MCP"
+    status: NOT_RECOMMENDED
+    atlas_capability: messaging
+    config_scope: unknown
+    live_tool_prefix: "mcp__slack__"
+    capabilities:
+      - send_message
+      - list_channels
+      - read_messages
+      - create_thread
+    required_for: []
+    validation_command: null
+    cli_available: false
+    install_notes: |
+      Package: @modelcontextprotocol/server-slack v2025.1.14
+      EVALUACIÓN: Útil para reportes/alertas pero requiere Slack workspace + token.
+      ATLAS no tiene agente de notificaciones activo.
+      Bajo ROI en estado actual — puede agregarse si se define un agente reporter.
+      VEREDICTO: NOT_RECOMMENDED por ahora. Revisar en F17+ si se crea agente reporter.
+    risks:
+      - "SLACK_BOT_TOKEN + workspace ID requeridos"
+
+  # ─── DISEÑO / UI ────────────────────────────────────────────────────────────
 
   - id: magic_21st
     name: "21st.dev Magic"
     provider: "21st.dev"
-    status: MISSING
+    status: DEFERRED_PAID
+    atlas_capability: design
     config_scope: unknown
     live_tool_prefix: "mcp__21st_magic__"
     capabilities:
       - generate_ui_component
       - search_components
+      - logo_search
     required_for:
       - ui-designer
       - frontend-developer
     validation_command: null
     cli_available: false
     install_notes: |
-      Requiere API key de 21st.dev.
-      Útil para: generación de componentes UI de alta calidad.
+      Package: @21st-dev/magic v0.1.0
+      EVALUACIÓN: Requiere API key de pago de 21st.dev (suscripción).
+      Capacidades interesantes para generación de componentes UI profesionales.
+      VEREDICTO: DEFERRED_PAID — instalar solo si el usuario provee API key.
+      Variable: TWENTY_FIRST_API_KEY
     risks:
-      - "Requiere API key de pago"
-      - "Componentes pueden no seguir design system de ATLAS"
+      - "Requiere API key de pago — no instalar sin autorización explícita"
+      - "Componentes generados pueden no seguir design system de ATLAS"
