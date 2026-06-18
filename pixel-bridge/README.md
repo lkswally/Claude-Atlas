@@ -1,6 +1,6 @@
 # Pixel Bridge — Standalone Office Viewer
 
-Visualización en tiempo real de los 22 agentes del sistema claude-vibecoding como personajes en una oficina pixel art.
+Visualización en tiempo real de los 25 agentes de ATLAS como personajes en una oficina pixel art.
 
 Un servidor Node.js + React lee los archivos JSONL de `~/.claude/projects/` y proyecta la actividad de cada agente como animaciones en el navegador (`http://localhost:3456`).
 
@@ -136,7 +136,7 @@ A diferencia de Claude Desktop (VS Code), Claude Code almacena sesiones así:
 3. Los `progress` messages revelan el `agentId` que corresponde a cada `subagent_type`
 4. Cuando aparece `agent-{id}.jsonl`, se activa el personaje permanente correcto
 
-Los **22 agentes siempre están en la oficina**, incluso inactivos:
+Los **25 agentes siempre están en la oficina**, incluso inactivos:
 - Cuando un agente trabaja: camina a su escritorio, se sienta y muestra aura verde
 - Cuando termina: camina al orquestador a reportar con burbuja de chat, luego vuelve a deambular
 - Los agentes inactivos deambulan, descansan en sillas y charlan entre sí

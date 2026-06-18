@@ -34,8 +34,8 @@ These hold at all times. A PR that violates any of these will not be merged:
 ## Setting Up for Development
 
 ```bash
-git clone https://github.com/your-org/atlas.git
-cd atlas
+git clone https://github.com/lkswally/Claude-Atlas.git
+cd Claude-Atlas
 
 # Install Python dependencies
 pip install pyyaml

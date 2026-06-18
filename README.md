@@ -215,8 +215,8 @@ Phase 5  Deployment     → git (user confirms) → deployer (user confirms)
 
 ```bash
 # 1. Clone
-git clone https://github.com/your-org/atlas.git
-cd atlas
+git clone https://github.com/lkswally/Claude-Atlas.git
+cd Claude-Atlas
 
 # 2. Install
 bash install.sh          # Linux/macOS

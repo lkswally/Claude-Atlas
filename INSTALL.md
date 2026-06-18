@@ -167,11 +167,9 @@ vercel --version   # verify
 
 ```bash
 cd ~/Desktop    # or wherever you want to keep it
-git clone https://github.com/your-org/atlas.git
-cd atlas
+git clone https://github.com/lkswally/Claude-Atlas.git
+cd Claude-Atlas
 ```
-
-> Replace the URL with the actual repository URL.
 
 ---
 

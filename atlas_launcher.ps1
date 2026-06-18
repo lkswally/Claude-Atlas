@@ -9,7 +9,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # ---- Rutas base ----
 $BASE_DIR        = "D:\ProyectosIA\ProyectosClaude"
-$CLAUDE_ATLAS    = "$BASE_DIR\ClaudeAtlas\claude-vibecoding"
+$CLAUDE_ATLAS    = "$BASE_DIR"
 $REYESOFT        = "$BASE_DIR\REYESOFT"
 $AUDIT_SCRIPT    = "C:\Users\Lucas\.claude\hooks\audit-system.js"
 

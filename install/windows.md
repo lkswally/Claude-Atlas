@@ -110,11 +110,9 @@ git config --global init.defaultBranch main
 En Git Bash, navega a tu Escritorio (o donde prefieras guardar el repo):
 ```bash
 cd ~/Desktop
-git clone https://github.com/your-org/atlas.git
-cd atlas
+git clone https://github.com/lkswally/Claude-Atlas.git
+cd Claude-Atlas
 ```
-
-> Reemplaza la URL con la URL real del repositorio ATLAS.
 > Esto descarga todos los archivos del sistema a una carpeta llamada `atlas` en tu Escritorio.
 
 ---
@@ -396,7 +394,7 @@ El sistema se encarga del resto:
 ~/CLAUDE.md                                      <- instrucciones globales del sistema
 ~/.claude/
 |-- launch.json                                  <- configuracion de preview servers
-|-- agents/                                      <- 25 agentes + 12 referencias = 37 archivos
+|-- agents/                                      <- 25 agentes + 13 referencias = 38 archivos
 |   |-- orquestador.md                           <- coordinador central
 |   |-- project-manager-senior.md                <- Fase 1: spec a tareas
 |   |-- ux-architect.md                          <- Fase 2: CSS tokens, layout
