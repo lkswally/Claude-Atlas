@@ -650,6 +650,80 @@ def check_mcp_json() -> None:
         WARN(".mcp.json (CWD raíz)", f"error: {e}")
 
 
+def check_capability_metrics() -> None:
+    """
+    F18: Capability Metrics — valida que el módulo de eventos existe,
+    el directorio .pipeline es escribible, y el metrics reader importa.
+    No bloquea si no hay eventos (normal en entorno limpio).
+    """
+    pipeline_dir = PROJECT_ROOT / ".pipeline"
+    events_file  = pipeline_dir / "capability-events.jsonl"
+    metrics_tool = PROJECT_ROOT / "tools" / "capability_metrics.py"
+
+    issues: list[str] = []
+    warns:  list[str] = []
+
+    # 1. events.py existe
+    events_mod = PROJECT_ROOT / "core" / "capabilities" / "events.py"
+    if not events_mod.exists():
+        issues.append("core/capabilities/events.py no encontrado")
+    else:
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from core.capabilities.events import make_event, emit, read_events
+        except Exception as e:
+            issues.append(f"events.py no importa: {e}")
+
+    # 2. capability_metrics.py existe
+    if not metrics_tool.exists():
+        issues.append("tools/capability_metrics.py no encontrado")
+    else:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("capability_metrics", metrics_tool)
+            mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            _ = mod.load_events
+            _ = mod.compute_metrics
+        except Exception as e:
+            issues.append(f"capability_metrics.py no importa: {e}")
+
+    # 3. .pipeline dir es escribible (o puede crearse)
+    try:
+        pipeline_dir.mkdir(parents=True, exist_ok=True)
+        test_file = pipeline_dir / ".healthcheck_write_test"
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink()
+    except Exception as e:
+        issues.append(f".pipeline/ no escribible: {e}")
+
+    # 4. Si el archivo de eventos existe, verifica que sea JSONL válido
+    if events_file.exists():
+        bad_lines = 0
+        try:
+            for line in events_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    json.loads(line)
+                except Exception:
+                    bad_lines += 1
+        except Exception as e:
+            warns.append(f"No se pudo leer capability-events.jsonl: {e}")
+        if bad_lines:
+            warns.append(f"{bad_lines} líneas JSONL inválidas en capability-events.jsonl")
+    else:
+        warns.append("capability-events.jsonl no existe aún (normal en entorno limpio)")
+
+    if issues:
+        FAIL("Capability metrics (F18)", "; ".join(issues))
+    elif warns:
+        WARN("Capability metrics (F18)", " | ".join(warns))
+    else:
+        PASS("Capability metrics (F18)", "events.py + metrics reader OK | .pipeline/ escribible")
+
+
 def check_dispatcher() -> None:
     """tools/atlas_dispatcher.py debe existir e importarse sin error."""
     dp = PROJECT_ROOT / "tools" / "atlas_dispatcher.py"
@@ -729,6 +803,7 @@ def run_all() -> int:
     check_mcp_json()
     check_capabilities_layer()
     check_capability_router()
+    check_capability_metrics()
     check_dispatcher()
 
     # --- Reporte ---

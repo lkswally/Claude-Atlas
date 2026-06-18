@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 ResolutionStatus = Literal[
     "LIVE",           # provider active, tools visible in session
@@ -82,7 +83,38 @@ def _make_unavailable(capability: str) -> Resolution:
     )
 
 
-def resolve_capability(name: str) -> Resolution:
+def _emit_event(
+    resolution: "Resolution",
+    requested_by: str = "unknown",
+    events_file: "Path | None" = None,
+) -> None:
+    """Emit capability event to JSONL log. Fail-open — never raises."""
+    try:
+        from .events import emit_resolution
+        fallback_used = (
+            resolution.fallback is not None
+            and resolution.status != "LIVE"
+        )
+        emit_resolution(
+            capability=resolution.capability,
+            provider_selected=resolution.provider,
+            provider_status=resolution.status,
+            fallback_used=fallback_used,
+            action=resolution.action,
+            requested_by=requested_by,
+            metadata={"tool_prefix": resolution.tool_prefix, "notes": resolution.notes},
+            events_file=events_file,
+        )
+    except Exception:
+        pass
+
+
+def resolve_capability(
+    name: str,
+    requested_by: str = "unknown",
+    emit: bool = True,
+    _events_file: "Path | None" = None,
+) -> Resolution:
     """
     Resolve a capability name to its best available provider.
 
@@ -90,6 +122,12 @@ def resolve_capability(name: str) -> Resolution:
     - primary provider (best status)
     - fallback provider (next best, if primary is not LIVE)
     - action hint
+
+    Args:
+        name:         Capability name (e.g. "browser", "memory")
+        requested_by: Caller hint for observability (agent name or module)
+        emit:         Whether to emit a CapabilityEvent to the JSONL log
+        _events_file: Override log path (for testing)
 
     Never raises — returns UNAVAILABLE resolution on unknown capability.
     """
@@ -148,6 +186,10 @@ def resolve_capability(name: str) -> Resolution:
         None,
     )
     primary.fallback = fallback
+
+    if emit:
+        _emit_event(primary, requested_by=requested_by, events_file=_events_file)
+
     return primary
 
 
@@ -157,12 +199,25 @@ class CapabilityRouter:
     Caches resolutions within the same instance.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        requested_by: str = "CapabilityRouter",
+        emit: bool = True,
+        _events_file: "Path | None" = None,
+    ) -> None:
         self._cache: dict[str, Resolution] = {}
+        self._requested_by = requested_by
+        self._emit = emit
+        self._events_file = _events_file
 
     def resolve(self, capability: str) -> Resolution:
         if capability not in self._cache:
-            self._cache[capability] = resolve_capability(capability)
+            self._cache[capability] = resolve_capability(
+                capability,
+                requested_by=self._requested_by,
+                emit=self._emit,
+                _events_file=self._events_file,
+            )
         return self._cache[capability]
 
     def resolve_many(self, capabilities: list[str]) -> dict[str, Resolution]:

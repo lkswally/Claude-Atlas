@@ -2334,3 +2334,49 @@ Las capabilities `memory`, `browser`, y `documentation` son críticas. Si alguna
 | `PENDING_TOKEN` | Informar qué variable de entorno falta (ver `config/mcp.registry.yaml`) |
 | `DEFERRED_PAID` | Reportar como no disponible, no intentar usar |
 | `UNAVAILABLE` | Escalar como bloqueador |
+
+## F18. Capability Runtime Metrics — Observabilidad de resoluciones
+
+> **Bloque F18** — Cada llamada a `resolve_capability()` emite automáticamente un evento al log de observabilidad. Los agentes no necesitan hacer nada extra; el sistema es transparente.
+
+### Log de eventos
+
+Los eventos se escriben en `.pipeline/capability-events.jsonl` (append-only, un JSON por línea).
+
+Campos de cada evento:
+- `timestamp` — ISO-8601 UTC
+- `capability` — nombre solicitado ("browser", "memory", etc.)
+- `requested_by` — agente o módulo solicitante
+- `provider_selected` — mcp_id del provider elegido
+- `provider_status` — LIVE | CONFIG_ONLY | PENDING_TOKEN | DEFERRED_PAID | UNAVAILABLE
+- `fallback_used` — true si el primario no era LIVE
+- `resolution_ok` — true si el resultado es usable
+- `action` — hint: "use" | "restart_session" | "set_token" | "acquire_license" | "register_provider"
+
+### Variables de control
+
+| Variable | Efecto |
+|---|---|
+| `ATLAS_CAPABILITY_EVENTS_DISABLED=1` | Desactiva el log de eventos (emit() retorna False) |
+| `ATLAS_CAPABILITIES_DISABLED=1` | Desactiva el router completo (F16) |
+
+### Metrics reader
+
+```bash
+# Resumen completo
+python tools/capability_metrics.py
+
+# Solo estado crítico
+python tools/capability_metrics.py --critical
+
+# Últimos N eventos
+python tools/capability_metrics.py --last 20
+
+# Filtrar por capability
+python tools/capability_metrics.py --capability browser
+
+# Salida machine-readable
+python tools/capability_metrics.py --json
+```
+
+Exit codes del metrics reader: `0` = sano, `1` = crítica degradada, `2` = sin eventos aún.
