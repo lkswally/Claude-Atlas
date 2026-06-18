@@ -10,7 +10,7 @@
 #   OPTIONAL      — no requerido por ningún agente core
 
 version: "1.0"
-updated: "2026-06-18"
+updated: "2026-06-17"
 
 mcps:
 
@@ -19,12 +19,14 @@ mcps:
   - id: engram
     name: "Engram Memory"
     provider: "Gentleman-Programming"
-    status: CONFIG_ONLY
+    status: LIVE
     config_scope: project
     command: "C:\\Users\\lksro\\go\\bin\\engram.exe"
     args: ["mcp", "--tools=agent"]
     live_tool_prefix: "mcp__engram__"
     config_file: ".mcp.json"
+    config_file_path: "D:\\ProyectosIA\\.mcp.json"
+    last_confirmed_live: "2026-06-17"
     capabilities:
       - save_memory
       - search_memories
@@ -46,12 +48,12 @@ mcps:
     db_path: "C:\\Users\\lksro\\.engram\\engram.db"
     install_notes: |
       Instalado via: go install github.com/Gentleman-Programming/engram@latest
-      Para LIVE: .mcp.json debe estar en el CWD raíz de la sesión.
-      CWD actual: D:\ProyectosIA — .mcp.json debe estar ahí, no en ProyectosClaude.
+      LIVE confirmado 2026-06-17: .mcp.json movido a CWD raíz D:\ProyectosIA.
+      mcp__engram__* tools activas en sesión. mem_save + mem_search operativos.
     risks:
       - "DB lock en Windows si proceso engram MCP y CLI corren simultáneamente"
       - "engram-sync.js requiere ~/.engram como git repo para sync remoto"
-    note: "CONFIG_ONLY porque .mcp.json está en subdirectorio, no en CWD raíz"
+    note: "LIVE desde 2026-06-17 — .mcp.json en D:\\ProyectosIA (CWD raíz)"
 
   # ─── DOCUMENTACIÓN / NOTAS ──────────────────────────────────────────────────
 

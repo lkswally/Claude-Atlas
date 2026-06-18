@@ -16,8 +16,10 @@ Valida config/mcp.registry.yaml y tools/mcp_registry.py:
  10. summary() tiene campos requeridos
  11. find_mcps(required_for="evidence-collector") incluye playwright o chrome
  12. list_missing_required() no incluye MCPs LIVE
+ 13. Engram config_status == LIVE (estado declarativo en registry)
+ 14. Engram runtime_status — CLI probe responde sin error
 
-Total: 12 tests
+Total: 14 tests
 """
 
 import json
@@ -238,6 +240,55 @@ def test_missing_required_no_live():
 
 
 # ---------------------------------------------------------------------------
+# T13: Engram config_status == LIVE (estado declarativo)
+# ---------------------------------------------------------------------------
+def test_engram_config_status_live():
+    try:
+        from mcp_registry import get_mcp
+        m = get_mcp("engram")
+        if not m:
+            fail("T13 Engram config_status=LIVE", "engram no en registry")
+            return
+        config_status = m.get("status", "UNKNOWN")
+        if config_status == "LIVE":
+            confirmed = m.get("last_confirmed_live", "unknown date")
+            ok("T13 Engram config_status=LIVE", f"confirmado: {confirmed}")
+        else:
+            fail("T13 Engram config_status=LIVE",
+                 f"config_status={config_status} — actualizar registry tras confirmar MCP live")
+    except Exception as e:
+        fail("T13 Engram config_status=LIVE", str(e))
+
+
+# ---------------------------------------------------------------------------
+# T14: Engram runtime_status — CLI probe
+# ---------------------------------------------------------------------------
+def test_engram_runtime_probe():
+    import subprocess
+    try:
+        from mcp_registry import get_mcp
+        m = get_mcp("engram")
+        if not m:
+            fail("T14 Engram runtime_status (CLI probe)", "engram no en registry")
+            return
+        cmd = m.get("validation_command", "")
+        if not cmd:
+            fail("T14 Engram runtime_status (CLI probe)", "validation_command no definido")
+            return
+        parts = cmd.split()
+        r = subprocess.run(parts, capture_output=True, text=True, timeout=8)
+        if r.returncode == 0:
+            ok("T14 Engram runtime_status (CLI probe)", f"exit 0 — runtime OK")
+        else:
+            fail("T14 Engram runtime_status (CLI probe)",
+                 f"exit {r.returncode}: {(r.stdout + r.stderr).strip()[:80]}")
+    except subprocess.TimeoutExpired:
+        fail("T14 Engram runtime_status (CLI probe)", "timeout >8s")
+    except Exception as e:
+        fail("T14 Engram runtime_status (CLI probe)", str(e))
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -260,11 +311,14 @@ def main():
     test_summary_fields()
     test_evidence_collector_mcps()
     test_missing_required_no_live()
+    test_engram_config_status_live()
+    test_engram_runtime_probe()
 
     total = PASS_COUNT + FAIL_COUNT
     print()
     print(f"Total: {total} | PASS: {PASS_COUNT} | FAIL: {FAIL_COUNT}")
     print()
+    # T13/T14 distinguen: config_status (declarativo en YAML) vs runtime_status (CLI probe live)
 
     if FAIL_COUNT > 0:
         print("RESULTADO: FAIL")

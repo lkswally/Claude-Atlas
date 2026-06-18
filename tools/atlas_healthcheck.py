@@ -483,8 +483,34 @@ def check_engram() -> None:
         WARN("Engram", f"ENGRAM_FAIL_OPEN — {e}")
 
 
+def _probe_engram_runtime(engram_entry: dict) -> tuple[str, str]:
+    """
+    Probe runtime status of Engram via CLI validation_command.
+    Returns (runtime_status, detail): "OK" | "WARN" | "SKIP".
+    """
+    cmd = engram_entry.get("validation_command", "")
+    if not cmd:
+        return "SKIP", "no validation_command"
+    parts = cmd.split()
+    try:
+        r = subprocess.run(parts, capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return "OK", "CLI probe passed"
+        else:
+            return "WARN", f"CLI probe exit {r.returncode}"
+    except subprocess.TimeoutExpired:
+        return "WARN", "CLI probe timeout"
+    except Exception as e:
+        return "WARN", f"CLI probe error: {e}"
+
+
 def check_mcp_registry() -> None:
-    """Valida config/mcp.registry.yaml y distingue estados de Engram."""
+    """
+    Valida config/mcp.registry.yaml.
+    Para Engram distingue:
+      config_status  — estado declarado en el registry (YAML)
+      runtime_status — resultado del CLI probe en esta ejecución
+    """
     reg_file = PROJECT_ROOT / "config" / "mcp.registry.yaml"
     if not reg_file.exists():
         WARN("MCP Registry", f"config/mcp.registry.yaml no encontrado")
@@ -503,19 +529,28 @@ def check_mcp_registry() -> None:
         live = s.get("live", [])
         missing_req = s.get("missing_required", [])
 
-        # Engram status específico
+        # Engram: config_status (declarativo) + runtime_status (CLI probe)
         from mcp_registry import get_mcp
         engram = get_mcp("engram")
-        engram_status = engram.get("status", "UNKNOWN") if engram else "NOT_IN_REGISTRY"
+        config_status = engram.get("status", "UNKNOWN") if engram else "NOT_IN_REGISTRY"
+
+        if engram and config_status == "LIVE":
+            runtime_status, runtime_detail = _probe_engram_runtime(engram)
+            engram_label = f"engram=LIVE (runtime:{runtime_status})"
+        else:
+            engram_label = f"engram={config_status}"
+            runtime_status = "SKIP"
 
         detail = (
             f"{s['total']} MCPs, {len(live)} LIVE, "
             f"{len(missing_req)} missing-required | "
-            f"engram={engram_status}"
+            f"{engram_label}"
         )
 
-        if missing_req and any(m in missing_req for m in ["engram"]):
+        if missing_req and "engram" in missing_req:
             WARN("MCP Registry", detail + " (engram requerido no LIVE)")
+        elif runtime_status == "WARN":
+            WARN("MCP Registry", detail + " — config LIVE pero CLI probe falló")
         else:
             PASS("MCP Registry", detail)
 
