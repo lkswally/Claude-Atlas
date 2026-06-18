@@ -37,7 +37,7 @@ HOOKS_DIR = PROJECT_ROOT / ".claude" / "hooks"
 #  Helper
 # ---------------------------------------------------------------------------
 
-def run_hook(hook_name: str, stdin_payload, timeout: int = 8) -> tuple[int, str, str]:
+def run_hook(hook_name: str, stdin_payload, timeout: int = 15) -> tuple[int, str, str]:
     """
     Invoca hook via `node .claude/hooks/<hook_name>` con stdin_payload como JSON.
     Retorna (exit_code, stdout, stderr).
@@ -423,7 +423,7 @@ def test_23_delegation_tracker_sanity():
         "tool_input": {"file_path": "src/foo.ts"},
         "cwd": str(tmpdir),
     }
-    code, _, err = run_hook("delegation-tracker.js", payload)
+    code, _, err = run_hook("delegation-tracker.js", payload, timeout=20)
     print(f"  exit={code}")
     assert code == 0
 

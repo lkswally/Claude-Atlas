@@ -54,9 +54,10 @@ NETWORK_SUITES: set[str] = set()  # currently none hit real network in test mode
 # Use when a suite legitimately takes longer than the default.
 SUITE_TIMEOUTS: dict[str, int] = {
     "bloque-F23-runtime-settings-separation": 420,  # renames settings.json multiple times
-    "bloque-F4-js-hooks-validation": 120,            # spawns node processes for each hook
-    "bloque-F7-healthcheck-validation": 120,         # runs atlas_healthcheck.py internally
-    "bloque-F6-runtime-hooks-validation": 120,       # spawns node processes
+    "bloque-F4-js-hooks-validation": 240,            # spawns node processes for each hook
+    "bloque-F9-projects-registry": 240,             # imports dispatcher — slow Python 3.14 cold start
+    "bloque-F7-healthcheck-validation": 240,         # runs atlas_healthcheck.py internally (slow on Python 3.14)
+    "bloque-F6-runtime-hooks-validation": 240,       # spawns node processes (delegation-tracker slow on Win)
     "bloque-F11-skills-registry-runtime": 180,       # imports dispatcher which is slow to start
     "bloque-F15-context7": 120,                      # context7 MCP startup takes up to 90s
     "bloque-F15-playwright": 120,                    # playwright MCP startup takes time
