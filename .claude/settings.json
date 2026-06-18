@@ -116,6 +116,7 @@
       }
     ]
   },
+  "enabledMcpjsonServers": ["engram"],
   "enabledPlugins": {
     "engram@engram": true,
     "vercel@claude-plugins-official": true

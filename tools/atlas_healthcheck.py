@@ -217,7 +217,7 @@ def check_hooks_smoke_test() -> None:
                 capture_output=True,
                 timeout=8,
             )
-            # engram-sync: exit 1 es aceptable (no puede sincronizar sin repo Engram)
+            # engram-sync: exit 0 siempre en modo hook (fail-open cuando no hay git repo)
             if hook.name == "engram-sync.js":
                 if r.returncode not in (0, 1):
                     crashed.append(f"{hook.name}(exit={r.returncode})")
@@ -441,6 +441,48 @@ def check_projects_registry() -> None:
              f"{len(projects)} proyecto(s) registrado(s), {total_active} activo(s), paths OK")
 
 
+def check_engram() -> None:
+    """Detecta estado de Engram: ACTIVE / FAIL_OPEN / DISABLED."""
+    import shutil
+
+    # 1. Feature flag
+    if os.environ.get("ENGRAM_SYNC_DISABLED") == "1":
+        WARN("Engram", "ENGRAM_DISABLED — ENGRAM_SYNC_DISABLED=1 activo")
+        return
+
+    # 2. Binary presente?
+    engram_bin = shutil.which("engram") or str(
+        Path.home() / "go" / "bin" / "engram.exe"
+    ) or str(Path.home() / "go" / "bin" / "engram")
+    bin_found = Path(engram_bin).exists() if engram_bin else False
+    if not bin_found:
+        WARN("Engram", "ENGRAM_FAIL_OPEN — binario engram no encontrado en PATH ni ~/go/bin")
+        return
+
+    # 3. DB presente?
+    db_path = Path.home() / ".engram" / "engram.db"
+    if not db_path.exists():
+        WARN("Engram", f"ENGRAM_FAIL_OPEN — DB no encontrada en {db_path}")
+        return
+
+    # 4. Smoke test: engram search con query vacía (debe terminar en <3s)
+    try:
+        r = subprocess.run(
+            [engram_bin, "search", "atlas"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            PASS("Engram", f"ENGRAM_ACTIVE — binario OK, DB OK, search OK ({db_path})")
+        else:
+            WARN("Engram", f"ENGRAM_FAIL_OPEN — search exit {r.returncode}: {r.stderr[:80]}")
+    except subprocess.TimeoutExpired:
+        WARN("Engram", "ENGRAM_FAIL_OPEN — smoke test timeout (>5s)")
+    except Exception as e:
+        WARN("Engram", f"ENGRAM_FAIL_OPEN — {e}")
+
+
 def check_dispatcher() -> None:
     """tools/atlas_dispatcher.py debe existir e importarse sin error."""
     dp = PROJECT_ROOT / "tools" / "atlas_dispatcher.py"
@@ -515,6 +557,7 @@ def run_all() -> int:
     check_hard_rules()
     check_skills_registry()
     check_projects_registry()
+    check_engram()
     check_dispatcher()
 
     # --- Reporte ---
