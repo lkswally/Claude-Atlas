@@ -43,8 +43,9 @@ process.stdin.on('end', () => {
       process.exit(2);
     }
 
-    // Detectar git push --force / -f (puede sobrescribir historia remota)
-    if (/git\s+push\s+.*(-f\b|--force\b|--force-with-lease\b)/.test(command)) {
+    // Detectar git push --force / -f (incluyendo git -C <dir> push --force)
+    if (/git\s+push\s+.*(-f\b|--force\b|--force-with-lease\b)/.test(command) ||
+        /git\s+-C\s+\S+\s+push\s+.*(-f\b|--force\b|--force-with-lease\b)/.test(command)) {
       process.stderr.write(
         'BLOCKED: git push --force detected. This can overwrite remote history. ' +
         'Ask the user for explicit permission.'
@@ -89,11 +90,20 @@ process.stdin.on('end', () => {
       process.exit(2);
     }
 
-    // Detectar chmod 777 (permisos excesivos)
-    if (/\bchmod\s+777\b/.test(command)) {
+    // Detectar chmod 777 / 0777 en cualquier forma: chmod 777, chmod -R 777, chmod 0777
+    if (/\bchmod\s+(-[a-zA-Z]+\s+)*0?777\b/.test(command)) {
       process.stderr.write(
-        'BLOCKED: chmod 777 detected. This grants full permissions to everyone. ' +
+        'BLOCKED: chmod 777/0777 detected (including -R variant). This grants full permissions to everyone. ' +
         'Use more restrictive permissions (e.g., 755). Ask the user if 777 is intended.'
+      );
+      process.exit(2);
+    }
+
+    // Detectar chown -R (cambio recursivo de propietario — alta superficie de ataque)
+    if (/\bchown\s+(-[a-zA-Z]*R|--recursive)\b/.test(command)) {
+      process.stderr.write(
+        'BLOCKED: chown -R/--recursive detected. Recursive ownership change can expose sensitive files. ' +
+        'Ask the user for explicit permission with the exact path and owner intended.'
       );
       process.exit(2);
     }

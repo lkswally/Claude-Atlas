@@ -1,0 +1,14 @@
+# Enforce LF line endings for all text files (prevents CRLF/LF drift between Windows and Linux)
+* text=auto eol=lf
+
+# Explicit binary files — no line-ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.pyc binary
+*.db binary

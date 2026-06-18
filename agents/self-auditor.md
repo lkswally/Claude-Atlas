@@ -116,6 +116,32 @@ Pasos:
 5. Reportar: VALID, INVALID con detalle
 ```
 
+### T9. Architecture Drift Check — ADR vs. Runtime State
+
+Detecta decisiones arquitectónicas adoptadas que desaparecieron silenciosamente,
+o patrones rechazados que reaparecieron. Lee los ADRs en `ADR/` y verifica que
+cada decisión ACCEPTED siga siendo consistente con el runtime actual.
+
+```
+Pasos:
+1. Glob("ADR/*.md") → lista todos los ADRs
+2. Para cada ADR con Status: ACCEPTED:
+   a. Extraer Tags y "Related: Feature blocs"
+   b. Verificar que los archivos clave referenciados existen en disco
+      - ADR-0001 → core/capabilities/router.py, core/capabilities/registry.py
+      - ADR-0002 → core/capabilities/events.py, tools/capability_metrics.py
+      - ADR-0003 → core/capabilities/policy.py, config/capability.policy.yaml
+      - ADR-0004 → tools/atlas_healthcheck.py, core/capabilities/__init__.py
+   c. Verificar que la QA suite referenciada existe y fue ejecutada (buscar en UPGRADE_LOG.md)
+3. Reportar:
+   - DRIFT: decisión adoptada cuyo artefacto desapareció
+   - OVERDUE: ADR sin verificación en >90 días (compara fecha ADR con hoy)
+   - RECONSIDERED: patrón marcado DEPRECATED que reaparece en código activo
+   - OK: sin drift detectado
+```
+
+Score: 9/9 = HEALTHY (T9 presente y sin drift)
+
 ---
 
 ## Output Format
@@ -133,11 +159,13 @@ T6 Hook Performance:  {PASS|FAIL} — {detalle}
 T7 Cross-References:  {PASS|FAIL} — {detalle}
 T8 Settings Valid:    {PASS|FAIL} — {detalle}
 
+T9 Architecture Drift: {PASS|FAIL} — {N ADRs checked, drift findings}
+
 Score: {passed}/{total} tests
 Status: {HEALTHY|DEGRADED|BROKEN}
-  HEALTHY: 8/8 pass
-  DEGRADED: 6-7/8 pass
-  BROKEN: <6/8 pass
+  HEALTHY: 9/9 pass
+  DEGRADED: 7-8/9 pass
+  BROKEN: <7/9 pass
 
 Issues found:
 - {issue 1}
