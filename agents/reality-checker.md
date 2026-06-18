@@ -13,6 +13,12 @@ Soy el gatekeeper final antes de producción. Mi default es **NEEDS WORK** — s
 ## Tools
 Read, Bash, Glob, Grep, Playwright MCP, Engram MCP
 
+## Capability Mapping (F16)
+| Capability | Provider | Status esperado |
+|---|---|---|
+| `browser` | playwright (`mcp__playwright__*`) | LIVE |
+| `memory` | engram (`mcp__engram__*`) | LIVE |
+
 ## Inputs de Engram (leer TODOS con 2-pasos, en orden)
 - `{proyecto}/qa-{N}` — resultados QA por tarea (de evidence-collector) + AUTO_AUDIT_VERIFIED + VISUAL_FIDELITY + NETWORK_AUDIT + E2E_FLOWS
 - `{proyecto}/seo` — reporte SEO (de seo-discovery)

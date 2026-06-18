@@ -286,7 +286,7 @@ mem_session_summary(
 | ux-architect | `{proyecto}/tareas` | `{proyecto}/css-foundation` |
 | ui-designer | `{proyecto}/css-foundation`, `{proyecto}/visual-direction` | `{proyecto}/design-system` |
 | security-engineer | `{proyecto}/tareas` | `{proyecto}/security-spec` |
-| frontend-developer | `{proyecto}/css-foundation`, `{proyecto}/visual-direction`, `{proyecto}/design-system`, `{proyecto}/security-spec`, `{proyecto}/tareas`, `codepen-vault/*` (consulta boveda), Context7 MCP (21st.dev, si `component_source: 21st.dev`) | `{proyecto}/tarea-{N}` |
+| frontend-developer | `{proyecto}/css-foundation`, `{proyecto}/visual-direction`, `{proyecto}/design-system`, `{proyecto}/security-spec`, `{proyecto}/tareas`, `codepen-vault/*` (consulta boveda), capability `documentation` (21st.dev, si `component_source: 21st.dev`) | `{proyecto}/tarea-{N}` |
 | mobile-developer | `{proyecto}/design-system`, `{proyecto}/tareas` | `{proyecto}/tarea-{N}` |
 | backend-architect | `{proyecto}/security-spec`, `{proyecto}/tareas` | `{proyecto}/tarea-{N}` |
 | rapid-prototyper | `{proyecto}/tareas` (la tarea específica) | `{proyecto}/tarea-{N}` |
@@ -375,7 +375,7 @@ modificacion_origen: ""           # "completado" — fase desde la que se inici�
 # Campos de estado del sistema
 backup_disk: ""                   # ruta al backup en disco (ver Dual-Write)
 recovered: false                  # true si esta sesion retomo tras crash/compactación
-qa_mode: "full"                   # "full" | "code-only" (si Playwright no disponible)
+qa_mode: "full"                   # "full" | "code-only" (si capability browser no está LIVE — resolve_capability("browser").status not in LIVE/CONFIG_ONLY)
 engram_degraded: false            # true si Engram tuvo fallas en esta sesion
 ```
 
@@ -889,7 +889,7 @@ intent_version: 1
    - Si no menciona ninguno → `component_source: "custom"` (default — todo se construye manual)
    - `component_source` NO es excluyente: frontend-developer puede consultar 21st.dev puntualmente aunque no sea el source principal
    
-   **21st.dev via Context7 MCP**: library ID `/websites/21st_dev_community_components`. frontend-developer lo consulta directamente — no necesita agente intermediario (a diferencia de CodePen que usa codepen-explorer).
+   **21st.dev via capability `documentation`** (provider: context7, library ID `/websites/21st_dev_community_components`): frontend-developer lo consulta directamente — no necesita agente intermediario (a diferencia de CodePen que usa codepen-explorer).
 
 5. Delega a **project-manager-senior**:
    - Pasa: spec del usuario (texto directo) + **stack decidido** + **estructura** (monorepo/single) + **`{proyecto}/intent` topic_key** (para que PM lea project_type + industry + audience y dimensione tareas apropiadamente)
@@ -1449,7 +1449,7 @@ Para **cada tarea** de la lista, en orden:
    DEVUELVE: Return Envelope Dev (ver seccion Return Envelope Standard)
    DESIGN_SYSTEM: {nothing-full | nothing-partial | custom | none} (si nothing-*, agregar linea siguiente)
    NOTHING_SCOPE: {lista de secciones} (solo si partial — el agente aplica Nothing SOLO a estas secciones)
-   COMPONENT_SOURCE: {21st.dev | codepen | custom} (si 21st.dev → frontend-developer consulta Context7 MCP para componentes animados/visuales)
+   COMPONENT_SOURCE: {21st.dev | codepen | custom} (si 21st.dev → frontend-developer usa capability `documentation` para componentes animados/visuales)
    VISUAL_DIRECTION: {resumen 1 línea de las elecciones clave — ej: "inmersivo + aurora bg + nav blur + animación inmersiva + dark"}
    ```
 

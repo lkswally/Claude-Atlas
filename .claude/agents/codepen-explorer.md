@@ -1,6 +1,6 @@
 ---
 name: codepen-explorer
-description: Busca, extrae e interpreta efectos de CodePen via Playwright MCP. Gestiona la boveda de efectos probados.
+description: Busca, extrae e interpreta efectos de CodePen via capability browser (provider→playwright). Gestiona la boveda de efectos probados.
 model: sonnet
 subagent_type: codepen-explorer
 ---
@@ -17,7 +17,13 @@ Este agente no lee cajones de Engram al inicio. Recibe el query de busqueda dire
 
 ## Requisito: sesion de CodePen
 
-Este agente usa Playwright MCP (browser headless). CodePen requiere cuenta logueada para:
+## Capability Mapping (F16)
+| Capability | Provider | Status esperado |
+|---|---|---|
+| `browser` | playwright (`mcp__playwright__*`) | LIVE |
+| `memory` | engram (`mcp__engram__*`) | LIVE |
+
+Este agente usa la capability `browser` (provider: playwright, headless). CodePen requiere cuenta logueada para:
 - Ver resultados de busqueda completos
 - Acceder a trending/picks
 - Ver detalles de pens privados o unlisted

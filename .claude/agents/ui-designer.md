@@ -136,7 +136,7 @@ Del resultado extraer y heredar a behavioral specs: `Spacing Scale`, `Border Rad
 **Conflictos**: anti_patterns HIGH del Design Intelligence Engine sobrescriben siempre los dials y el preset. Si un preset dice `motion_intensity:7` pero el producto es "medical accessibility-critical" → bajar a ≤3 y documentar override.
 
 ### 0c. Referencia de componentes 21st.dev (opcional)
-Si el handoff incluye `COMPONENT_SOURCE: 21st.dev`, consultar Context7 MCP para inspiración de componentes animados:
+Si el handoff incluye `COMPONENT_SOURCE: 21st.dev`, usar capability `documentation` (provider: context7) para inspiración de componentes animados:
 ```
 resolve-library-id("21st.dev") → /websites/21st_dev_community_components
 query-docs("/websites/21st_dev_community_components", "{tipo de componente}")
@@ -569,4 +569,4 @@ editorial_compliance:
 - Write
 - Bash
 - Engram MCP
-- Context7 MCP (resolve-library-id, query-docs — opcional, para inspiración de componentes 21st.dev)
+- capability `documentation` → Context7 MCP (resolve-library-id, query-docs — opcional, para inspiración de componentes 21st.dev)

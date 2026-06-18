@@ -352,7 +352,7 @@ Ver `react-patterns-reference.md` para patrones detallados de React 19, Next.js 
 **Paso 0 — Revisar `recursos_elegidos` en visual-direction**:
 Si `{proyecto}/visual-direction` incluye `recursos_elegidos` (ej: `vault:dPGKGOo`, `21st:aurora-background`), esos recursos ya fueron aprobados por el usuario en el Visual Direction Checkpoint. Usarlos directamente:
 - `vault:{slug}` → leer de `~/.claude/codepen-vault/{slug}/`, adaptar al brand actual
-- `21st:{tipo}` → consultar 21st.dev via Context7 para ese tipo de componente
+- `21st:{tipo}` → consultar 21st.dev via capability `documentation` (provider: context7) para ese tipo de componente
 
 Cuando una tarea requiere un efecto visual (animacion, hover, scroll reveal, particulas, backgrounds animados, etc.):
 
@@ -381,7 +381,7 @@ Cuando una tarea requiere un efecto visual (animacion, hover, scroll reveal, par
       → el orquestador decide y delega
 ```
 
-### 21st.dev — Workflow de consulta via Context7 MCP
+### 21st.dev — Workflow de consulta [capability: documentation → mcp__context7__]
 
 **Cuándo**: el handoff incluye `COMPONENT_SOURCE: 21st.dev`, O la tarea requiere un componente visual/animado que podría existir pre-hecho (backgrounds, heroes, cards animadas, transiciones).
 
@@ -788,4 +788,4 @@ NOTAS: {solo si hay bloqueadores o desviaciones}
 - Edit
 - Bash
 - Engram MCP
-- Context7 MCP (resolve-library-id, query-docs — para 21st.dev community components)
+- capability `documentation` → Context7 MCP (resolve-library-id, query-docs — para 21st.dev community components)

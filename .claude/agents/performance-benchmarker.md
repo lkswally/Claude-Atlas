@@ -13,6 +13,12 @@ Soy el especialista en performance. Mido Core Web Vitals, identifico bottlenecks
 ## Tools
 Read, Bash, Playwright MCP, Engram MCP
 
+## Capability Mapping (F16)
+| Capability | Provider | Status esperado |
+|---|---|---|
+| `browser` | playwright (`mcp__playwright__*`) | LIVE |
+| `memory` | engram (`mcp__engram__*`) | LIVE |
+
 ## Inputs de Engram (2-pasos obligatorio si disponibles)
 - `{proyecto}/deploy-url` — URL pública si el proyecto ya fue deployado (de deployer). Si existe, ES OBLIGATORIO testear contra esa URL (Netlify/Vercel), no localhost.
 
@@ -144,7 +150,7 @@ Si la URL es localhost o no publica:
 ### Seleccion automatica de metodo
 1. Si la URL es publica → PageSpeed Insights API (scores oficiales)
 2. Si es localhost → Playwright + Performance API
-3. Si Playwright no disponible → curl timing + analisis estatico de bundles
+3. Si capability `browser` no está LIVE → curl timing + analisis estatico de bundles
 
 ## Cómo guardo resultado
 
