@@ -29,7 +29,7 @@
 ### P0 — Must Have
 1. **Install automation** — `install/linux.sh` and `install/windows.md` are outdated (reference wrong clone URL). A working one-command install script for both platforms.
 2. **Secrets management** — currently tokens go in `.env.local` with no validation. Should have a `setup-tokens` command that validates each token before accepting it.
-3. **Full QA suite runner** — a single `python _qa/run_all.py` that runs all bloque-F* suites and reports overall pass/fail with timing.
+3. **Full QA suite runner** — `python tools/run_all.py` runs all bloque-F* suites and reports overall pass/fail with timing. ✅ Created in F22.
 4. **First-run experience** — after installation, `python tools/atlas_healthcheck.py` should guide the user through fixing any WARN/FAIL items.
 
 ### P1 — Should Have
@@ -74,7 +74,7 @@ A single `atlas` command that replaces the current manual incantations.
 
 ### F22 — Atlas CLI + Automated Regression Suite
 - `atlas` shell wrapper with all 6 commands above
-- `_qa/run_all.py`: discovers all `bloque-F*.py` files, runs them in parallel, reports totals
+- `tools/run_all.py`: discovers all `bloque-F*.py` files, runs them, reports totals
 - Exit code: 0 = all pass, 1 = any fail
 - GitHub Actions integration template
 

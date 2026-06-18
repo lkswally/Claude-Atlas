@@ -336,13 +336,13 @@ mcps:
   - id: context7
     name: "Context7 (Library Docs)"
     provider: "Upstash"
-    status: CONFIG_ONLY
+    status: LIVE
     atlas_capability: documentation
     config_scope: project
     live_tool_prefix: "mcp__context7__"
     config_file: ".mcp.json"
     config_file_path: "D:\\ProyectosIA\\.mcp.json"
-    last_confirmed_live: "2026-06-17"
+    last_confirmed_live: "2026-06-18"
     capabilities:
       - resolve_library_id
       - get_library_docs
