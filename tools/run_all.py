@@ -59,6 +59,11 @@ SUITE_TIMEOUTS: dict[str, int] = {
     "bloque-F15-playwright": 120,                    # playwright MCP startup takes time
     "bloque-F15-github": 120,                        # github MCP startup takes time
     "bloque-F15-notion": 120,                        # notion MCP startup takes time
+    "bloque-F17-agent-capability-migration": 120,   # imports dispatcher — slow cold start
+    "bloque-F18-capability-metrics": 120,            # imports dispatcher — slow cold start
+    "bloque-F19-capability-policy": 120,             # imports dispatcher — slow cold start
+    "bloque-F20-capability-contracts": 120,          # imports dispatcher — slow cold start
+    "bloque-F13-engram": 90,                         # engram MCP startup + DB check
     "bloque-F20-security-hooks": 120,               # spawns node processes for hook tests
     "bloque-F22-run-all": 600,                       # runs run_all.py --json internally multiple times
 }
