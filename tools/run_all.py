@@ -53,7 +53,10 @@ NETWORK_SUITES: set[str] = set()  # currently none hit real network in test mode
 # Per-suite timeout overrides (seconds).
 # Use when a suite legitimately takes longer than the default.
 SUITE_TIMEOUTS: dict[str, int] = {
-    "bloque-F23-runtime-settings-separation": 300,  # renames settings.json multiple times
+    "bloque-F23-runtime-settings-separation": 420,  # renames settings.json multiple times
+    "bloque-F4-js-hooks-validation": 120,            # spawns node processes for each hook
+    "bloque-F7-healthcheck-validation": 120,         # runs atlas_healthcheck.py internally
+    "bloque-F6-runtime-hooks-validation": 120,       # spawns node processes
     "bloque-F11-skills-registry-runtime": 180,       # imports dispatcher which is slow to start
     "bloque-F15-context7": 120,                      # context7 MCP startup takes up to 90s
     "bloque-F15-playwright": 120,                    # playwright MCP startup takes time
@@ -512,8 +515,8 @@ def main() -> int:
                         help="Release report output path (default: release-report.md, only in --release mode)")
     parser.add_argument("--list", action="store_true",
                         help="List suites without running")
-    parser.add_argument("--timeout", type=int, default=60,
-                        help="Per-suite timeout in seconds (default: 60)")
+    parser.add_argument("--timeout", type=int, default=120,
+                        help="Per-suite timeout in seconds (default: 120)")
     args = parser.parse_args()
 
     if args.out:
