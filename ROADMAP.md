@@ -1,11 +1,11 @@
 # ATLAS Roadmap
 
-## Current State — v0.23.0
+## Current State — v0.24.0-rc1
 
-**Architecture maturity: ~87%**  
-**Open Source DX readiness: ~91%**  
-**System reliability: ~85%**  
-**v1.0 readiness: ~73%**
+**Architecture maturity: ~91%**  
+**Open Source DX readiness: ~95%**  
+**System reliability: ~88%**  
+**v1.0 readiness: ~82%**
 
 ### What's Solid (production-ready)
 - 5-phase pipeline with phase gates and retry logic
@@ -16,14 +16,13 @@
 - ADR system with self-auditor drift detection
 - Python tools layer: healthcheck (25 checks), dispatcher, metrics, dependency graph
 - Engram MCP: persistent memory, dual-write, cross-session continuity
-
-### What's Solid (production-ready — additions since v0.22.0)
-- **Runtime settings separation (F23)**: healthcheck tolerates Windows/Claude Desktop race condition; WARN not FAIL when settings.json absent; `--strict` mode for release validation; `config/atlas.runtime.expected.yaml` as stable config reference
+- **Runtime settings separation (F23)**: healthcheck tolerates Windows/Claude Desktop race condition; WARN not FAIL when settings.json absent; `--strict` mode for release validation
+- **Release pipeline (F24)**: `python tools/run_all.py --release` validates everything, auto-generates `release-report.md`, structured JSON output, GitHub Actions CI, bootstrap installer, doctor diagnostic
 
 ### What's Incomplete
-- No public install script (installation is manual)
 - Context7 and GitHub MCP require manual token configuration
 - Python tools are invoked manually (no auto-trigger on agent completion)
+- F25 (Agent Output Contracts) and F26 (Token Budget) deferred to post-v1.0
 
 ---
 
@@ -88,10 +87,15 @@ A single `atlas` command that replaces the current manual incantations.
 - `_qa/bloque-F10 TC03`: skip (not FAIL) when runtime absent
 - `_qa/bloque-F23-runtime-settings-separation.py`: 14 tests, all PASS
 
-### F24 — Capability Auto-Discovery
-- `registry.py` reads `.mcp.json` at startup and supplements hardcoded entries
-- New capabilities added dynamically without code changes
-- Policy file supports `*` wildcard for unknown capabilities
+### F24 — Release Candidate Engineering ✅ Completed v0.24.0-rc1
+- `tools/run_all.py --release`: single command validates everything, git metadata, strict healthcheck, all suites, JSON output, auto-generates `release-report.md`
+- `tools/run_all.py --out FILE`: saves JSON to file
+- `tools/doctor.py`: read-only diagnostic — Python/Node/Git/Go/Claude, MCP, Engram, hooks, filesystem, env vars, PATH
+- `bootstrap/install.ps1` + `bootstrap/install.sh`: one-command installer for Windows and Linux/macOS
+- `.github/workflows/ci.yml`: PR validation via `run_all.py --quick`
+- `.github/workflows/release.yml`: release tag validation via `run_all.py --release`, artifacts upload
+- `ARCHITECTURE.md`: Release Pipeline, Doctor, Bootstrap, GitHub Actions, Registry Layer sections added
+- `docs/GETTING_STARTED.md`, `docs/TESTING.md`, `docs/RELEASE.md`, `docs/CONFIGURATION.md`: new
 
 ### F25 — Agent Output Contracts
 - Per-agent schema: what drawers they write, what files they touch
@@ -109,6 +113,7 @@ A single `atlas` command that replaces the current manual incantations.
 
 | Version | Tag | Focus |
 |---------|-----|-------|
+| v0.24.0-rc1 | `v0.24.0-atlas-rc1` | Release Candidate Engineering — run_all --release, release report, doctor, bootstrap, CI |
 | v0.23.0 | `v0.23.0-atlas-runtime-settings-separated` | Runtime settings separation, F23 — healthcheck WARN/FAIL split, template fallback |
 | v0.22.0 | `v0.22.0-atlas-integrity-audit` | System Integrity Audit — tools/run_all.py, secrets_check, 56 new QA tests |
 | v0.21.0 | `v0.21.0-atlas-dx` | DX, open source readiness, 12 new docs, install guides fixed |

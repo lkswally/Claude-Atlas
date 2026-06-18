@@ -200,6 +200,107 @@ Two mirrors are maintained in sync with the runtime directories:
 
 QA suite `bloque-F10-sot-drift.py` detects when the mirrors diverge. The self-auditor's T9 checks that all ACCEPTED ADRs still have their referenced artefacts on disk.
 
+## Release Pipeline
+
+The single official command to validate everything before tagging:
+
+```
+python tools/run_all.py --release
+```
+
+Execution flow:
+
+```
+run_all.py --release
+    │
+    ├─ git metadata (commit, tag, branch, dirty)
+    │
+    ├─ atlas_healthcheck.py --strict
+    │    25 checks: Node, Python, hooks, MCP, Engram, capabilities,
+    │    skills, projects, dispatcher, settings.json
+    │    Strict mode: settings.json absent = FAIL (not WARN)
+    │
+    ├─ _qa/bloque-F*.py suites (all, including live binaries)
+    │    Covers: hooks, settings, healthcheck, engram, MCP, envelope,
+    │            capabilities, security, skills, runtime, secrets,
+    │            dispatcher, F23 race condition, command audit
+    │
+    ├─ JSON output: run_all.json
+    │    { mode, total, passed, failed, skipped, elapsed, git, healthcheck, suites }
+    │
+    └─ release-report.md (auto-generated)
+         Version, commit, tag, date, duration, per-category results,
+         known risks, executive summary
+```
+
+### Release Report Format
+
+```
+release-report.md
+├── Header table (version, commit, tag, date, duration, status)
+├── Healthcheck section
+├── Runtime checks table (hooks, MCP, capabilities, security, skills…)
+├── Suites detail (per-suite pass/fail/time)
+├── Failures section (last 10 lines of output per failed suite)
+├── Known risks
+├── Pending
+└── Executive summary
+```
+
+## Doctor
+
+Diagnostic tool — read-only, never modifies anything:
+
+```
+python tools/doctor.py
+```
+
+Checks: Python version, Node.js, Git, Go, Claude CLI, GitHub CLI, Engram binary+DB,
+Playwright, PyYAML, .mcp.json, filesystem structure, hook syntax, settings.json,
+environment variables, PATH coverage, write permissions.
+
+Output: PASS/WARN/FAIL per check, final `ATLAS READY` or `ATLAS NOT READY`.
+
+## Bootstrap
+
+One-command installer that verifies prerequisites and configures ATLAS:
+
+```
+# Windows
+.\bootstrap\install.ps1
+
+# Linux / macOS
+bash bootstrap/install.sh
+```
+
+Checks Python ≥3.11, Node ≥18, Git, Go, Claude, PyYAML, Playwright, Engram,
+Context7, .mcp.json, .claude/ structure, PATH. Ends with `ATLAS READY` or
+`ATLAS NOT READY` with a punch list.
+
+## GitHub Actions (CI)
+
+```
+.github/workflows/
+├── ci.yml       — Pull requests: python tools/run_all.py --quick
+└── release.yml  — Version tags: python tools/run_all.py --release
+                   Uploads: release-report.md + run_all.json as artifacts
+```
+
+## Registry Layer
+
+```
+config/
+├── mcp.registry.yaml          — 21 MCP servers, status, tokens
+├── capability.policy.yaml     — 14 capability policies (ALLOW/WARN/BLOCK)
+├── atlas.runtime.expected.yaml — Expected hooks/MCPs + ownership model
+└── phase_playbook.json        — E2E flows required per pipeline phase
+
+tools/
+├── skills_registry.py         — 10 skills, 4 domains, usage logging
+├── projects_registry.py       — 5 projects (3 active), path validation
+└── mcp_registry.py            — MCP status resolver
+```
+
 ## Invariants
 
 These must hold at all times:
@@ -210,3 +311,5 @@ These must hold at all times:
 4. Every ACCEPTED ADR has its referenced files on disk
 5. `config/capability.policy.yaml` has an entry for every capability in the registry
 6. No agent file references a raw MCP tool prefix (use capability names)
+7. `python tools/run_all.py --release` exits 0 before any version tag is applied
+8. `release-report.md` is regenerated on every `--release` run and committed

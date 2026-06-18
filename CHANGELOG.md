@@ -4,6 +4,48 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [v0.24.0] — 2026-06-18 — Release Candidate Engineering
+
+### Problem Solved
+ATLAS needed a single official command to validate everything before tagging, automated CI, a one-command bootstrap, and a diagnostic doctor — converting ATLAS from a functional system into a reproducible, verifiable, publishable architecture.
+
+### Changes
+
+**P1/P2 — Release Pipeline + Release Report**
+- `tools/run_all.py`: added `get_git_metadata()` (commit/tag/branch/dirty), healthcheck always runs in `--release` mode (including `--json`), `generate_release_report()` auto-writes `release-report.md` on every `--release` run, `--out FILE` saves JSON to file, git metadata in JSON output
+
+**P3 — GitHub Actions**
+- `.github/workflows/ci.yml`: on PR/push to main, runs `python tools/run_all.py --quick --json`, uploads `run_all.json` as artifact
+- `.github/workflows/release.yml`: on version tags, runs `python tools/run_all.py --release`, uploads `release-report.md` + `run_all.json`, fails if any suite fails
+
+**P4 — Bootstrap**
+- `bootstrap/install.ps1`: Windows one-command installer — checks Python/Node/Git/Go/Claude, installs PyYAML+Playwright, verifies Engram+Context7+.mcp.json, runs healthcheck, reports `ATLAS READY` or `ATLAS NOT READY`
+- `bootstrap/install.sh`: Linux/macOS equivalent
+
+**P5 — Doctor**
+- `tools/doctor.py`: read-only diagnostic — Python/Node/Git/Go/Claude/GitHub CLI versions, Engram binary+DB, Playwright, key imports, .mcp.json, filesystem structure, hook syntax checks, settings.json, environment variables, PATH coverage, write permissions. JSON output with `--json`. Never modifies anything.
+
+**P6 — Architecture**
+- `ARCHITECTURE.md`: added sections for Release Pipeline, Release Report Format, Doctor, Bootstrap, GitHub Actions, Registry Layer. Added invariants 7+8 (release command must pass before tagging; release-report.md must be committed).
+
+**P7 — Developer Experience**
+- `docs/GETTING_STARTED.md`: new — prerequisites, bootstrap, pipeline activation, quick validation
+- `docs/TESTING.md`: new — full suite catalog, mode comparison table, JSON output structure, how to write a new suite
+- `docs/RELEASE.md`: new — release checklist, tagging procedure, tag integrity verification, versioning scheme, known stable WARNs
+- `docs/CONFIGURATION.md`: new — all config files documented, environment variables table, hook configuration guidance
+
+**P8 — Project State**
+- `CHANGELOG.md`: this entry
+- `ROADMAP.md`: F24 marked completed, version history updated
+
+### QA
+- `tools/doctor.py`: runs clean, no false positives
+- `bootstrap/install.ps1`: syntax verified
+- `.github/workflows/ci.yml`: YAML valid
+- `.github/workflows/release.yml`: YAML valid
+
+---
+
 ## [v0.23.0] — 2026-06-18 — Runtime Settings Separation
 
 ### Problem Solved
