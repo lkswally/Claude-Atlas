@@ -131,7 +131,7 @@ else:
 try:
     r = subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "tools/capability_metrics.py"), "--json"],
-        capture_output=True, text=True, timeout=10, cwd=str(PROJECT_ROOT)
+        capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT)
     )
     data = json.loads(r.stdout)
     if "total_resolutions" in data or "by_capability" in data:
@@ -145,7 +145,7 @@ except Exception as e:
 try:
     r = subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "tools/skills_registry.py"), "list"],
-        capture_output=True, text=True, timeout=10, cwd=str(PROJECT_ROOT)
+        capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT)
     )
     data = json.loads(r.stdout)
     if isinstance(data, list):
@@ -159,7 +159,7 @@ except Exception as e:
 try:
     r = subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "tools/secrets_check.py"), "--json"],
-        capture_output=True, text=True, timeout=10, cwd=str(PROJECT_ROOT)
+        capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT)
     )
     data = json.loads(r.stdout)
     required_keys = {"tokens", "ok", "missing_required"}

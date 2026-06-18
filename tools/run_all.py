@@ -68,7 +68,10 @@ SUITE_TIMEOUTS: dict[str, int] = {
     "bloque-F20-capability-contracts": 120,          # imports dispatcher — slow cold start
     "bloque-F13-engram": 90,                         # engram MCP startup + DB check
     "bloque-F20-security-hooks": 120,               # spawns node processes for hook tests
-    "bloque-F22-run-all": 600,                       # runs run_all.py --json internally multiple times
+    "bloque-F22-run-all": 2400,                      # runs run_all.py --json + --quick internally (shared, ~2 full runs)
+    "bloque-F22-command-audit": 180,                 # TC11/TC12 run Python tools with 30s timeout each
+    "bloque-F22-runtime-truth": 300,                 # reads large capability events log (can grow over time)
+    "bloque-F22-secrets-check": 180,                 # runs multiple Python tool subprocesses
 }
 
 # ---------------------------------------------------------------------------

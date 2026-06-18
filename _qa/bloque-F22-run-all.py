@@ -95,22 +95,43 @@ try:
 except Exception as e:
     FAIL("TC3 --list discovers suites", str(e))
 
-# TC4 — --json exits 0 or 1 (never 2)
+# --- Shared runs (avoid running the full suite 5 separate times) ---
+# Run --json once (== --quick with JSON output). Reuse result for TC4-TC6, TC11-TC14.
+# Run --quick once (for TC7 timing + TC8 exit code).
+_r_json = None
+_r_json_err = None
+_r_quick = None
+_r_quick_err = None
+_r_quick_elapsed = 0.0
+
 try:
-    r = run("--json", timeout=1800)
-    if r.returncode in (0, 1):
-        PASS("TC4 --json exits 0 or 1 (not 2)", f"returncode={r.returncode}")
-    else:
-        FAIL("TC4 --json exits 0 or 1", f"returncode={r.returncode}")
-except subprocess.TimeoutExpired:
-    FAIL("TC4 --json timeout", "exceeded 450s")
+    _r_json = run("--json", timeout=1800)
 except Exception as e:
-    FAIL("TC4 --json", str(e))
+    _r_json_err = e
+
+try:
+    _t0 = time.monotonic()
+    _r_quick = run("--quick", timeout=1800)
+    _r_quick_elapsed = time.monotonic() - _t0
+except subprocess.TimeoutExpired:
+    _r_quick_err = subprocess.TimeoutExpired([], 1800)
+    _r_quick_elapsed = 1800.0
+except Exception as e:
+    _r_quick_err = e
+
+# TC4 — --json exits 0 or 1 (never 2)
+if _r_json_err:
+    FAIL("TC4 --json exits 0 or 1 (not 2)", str(_r_json_err))
+elif _r_json.returncode in (0, 1):
+    PASS("TC4 --json exits 0 or 1 (not 2)", f"returncode={_r_json.returncode}")
+else:
+    FAIL("TC4 --json exits 0 or 1", f"returncode={_r_json.returncode}")
 
 # TC5 — --json output is valid JSON with required keys
 try:
-    r = run("--json", timeout=1800)
-    data = json.loads(r.stdout)
+    if _r_json_err:
+        raise _r_json_err
+    data = json.loads(_r_json.stdout)
     required = {"total", "passed", "failed", "suites", "mode"}
     missing = required - data.keys()
     if not missing:
@@ -118,14 +139,15 @@ try:
     else:
         FAIL("TC5 --json required keys", f"missing: {missing}")
 except json.JSONDecodeError as e:
-    FAIL("TC5 --json valid JSON", f"parse error: {e} | stdout[:200]={r.stdout[:200]}")
+    FAIL("TC5 --json valid JSON", f"parse error: {e}")
 except Exception as e:
     FAIL("TC5 --json", str(e))
 
 # TC6 — JSON total matches suite count
 try:
-    r = run("--json", timeout=1800)
-    data = json.loads(r.stdout)
+    if _r_json_err:
+        raise _r_json_err
+    data = json.loads(_r_json.stdout)
     total = data.get("total", 0)
     suite_count = len(data.get("suites", []))
     if total > 0 and total == suite_count:
@@ -138,34 +160,27 @@ except Exception as e:
 # TC7 — --quick runs in under 1800s (30 min)
 # F23 has a 420s override; other suites have 120s default (Python 3.14 + Windows
 # startup is slower). Total expected: 600-1200s on this machine.
-try:
-    start = time.monotonic()
-    r = run("--quick", timeout=1800)
-    elapsed = time.monotonic() - start
-    if elapsed < 1800:
-        PASS("TC7 --quick completes in under 1800s", f"{elapsed:.1f}s")
-    else:
-        FAIL("TC7 --quick under 1800s", f"took {elapsed:.1f}s")
-except subprocess.TimeoutExpired:
+if _r_quick_err and isinstance(_r_quick_err, subprocess.TimeoutExpired):
     FAIL("TC7 --quick timeout", "exceeded 1800s")
-except Exception as e:
-    FAIL("TC7 --quick", str(e))
+elif _r_quick_err:
+    FAIL("TC7 --quick", str(_r_quick_err))
+elif _r_quick_elapsed < 1800:
+    PASS("TC7 --quick completes in under 1800s", f"{_r_quick_elapsed:.1f}s")
+else:
+    FAIL("TC7 --quick under 1800s", f"took {_r_quick_elapsed:.1f}s")
 
 # TC8 — --quick exit code is 0
-try:
-    r = run("--quick", timeout=1800)
-    if r.returncode == 0:
-        PASS("TC8 --quick exit code 0 (all suites pass)")
-    else:
-        # Show which failed
-        detail = ""
-        for line in (r.stdout + r.stderr).splitlines():
-            if "[FAIL]" in line or "RESULTADO: FAIL" in line:
-                detail = line.strip()
-                break
-        FAIL("TC8 --quick exit code 0", f"returncode={r.returncode} {detail}")
-except Exception as e:
-    FAIL("TC8 --quick exit", str(e))
+if _r_quick_err:
+    FAIL("TC8 --quick exit", str(_r_quick_err))
+elif _r_quick.returncode == 0:
+    PASS("TC8 --quick exit code 0 (all suites pass)")
+else:
+    detail = ""
+    for line in (_r_quick.stdout + _r_quick.stderr).splitlines():
+        if "[FAIL]" in line or "RESULTADO: FAIL" in line:
+            detail = line.strip()
+            break
+    FAIL("TC8 --quick exit code 0", f"returncode={_r_quick.returncode} {detail}")
 
 # TC9 — LIVE_BINARY_SUITES skipped in --quick (bloque-F13-engram-active)
 try:
@@ -189,10 +204,11 @@ try:
 except Exception as e:
     FAIL("TC10 --no-network", str(e))
 
-# TC11 — JSON has passed, failed, total
+# TC11 — JSON has passed, failed, total (reuse _r_json)
 try:
-    r = run("--json", timeout=1800)
-    data = json.loads(r.stdout)
+    if _r_json_err:
+        raise _r_json_err
+    data = json.loads(_r_json.stdout)
     all_keys = {"passed", "failed", "total"}
     if all_keys.issubset(data.keys()) and isinstance(data["passed"], int):
         PASS("TC11 JSON has passed/failed/total as integers")
@@ -201,10 +217,11 @@ try:
 except Exception as e:
     FAIL("TC11 JSON keys", str(e))
 
-# TC12 — JSON 'mode' is 'quick' by default
+# TC12 — JSON 'mode' is 'quick' by default (reuse _r_json)
 try:
-    r = run("--json", timeout=1800)
-    data = json.loads(r.stdout)
+    if _r_json_err:
+        raise _r_json_err
+    data = json.loads(_r_json.stdout)
     if data.get("mode") == "quick":
         PASS("TC12 JSON mode='quick' by default")
     else:
@@ -212,10 +229,11 @@ try:
 except Exception as e:
     FAIL("TC12 JSON mode", str(e))
 
-# TC13 — JSON suites array has per-suite results
+# TC13 — JSON suites array has per-suite results (reuse _r_json)
 try:
-    r = run("--json", timeout=1800)
-    data = json.loads(r.stdout)
+    if _r_json_err:
+        raise _r_json_err
+    data = json.loads(_r_json.stdout)
     suites = data.get("suites", [])
     if suites and all("suite" in s and "passed" in s for s in suites):
         PASS("TC13 JSON suites array has suite+passed per entry", f"{len(suites)} suites")
@@ -224,10 +242,11 @@ try:
 except Exception as e:
     FAIL("TC13 JSON suites", str(e))
 
-# TC14 — healthcheck key absent in --quick JSON (only in --release)
+# TC14 — healthcheck key absent in --quick JSON (only in --release) (reuse _r_json)
 try:
-    r = run("--json", timeout=1800)
-    data = json.loads(r.stdout)
+    if _r_json_err:
+        raise _r_json_err
+    data = json.loads(_r_json.stdout)
     hc = data.get("healthcheck")
     if hc is None:
         PASS("TC14 healthcheck absent in --quick JSON output")
