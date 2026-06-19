@@ -49,7 +49,7 @@ These are **enforced invariants**, not features you have to remember to use:
 - **Healthcheck** — one command validates ~24 aspects of system state.
 - **Test runner** — `run_all` with quick / release / full layers, JSON output, CI-ready.
 - **MCP registry** — every MCP declared with status, capability, and validation.
-- **Capability router** — agents call `resolve_capability("browser")`, not a raw MCP tool; the system picks the best provider with fallback.
+- **Capability router** — an abstraction layer for MCP integrations: `resolve_capability("browser")` returns the best available provider with a fallback chain and policy. It's available for new integrations and progressive migration — some agents still reference MCP tools directly (`mcp__…`), which the capability resolves to. Not a completed total migration.
 - **Engram memory** — decisions survive across sessions and compactions.
 - **Visual QA with Playwright** — screenshots, network, and console inspection.
 - **Docs with Context7** — current library documentation on demand.
@@ -237,6 +237,16 @@ Fail-open: if the registry or PyYAML is missing, queries return `[]` (no crash).
 - **Legacy** suites are registered but not all run in quick (kept for regression history).
 - **Skips** — suites whose external dependency is absent (e.g. Engram binary, Chromium, `.mcp.json` in clean CI) report `[SKIP]` and do **not** affect exit code.
 - **Warnings** — non-blocking notices (e.g. runtime-mutable files); they don't fail a gate.
+
+**When to run which (gate policy):**
+
+| Layer | When | Runs |
+|-------|------|------|
+| `--quick` | **Daily development** — fast feedback | ~30 suites, ~40s |
+| `--release` | **Before publishing / tagging** | active suites + healthcheck gate, ~60s |
+| `--full` | **Research / maintenance** | everything, including legacy suites |
+
+You do **not** need `--release` for everyday work — `--quick` is the default loop. CI runs Quick on every push to `main`; Release Validation runs only on tag push. Don't run the heavy layers on every edit.
 
 ---
 

@@ -20,13 +20,13 @@ Thank you for contributing. ATLAS has layered invariants — a change to one lay
 
 These hold at all times. A PR that violates any of these will not be merged:
 
-1. `python tools/atlas_healthcheck.py` exits 0 with all 25 checks PASS
+1. `python tools/atlas_healthcheck.py` exits 0 (HEALTHY) with no FAIL (documented WARNs are allowed)
 2. All `_qa/bloque-F*.py` suites exit 0
 3. `agents/` and `~/.claude/agents/` are identical (checked by F10 drift test)
 4. `hooks/` and `~/.claude/hooks/` are identical
 5. Every ACCEPTED ADR references files that exist on disk (checked by self-auditor T9)
 6. `config/capability.policy.yaml` has an entry for every capability in the registry
-7. No agent file references raw MCP tool prefixes — always use capability names
+7. New agent integrations should prefer capability names (`resolve_capability`) over raw MCP prefixes. Existing agents may still reference MCP tools directly (`mcp__…`) — the capability router is a progressive migration, not a completed one. Don't add *new* raw prefixes without reason.
 8. Every hook exits 0 on empty input (`echo '{}' | node ~/.claude/hooks/<name>.js`)
 
 ---

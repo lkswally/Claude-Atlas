@@ -34,9 +34,9 @@ ATLAS has 25 agents (1 orchestrator + 24 sub-agents) and 13 technical reference 
 
 An abstract name for a system function: `memory`, `browser`, `documentation`, `repository`, etc.
 
-Agents use capability names (not MCP names) when they need to do something. The **Capability Router** translates the capability name into the best available **Provider**.
+Agents resolve a capability name through the **Capability Router**, which translates it into the best available **Provider**. This is the recommended path for new integrations; some existing agents still reference MCP tools directly (`mcp__…`), which the capability resolves to — migration is progressive.
 
-The capability abstraction decouples agents from specific MCP implementations. If `playwright` is replaced by another browser MCP, agents don't change — only the registry does.
+The capability abstraction is designed to decouple agents from specific MCP implementations. The goal: when `playwright` is replaced by another browser MCP, agents that go through `resolve_capability` don't change — only the registry does. Agents that still embed raw MCP prefixes would need updating until they migrate.
 
 → See: [docs/CAPABILITIES.md](docs/CAPABILITIES.md)
 
@@ -272,6 +272,6 @@ Every ATLAS memory write uses a topic_key to prevent duplicates and enable upser
 
 ATLAS follows a feature-bloc versioning system: `v0.16.0-atlas-capability-router`, `v0.19.0-atlas-capability-policy`, etc.
 
-`v1.0.0` is planned once: install automation works end-to-end, first-run experience is smooth, three external developers have used it successfully, and all 25 healthcheck checks are green on a fresh install.
+`v1.0.0` is planned once: install automation works end-to-end, first-run experience is smooth, three external developers have used it successfully, and all healthcheck checks are green (no FAIL) on a fresh install.
 
 → See: [ROADMAP.md](ROADMAP.md)

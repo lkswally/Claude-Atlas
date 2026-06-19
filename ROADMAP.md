@@ -133,6 +133,12 @@ A single `atlas` command that replaces the current manual incantations.
 - Dispatcher tracks tokens per delegation
 - Auto-escalate to orchestrator when budget exceeded
 
+### v1.1 — Dispatcher Decomposition
+- **Known debt:** `tools/atlas_dispatcher.py` is monolithic (~3,366 LOC, the largest tool in the repo). It mixes envelope validation, phase gates, E2E flow checks, design-quality enforcement, and ~24 public helpers.
+- **Not a v1.0.0-rc2 blocker** — the dispatcher is stable, covered by the F24 test net (envelope/phase/contract suites green), and behaves correctly. This is maintainability debt, not a defect.
+- **Plan (v1.1):** split into focused modules (e.g. `dispatcher/envelope.py`, `dispatcher/phases.py`, `dispatcher/audit.py`) behind the same public API, one extraction at a time, each validated against the existing F24 suites so behavior is preserved.
+- **Precondition met:** the stable regression net required for a safe refactor was built in F24.
+
 ---
 
 ## Version History
