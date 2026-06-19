@@ -312,15 +312,95 @@ knowledge:
 
   - id: orchestrator-pipeline
     path: .claude/agents/refs/orchestrator-pipeline.md
-    category: agent-ref
+    category: pipeline
     load_policy: lazy
     owner: orchestrator
     required_at_boot: false
     trigger: pipeline_phase
+    tags: [pipeline, phases, phase-gates, index]
+    estimated_tokens: 673
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: pipeline INDEX (was 18K, now ~673t). Phase detail in orchestrator-pipeline-phase-*.md."
+
+  # --- F33 pipeline phase refs (from orchestrator-pipeline.md) --------------
+  - id: orchestrator-pipeline-phase-1
+    path: .claude/agents/refs/orchestrator-pipeline-phase-1.md
+    category: pipeline
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_1
+    tags: [pipeline, phase-1, planning, intent, stack]
     estimated_tokens: 0
     replacement_candidate: false
     duplication_risk: low
-    notes: "F32: full 5-phase pipeline + 2B (from orquestador.md). Largest ref."
+    notes: "F33: FASE 1 planning (verbatim)."
+
+  - id: orchestrator-pipeline-phase-2
+    path: .claude/agents/refs/orchestrator-pipeline-phase-2.md
+    category: pipeline
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_2
+    tags: [pipeline, phase-2, architecture, design, security]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: FASE 2 architecture (verbatim)."
+
+  - id: orchestrator-pipeline-phase-2b
+    path: .claude/agents/refs/orchestrator-pipeline-phase-2b.md
+    category: pipeline
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_2b
+    tags: [pipeline, phase-2b, assets, brand, creative]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: FASE 2B visual assets (verbatim)."
+
+  - id: orchestrator-pipeline-phase-3
+    path: .claude/agents/refs/orchestrator-pipeline-phase-3.md
+    category: pipeline
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_3
+    tags: [pipeline, phase-3, dev, qa, evidence, codepen]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: FASE 3 dev/QA loop (verbatim)."
+
+  - id: orchestrator-pipeline-phase-4
+    path: .claude/agents/refs/orchestrator-pipeline-phase-4.md
+    category: pipeline
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_4
+    tags: [pipeline, phase-4, seo, certification, performance]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: FASE 4 SEO + certification (verbatim)."
+
+  - id: orchestrator-pipeline-phase-5
+    path: .claude/agents/refs/orchestrator-pipeline-phase-5.md
+    category: pipeline
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_5
+    tags: [pipeline, phase-5, deploy, publish, git]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: FASE 5 publication (verbatim)."
 
   - id: orchestrator-operations
     path: .claude/agents/refs/orchestrator-operations.md
@@ -361,15 +441,56 @@ knowledge:
 
   - id: protocol-agent-contracts
     path: .claude/agents/refs/protocol-agent-contracts.md
-    category: agent-ref
+    category: contracts
     load_policy: lazy
     owner: subagents
     required_at_boot: false
     trigger: agent_contract
+    tags: [contracts, index]
+    estimated_tokens: 566
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: contracts INDEX (was 13K, now ~566t). Detail in protocol-agent-contract-*.md."
+
+  # --- F33 contract concern refs (from protocol-agent-contracts.md) ---------
+  - id: protocol-agent-contract-core
+    path: .claude/agents/refs/protocol-agent-contract-core.md
+    category: contracts
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: contract_core
+    tags: [contracts, design, qa, wiring, dev, frontend, backend]
     estimated_tokens: 0
     replacement_candidate: false
     duplication_risk: low
-    notes: "F32: per-agent contracts (QA cache, design, hardening, evidence, network/console) (from agent-protocol.md)."
+    notes: "F33: proactive saves, design intel, reality re-runs, QA cache, runtime wiring (verbatim)."
+
+  - id: protocol-agent-contract-enforcement
+    path: .claude/agents/refs/protocol-agent-contract-enforcement.md
+    category: contracts
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: contract_enforcement
+    tags: [contracts, skills, envelope, design, escalation, dev]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: skills/hard-rules, envelope, design hardening, auto-invoke, escalation (verbatim)."
+
+  - id: protocol-agent-contract-evidence
+    path: .claude/agents/refs/protocol-agent-contract-evidence.md
+    category: contracts
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: contract_evidence
+    tags: [contracts, qa, evidence, visual, network, console, testing]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F33: screenshot, visual evidence, invocation tracking, anti-loop, fidelity, console, network (verbatim)."
 
   - id: protocol-core-universal
     path: .claude/agents/refs/protocol-core-universal.md

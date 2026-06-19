@@ -132,6 +132,15 @@ suites:
     can_run_in_release: true
     notes: "Tests architecture intelligence analyzer (analysis-only). Spawns subprocess to architecture_audit CLI."
 
+  - id: bloque-F33-knowledge-resolver
+    path: _qa/bloque-F33-knowledge-resolver.py
+    layer: integration
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests knowledge resolver + second-layer decomposition (pipeline phases, contract concerns). Spawns subprocess to resolver CLI."
+
   - id: bloque-F11-skills-registry-runtime
     path: _qa/bloque-F11-skills-registry-runtime.py
     layer: unit
