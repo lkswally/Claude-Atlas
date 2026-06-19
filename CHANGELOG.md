@@ -4,6 +4,40 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [v0.24.1] — 2026-06-18 — F24 Complexity Reduction (P1–P4)
+
+### Problem Solved
+`run_all --release` producía 9 FAILs con timeouts de hasta 2400s por recursión subprocess y ausencia de taxonomía de tests. F24 P1-P4 atacó las causas raíz: registry declarativo, eliminación de recursión, corrección de bugs de clasificación.
+
+### Changes
+
+**P1 — Registry declarativo de tests**
+- `config/test.registry.yaml` (NEW): 65 suites (33 activas + 32 legacy), con layer/timeout/can_run_in_quick/can_run_in_release/status
+- `tools/test_registry.py` (NEW): loader con dataclass `Suite`, `TestRegistry.suites_for_mode()`, `get_suite()`, `detect_orphaned_suites()`, `detect_missing_files()`
+- `_qa/bloque-F24-test-registry.py` (NEW): 28 TCs, 0.7s, 100% PASS
+- `tools/run_all.py`: discovery y `should_run()` usan registry; timeout por suite desde registry
+
+**P2 — Eliminación de recursión subprocess**
+- `_qa/bloque-F22-run-all.py` (REWRITTEN): importlib en lugar de subprocess `run_all --quick`; 0.4s vs ~2400s budget
+- `_qa/bloque-F22-secrets-check.py` (REWRITTEN): importlib + API directa; 0.26s vs ~130s (13 subprocs)
+- `_qa/bloque-F22-runtime-truth.py` (MODIFIED): TC14 usa `read_events(tail=1000)`; 0.36s vs 42.5s
+- `core/capabilities/events.py` (MODIFIED): parámetro `tail: int | None` añadido a `read_events()`
+
+**P3 — Corrección de bugs (→ 30/30 PASS en --quick, 41s)**
+- `_qa/bloque-F7-healthcheck-validation.py`: guard `existed = SETTINGS_PATH.exists()` en tests 3-5; test_3 usa `--strict`; masking de `[FAIL]` en output anidado
+- `tools/run_all.py`: secondary FAIL check cambiado a `line.lstrip().startswith("[FAIL]")` (elimina false-positives)
+- `config/test.registry.yaml`: entrada duplicada F24 eliminada; evidence-layer override eliminado de `should_run()`
+
+**P4 — Estabilización --release (→ 32/33 PASS, 56.8s)**
+- `_qa/bloque-F13-engram-active.py`: T7 usa `warn()` en lugar de `fail()` cuando settings.json ausente (RUNTIME_MUTABLE)
+- `tools/run_all.py`: `sys.stdout/stderr.reconfigure(encoding="utf-8", errors="replace")` para Windows cp1252
+- `docs/F24-COMPLEXITY-AUDIT.md`: secciones P1+P2 Result y P4 Result añadidas
+
+### Known Issues
+- `run_all --release` produce 1 FAIL en `bloque-F23` TC14: `healthcheck --strict` con settings.json ausente cuando Claude Desktop no está activo. Clasificado como RUNTIME_MUTABLE, esperado, no bloquea rc1.
+
+---
+
 ## [v0.24.0] — 2026-06-18 — Release Candidate Engineering
 
 ### Problem Solved

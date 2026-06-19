@@ -88,14 +88,33 @@ A single `atlas` command that replaces the current manual incantations.
 - `_qa/bloque-F23-runtime-settings-separation.py`: 14 tests, all PASS
 
 ### F24 — Release Candidate Engineering ✅ Completed v0.24.0-rc1
-- `tools/run_all.py --release`: single command validates everything, git metadata, strict healthcheck, all suites, JSON output, auto-generates `release-report.md`
-- `tools/run_all.py --out FILE`: saves JSON to file
-- `tools/doctor.py`: read-only diagnostic — Python/Node/Git/Go/Claude, MCP, Engram, hooks, filesystem, env vars, PATH
-- `bootstrap/install.ps1` + `bootstrap/install.sh`: one-command installer for Windows and Linux/macOS
-- `.github/workflows/ci.yml`: PR validation via `run_all.py --quick`
-- `.github/workflows/release.yml`: release tag validation via `run_all.py --release`, artifacts upload
-- `ARCHITECTURE.md`: Release Pipeline, Doctor, Bootstrap, GitHub Actions, Registry Layer sections added
-- `docs/GETTING_STARTED.md`, `docs/TESTING.md`, `docs/RELEASE.md`, `docs/CONFIGURATION.md`: new
+
+**P1 ✅ — Registry declarativo de tests**
+- `config/test.registry.yaml`: 65 suites (33 activas + 32 legacy), layers, timeouts, modos
+- `tools/test_registry.py`: loader con API `suites_for_mode()`, `get_suite()`, `detect_orphaned_suites()`
+- `_qa/bloque-F24-test-registry.py`: 28 TCs, 0.7s, 100% PASS
+- `tools/run_all.py`: discovery y should_run() ahora usan registry como única fuente de verdad
+
+**P2 ✅ — Eliminación de recursión subprocess**
+- `_qa/bloque-F22-run-all.py`: reescrita via importlib (0.4s vs ~2400s budget)
+- `_qa/bloque-F22-secrets-check.py`: reescrita via importlib (0.26s vs ~130s)
+- `_qa/bloque-F22-runtime-truth.py` TC14: `read_events(tail=1000)` (0.36s vs 42.5s)
+- `core/capabilities/events.py`: parámetro `tail` añadido a `read_events()`
+
+**P3 ✅ — 30/30 PASS en --quick (41s)**
+- Bugs corregidos: F7 tests 3-5 (settings.json guard), secondary FAIL check false-positive, duplicate F24 registry entry, evidence-layer override erróneo, import path de test_registry
+
+**P4 ✅ — 32/33 PASS en --release (56.8s)**
+- `_qa/bloque-F13-engram-active.py`: T7 usa `warn()` para settings.json ausente (RUNTIME_MUTABLE)
+- `tools/run_all.py`: UTF-8 stdout fix (reconfigure encoding)
+- 1 FAIL residual documentado: healthcheck `--strict` con settings.json ausente — RUNTIME_MUTABLE, esperado, no bloquea rc1
+
+**Herramientas previas (desde F24-rc0)**
+- `tools/run_all.py --release`: comando único de validación, git metadata, release-report.md, JSON output
+- `tools/doctor.py`: diagnóstico read-only
+- `bootstrap/install.ps1` + `bootstrap/install.sh`: instalador one-command
+- `.github/workflows/ci.yml` + `release.yml`: CI/CD via GitHub Actions
+- `docs/GETTING_STARTED.md`, `docs/TESTING.md`, `docs/RELEASE.md`, `docs/CONFIGURATION.md`: nuevos
 
 ### F25 — Agent Output Contracts
 - Per-agent schema: what drawers they write, what files they touch

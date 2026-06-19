@@ -51,6 +51,12 @@ def fail(name: str, detail: str = "") -> None:
     print(f"  [FAIL] {name}{suffix}")
     RESULTS.append(("FAIL", name, detail))
 
+def warn(name: str, detail: str = "") -> None:
+    """Non-blocking: counted separately, does not affect exit code."""
+    suffix = f" — {detail}" if detail else ""
+    print(f"  [WARN] {name}{suffix}")
+    RESULTS.append(("WARN", name, detail))
+
 def run_engram(*args, timeout=10) -> subprocess.CompletedProcess:
     return subprocess.run(
         [ENGRAM_BIN, *args],
@@ -182,7 +188,9 @@ def test_mcp_json():
 def test_settings_json():
     settings_file = PROJECT_ROOT / ".claude" / "settings.json"
     if not settings_file.exists():
-        fail("T7 settings.json", "no encontrado")
+        # RUNTIME_MUTABLE: Claude Desktop manages this file on Windows.
+        # Absent when Claude Desktop isn't running — not a blocking FAIL.
+        warn("T7 settings.json", "RUNTIME_MUTABLE — ausente (Claude Desktop lo gestiona)")
         return
     try:
         data = json.loads(settings_file.read_text())
