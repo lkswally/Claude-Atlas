@@ -1,351 +1,49 @@
-# Sistema Vibecoding Híbrido
+# ATLAS — Sistema Vibecoding Híbrido
+
+> **Boot loader delgado (F30).** Este archivo es el contexto always-on. El detalle
+> operativo vive en referencias lazy — cargalas por demanda (mapa abajo). Nada de
+> gobernanza se perdió; solo se reubicó. Ante la duda, **leé la referencia
+> correspondiente antes de actuar** (escape hatch).
+
+## Identidad
+
+ATLAS es una capa OS sobre Claude Code / Claude Desktop: orquestador central
+(1 coordinador + 24 subagentes), registries declarativos, capability router,
+hooks de seguridad, healthcheck y release gates. Estado: **v1.0.0-rc2** (CI verde).
 
 ## Dos modos de trabajo
 
-Claude opera en dos modos distintos. El usuario elige explícitamente cuál usar:
+| Modo | Cuándo | Cómo activarlo |
+|------|--------|----------------|
+| **Claude normal** | Preguntas, fixes, revisiones, chat técnico | Por defecto — simplemente habla |
+| **Orquestador operativo** | Proyectos completos de software end-to-end | *"activa el pipeline"*, *"modo orquestador"*, *"nuevo proyecto completo: X"* |
 
-| Modo | Cuándo usarlo | Cómo activarlo |
-|------|--------------|----------------|
-| **Claude normal** | Preguntas, fixes puntuales, revisiones, chat técnico | Por defecto — simplemente habla |
-| **Orquestador operativo** | Proyectos completos de software de principio a fin | Di explícitamente: *"activa el pipeline"*, *"modo orquestador"*, o *"nuevo proyecto completo: X"* |
+En modo orquestador, Claude adopta `~/.claude/agents/orquestador.md` (pipeline de
+5 fases, delegación a subagentes, sin trabajo real inline). El dispatcher
+`tools/atlas_dispatcher.py` **enforza** Return Envelope, phase gates y E2E flows
+(detalle: `docs/atlas-operational-capabilities.md`).
 
-Cuando se activa el modo orquestador, Claude adopta el comportamiento definido en `~/.claude/agents/orquestador.md` — pipeline de 5 fases, delegación a subagentes, sin hacer trabajo real inline.
+## Principios no negociables
 
-**IMPORTANTE (Phase 0.6A)**: El dispatcher en `tools/atlas_dispatcher.py` ahora **ENFORZA** Return Envelope format, phase gates, y E2E flows obligatorios. Ya no es "recomendado" — es obligatorio para que un proyecto avance.
-
-## Arquitectura
-
-Este sistema usa un **orquestador central** (1 coordinador + 24 subagentes = 25 entidades). Los subagentes solo responden al orquestador, nunca entre sí.
+- **Regla de oro:** el orquestador NUNCA hace trabajo real (no lee/escribe código,
+  no analiza arquitectura). Solo coordina. Cada token inline es contexto perdido.
+- **Memoria o no pasó:** toda decisión significativa va a Engram con `topic_key`.
+- **Fail-open:** cada feature tiene `ATLAS_*_DISABLED=1`; nada de ATLAS rompe el
+  Claude base.
+- **QA antes de push:** ninguna tarea dev avanza sin evidence-collector PASS.
 
 ### Pipeline (5 fases)
 ```
 Fase 1  Planificación   → project-manager-senior
-Fase 2  Arquitectura    → ux-architect → ui-designer + security-engineer (ux-arch primero, luego los otros en paralelo)
-Fase 2B Assets visuales → brand-agent → (pausa aprobación) → logo-agent + image-agent (paralelo) → video-agent
+Fase 2  Arquitectura    → ux-architect → ui-designer + security-engineer
+Fase 2B Assets visuales → brand-agent → logo + image + video (opcional)
 Fase 3  Dev ↔ QA Loop  → dev-agents ↔ evidence-collector (3 reintentos)
-Fase 4  Certificación   → seo-discovery + api-tester + performance-benchmarker + reality-checker
+Fase 4  Certificación   → seo + api-tester + performance + reality-checker
 Fase 5  Publicación     → git (confirmación) → deployer (confirmación)
-
-Modo Modificación → análisis → planificación ligera → mini Fase 3+QA (para proyectos ya completados)
 ```
-
-### Model routing (Opus / Sonnet)
-
-| Modelo | Agentes | Criterio |
-|--------|---------|----------|
-| **Opus** | orquestador, project-manager-senior, security-engineer, game-designer, reality-checker | Decisiones arquitectonicas complejas, planificacion, threat modeling, certificacion final |
-| **Sonnet** | Todos los demas (20 agentes) | Ejecucion de tareas definidas, QA, utilidades, creativos |
-
-Cada agente tiene `model:` en su frontmatter YAML. El orquestador lo respeta al hacer spawn.
-
-### Regla de oro
-El orquestador **NUNCA** hace trabajo real (no lee código, no escribe código, no analiza arquitectura). Solo coordina. Cada token inline es contexto perdido.
-
-## Capacidades operativas post-1K.2 (paridad ~92-97% con benchmark)
-
-ATLAS pasó por 23 bloques de mejora consolidados en `main` el 2026-05-21. Capabilities reales operativas:
-
-### Pipeline + Enforcement (serie 1A)
-- **Phase Gates operativos** (1A.7) con anti-loop intra-sesión (1A.12)
-- **Pre-Return Audit** (1A.14) con 6 reglas auto-ejecutables (debugger, breakpoint, .only/.skip, secrets, console.*, TODO/FIXME)
-- **Audit Enforcement** (1A.15) — dispatcher re-ejecuta audit y rechaza envelopes que mienten
-- **File Change Declaration** (1A.16) — `archivos` declarado debe ser superset real de `git diff`
-
-### Engram MCP real (serie 1B)
-- **Strategy Pattern** (1B.1) con `disk_fallback` honesto
-- **MCP Real Connection** (1B.2) — JSON-RPC stdio inline, sin dependencia externa SDK
-- **Auto-boot en dispatcher** (1B.5) — Engram MCP activa al construir el dispatcher
-- **2-step pattern real** (1B.4) — `mem_search` + `mem_get_observation` para contenido completo
-- **ambiguous_project handling** (1B.3) — detecta y propaga `unknown_project`/`ambiguous_project` con `available_projects` + `recovery_token`
-
-### Skills + Design (serie 1C)
-- **UI-UX Pro Max Skill Enforcement** (1C.1) — `mode="design_strict"` exige `design_intelligence.queried=true` en envelope
-
-### Anti-Loop Coordination (serie 1D + 1I)
-- **Delegation Stop Rules** (1D.1) — flags `escalation_needed` / `pause_recommended` / `fresh_review_recommended`
-- **Anti-Loop INTER-Sesión** (1I.1) — append-only history detecta loops persistentes 3+ sesiones
-
-### Certificación + QA Loop (serie 1E)
-- **Reality-Checker Random Re-runs** (1E.1) — sampler reproducible con seed, detecta falsos PASS
-
-### Performance + Tokens (serie 1F)
-- **File Hash Caching para QA** (1F.1) — SHA256 + mtime + atomic write, ~70-80% token savings
-
-### Runtime Wiring + Enforcement (serie 1G)
-- **Documental** (1G.1) — runtime helpers wiring documentado en orquestador.md
-- **Runtime Invocation Tracking** (1G.2) — 15 helpers instrumentados con `_record_invocation()`, audit via `audit_invocations()`
-
-### Multi-Layer QA (serie 1H)
-- **Network Inspection** (1H.1) — detecta 5xx, mixed content, redirects >3, 4xx en assets críticos
-- **Console Log Analysis** (1H.2) — Uncaught, CORS, CSP, hydration mismatch, null access
-- **Visual Fidelity Checker** (1H.3) — compara palette/typography/mood/anti-patterns con tolerancia RGB
-
-### Visual Evidence Verification (serie 1J)
-- **Design Intelligence Re-verification** (1J.1) — re-invoca skill independientemente, detecta industrias/styles inventados
-- **Screenshot Hash Verification** (1J.2) — verifica archivo existente + SHA256 coincide, detecta evidencia fantasma y tampering
-
-### Auto-Audit Hook (serie 1K)
-- **QA Auto-Audit PostToolUse Hook** (1K.1) — al terminar subagent spawn, audita automáticamente helpers obligatorios y emite WARN si faltan
-
-### Design Criterion Hardening (serie 1L)
-- **Intent Classifier** (1L.1) — `classify_user_intent(prompt)` clasifica el pedido en 4 buckets (audit/redesign/implement/validate) con confidence high/medium/low. En `low` escala al usuario. Heurística pura ES+EN, sin LLM.
-- **design_quality bloqueante en design_strict** (1L.2) — HIGH findings rechazan envelope con error accionable (file:line + suggestion). Whitelist anti-disguise por `brand.style`: solo fonts canónicas en {brutalism, editorial-raw, neo-grotesque} se degradan. Colors / layouts / opacity / radius **nunca** se whitelistan.
-- **reference-driven-design obligatorio** (1L.3) — `brand.references` schema estricto (2-5 entries con `url`, `rationale`≥10 chars, `take[]` no-vacío). ui-designer DEBE citar `references_used` como subset estricto. NO se valida URL viva.
-- **Refuerzo editorial obligatorio** (1L.4) — `editorial_compliance` con 5 sub-campos verificables: asymmetric_section, typography_mix (anti-monotypo: display≠body), references_cited (subset de references_used), boilerplate_avoided, whitespace_intentional. Rationales ≥20 chars (anti-teatro).
-- **Cascada en design_strict**: 1C.1 → 1L.2 → 1L.3 → 1L.4 → 1K.3/1K.4 (si aplica). Backward compat estricto en otros modos.
-- **Rollback por capas**: param `enforce_*=False`, env vars `ATLAS_*_DISABLED=1`, git revert por sub-bloque.
-
-### Skills Registry + Hard Rules (serie F2)
-- **Skills Registry MVP** (F2.1) — catálogo declarativo en `.claude/skills.registry.yaml` (10 skills iniciales: design / qa / branding / orchestration). API en `tools/skills_registry.py`: `find_skills(domain, agent, applies_when)`, `get_skill(id)`, `list_domains()`, `validate_registry()`. Disable: `ATLAS_SKILLS_REGISTRY_DISABLED=1`. Fail-open: registry missing / PyYAML missing → retorna `[]`.
-- **Hard Rules MVP** (F2.1) — reglas declarativas en `.claude/hard-rules.json` (4 reglas iniciales: no-merge-pr25-without-pilots [block], no-force-push-main [block], warn-cross-repo-commit [warn], warn-skill-registry-unused [warn]). Hook PreToolUse `.claude/hooks/pipeline-rules.js`. Disable global: `ATLAS_HARD_RULES_DISABLED=1`. Bypass per-rule via env var documentada. Fail-open absoluto.
-- **Registry usage logging + hints** (F2.1.b) — `find_skills`/`get_skill`/`list_domains` registran cada invocación en `.claude/logs/skills-registry-usage.jsonl` (gitignored, append-only). CLI `python tools/skills_registry.py stats [--since=N]` muestra invocaciones / top skills / top filters. Hint mínimo de 1 línea en `ux-architect.md` + `evidence-collector.md` apuntando al registry. Disable: `ATLAS_SKILLS_USAGE_LOG_DISABLED=1`. Fail-open total. Permite medir si F2.1 aporta valor real a 14/30 días.
-- **Diferidos en F2.1** (no incluidos): Activation Contracts, Output Contracts por agente, Decision Gates con audit trail, Token Budgets — solo si surge caso concreto.
-- **Criterio explícito de éxito o fracaso** documentado en `.claude/agents/agent-protocol.md` § 4.20.4.
-
-### Contracts formales (serie F1)
-- **Envelope.v1 Pydantic** (F1.1 reducido) — modelo formal versionado en `tools/contracts/` con coerción bidireccional transparente. `validate_return_envelope` acepta dict legacy O instancia `Envelope` indistintamente. Per-mode validations (qa_strict / dev_strict / design_strict / standard) intactas.
-- **Backward compat estricto**: subagentes, hooks, tests existentes sin cambios. Mutaciones downstream (`_dispatcher_warnings`) preservadas vía referencia.
-- **Fail-open + disable runtime**: `ATLAS_PYDANTIC_CONTRACTS_DISABLED=1` o `tools/contracts/` ausente → path dict puro sin error.
-- **Diferidos** (F1.1.b/c/d futuros): `PhaseGate.v1`, `AuditTrail.v1`, `ClaimAudit.v1` — solo si surge caso concreto.
-
-### Tests operativos
-218+ tests en `_qa/` cubriendo todos los bloques. Regression sweep en main consolidado: **100% verde**.
-
-### Helpers públicos del dispatcher (20)
-`validate_return_envelope(mode)`, `verify_pre_return_audit`, `verify_declared_files`, `verify_design_intelligence`, `verify_design_intelligence_real`, `verify_screenshot_evidence`, `consult_design_intelligence`, `get_cajon_full`, `resolve_ambiguous_project`, `should_skip_qa`, `cache_qa_result`, `run_certification_re_runs`, `inspect_network_requests`, `analyze_console_messages`, `check_visual_fidelity`, `record_session_summary`, `check_cross_session_loops`, `audit_invocations`, `audit_helpers_for_agent`, `classify_user_intent` (1L.1), `verify_design_quality` (1L.2), `verify_references` (1L.3), `verify_editorial_compliance` (1L.4).
-
-### Modos de validate_return_envelope
-- `standard` — validación suave (creativos, utilidades)
-- `qa_strict` — evidence-collector con PASS/FAIL exclusivos + archivos no-vacíos
-- `dev_strict` — dev-agents con pre_return_audit + file declaration superset
-- `design_strict` — ux-architect/ui-designer con design_intelligence + 1L.2 + 1L.3 + 1L.4 (cascada completa)
-
-### Hooks operativos
-13 hooks pre-existentes + 2 nuevos (1D.1 `delegation-tracker.js`, 1K.1 `qa-auto-audit.js`).
-
-### Tag de rollback de consolidación
-`pre-1K2-consolidation` (apunta a `c8f7b9c`, estado pre-merge). Permite revertir toda la cascada si surge regresión crítica.
-
-## Dispatcher Operativo (Phase 0.6A+)
-
-El `tools/atlas_dispatcher.py` es el **motor de enforcement** que transforma la arquitectura documentada en sistema operativo. Automatiza:
-
-### 1. Validación de Return Envelope
-Todo subagente DEBE devolver respuesta en formato estándar (fase 3+):
-```
-STATUS: completado | fallido | PASS | FAIL
-TAREA: {descripción}
-ARCHIVOS: [lista]
-ENGRAM: {proyecto}/{cajon}
-VERIFICACION: layout | typo | config | none
-BLOQUEADORES: [lista opcional]
-NOTAS: {texto}
-```
-El dispatcher **rechaza respuestas mal formateadas** y pide al subagente re-enviar.
-
-### 2. Phase Gates (control de transiciones)
-Antes de avanzar a la siguiente fase, el dispatcher verifica:
-- ¿Existen todos los cajones requeridos en Engram/disco?
-- ¿Tienen el STATUS esperado?
-- ¿Se completaron todos los E2E flows?
-
-Si falta algo → FASE BLOQUEADA. No continuar hasta resolver bloqueadores.
-
-Comandos:
-```bash
-# Verificar si se puede transicionar
-python tools/atlas_dispatcher.py check-phase fase_1 fase_2
-
-# Retorna:
-# {
-#   "ok": true/false,
-#   "bloqueadores": [lista de bloqueadores si ok=false]
-# }
-```
-
-### 3. E2E Flows Obligatorios
-Definidos en `config/phase_playbook.json` para cada fase. Ejemplos:
-- **Fase 2**: ux-architect design review
-- **Fase 3**: evidence-collector QA después de cada tarea
-- **Fase 4**: seo-discovery + api-tester + performance-benchmarker + reality-checker
-
-El dispatcher no deja avanzar si un E2E flow requerido falla.
-
-### 4. Validación de Respuestas
-Comandos:
-```bash
-# Validar que la respuesta de un agente sigue el formato
-echo '{ "status": "completado", "tarea": "...", ... }' | python tools/atlas_dispatcher.py validate-envelope
-
-# Retorna:
-# { "ok": true/false, "errores": [...] }
-```
-
-## Design Quality Enforcement — Anti-Generic Detector (Phase 0.6A+)
-
-El `tools/design_quality_enforcement.py` detecta outputs "genéricos" (colores corporativos, fonts aburridas, layouts predecibles) y asigna severidades **SIN BLOQUEO**:
-
-### Severidad: HIGH → MEDIUM → LOW
-
-- **HIGH**: Degrada posture a "NEEDS WORK" (colores genéricos #3B82F6, fonts Inter/Roboto, layouts boilerplate)
-- **MEDIUM**: Warnings que se reportan (opacidades predecibles 0.8, border-radius Tailwind defaults 8px)
-- **LOW**: Notas sobre mejoras (duraciones 300ms, nombres componentes genéricos Button/Card)
-
-### Patrones Detectados
-
-| Categoría | Ejemplos | Severidad |
-|-----------|----------|-----------|
-| **Fonts** | Inter, Roboto, Open Sans, Arial | HIGH |
-| **Colors** | #3B82F6 (Tailwind), #EF4444 (corporativo) | HIGH |
-| **Paletas** | Gradiente púrpura, grises neutros planos | HIGH |
-| **Opacity** | 0.8 (hover), 0.5, 0.75 | MEDIUM |
-| **Border-radius** | 8px (Tailwind), 4px (Bootstrap), 12px (Shadcn) | MEDIUM |
-| **Durations** | 300ms, 500ms, 1s | LOW |
-| **Layouts** | grid-cols-3, max-w-1200px, mx-auto, justify-center items-center | LOW |
-| **Components** | Button, Card, Container, Box, Wrapper | LOW |
-
-### Comandos
-
-```bash
-# Analizar archivo individual
-python tools/design_quality_enforcement.py src/styles/button.css
-
-# Analizar directorio completo
-python tools/design_quality_enforcement.py src/ --json
-
-# Salida JSON para integración
-python tools/design_quality_enforcement.py src/ --json > design-report.json
-```
-
-### Reporte Ejemplo
-
-```
-Posture: NEEDS WORK (4 HIGH findings)
-Total findings: 12
-  HIGH: 4 (degrada posture)
-  MEDIUM: 5 (warnings)
-  LOW: 3 (notes)
-
-[HIGH] SEVERITY (Posture degraded):
-  - font: inter @ src/styles.css:5
-    -> Usar fonts con personalidad: Syne, Clash Display, Fraunces, etc.
-  - color: #3B82F6 @ src/button.css:14
-    -> Paleta con dominante + acento sharp
-```
-
-**Nota**: Sin bloqueo duro — es informativo. Los agentes deben leer el reporte y mejorar, pero pueden enviar sin arreglarlo (aún).
-
-## Gestión de contexto
-
-### Reglas de protección de contexto
-- **Handoffs mínimos**: subagentes devuelven solo STATUS + archivos + issues. Nunca código completo.
-- **Screenshots a disco**: QA guarda en `/tmp/qa/` y pasa solo rutas, nunca imágenes inline.
-- **No duplicar en contexto**: si la info está en Engram, pasar solo el topic_key, no el contenido.
-
-### Engram (memoria persistente)
-- **Lectura siempre en 2 pasos**: `mem_search` → `mem_get_observation` (nunca usar preview truncada)
-- **Escritura siempre con topic_key**: evita duplicados en reintentos
-- **Actualizar, no duplicar**: usar `mem_update(observation_id, nuevo)` si el cajón ya existe
-- **Dual-write critico**: `{proyecto}/estado` y `{proyecto}/tareas` se guardan SIEMPRE en Engram + disco (`{project_dir}/.pipeline/`)
-- **Proactive saves**: subagentes guardan descubrimientos no obvios con topic key `{proyecto}/discovery-{desc}`
-
-### Lectura Engram — bloque canonico (referencia para todos los agentes)
-```
-# Leer de Engram (2 pasos OBLIGATORIOS — nunca usar preview truncada)
-result = mem_search("{proyecto}/{cajon}")
-if result.observation_id:
-    full = mem_get_observation(result.observation_id)
-    # usar full.content — NUNCA result.preview
-else:
-    # cajon no existe — informar al orquestador
-```
-
-### Perfil personal del usuario
-El **orquestador** ejecuta `mem_context(scope="personal")` como **paso 0 del Boot Sequence**. Los hooks NO pueden llamar MCPs. En modo Claude normal, llamar `mem_context(scope="personal")` manualmente al inicio.
-
-### Resiliencia Engram
-- **Disk fallback**: si Engram falla → `{project_dir}/.pipeline/{cajon}.md`. Orquestador busca Engram primero, luego disco.
-- **Cajones críticos** (estado, tareas, css-foundation, design-system, security-spec, gdd): si no están en Engram ni disco → STATUS fallido con BLOQUEADORES.
-- **Retry counter**: el orquestador posee `intento_actual` (no el subagente), persistido en topic_key `{proyecto}/boot-state`.
-- **Boot Sequence** (Phase 0.6A+): Light vs Full mode basado en session_id + intento_actual. Light mode economiza ~70% tokens en retomas. Ver `orquestador.md` § "Boot Sequence"
-
-> **Detalles completos** (Boot Sequence light/full, variables de estado, continuidad entre sesiones, topic keys, pre-compact snapshot): ver `orquestador.md`
-
-## Hook System (13 hooks, auditados 2026-04-12 — 11/11 HEALTHY)
-
-Hooks interceptan tool calls en tiempo real. Configurados en `~/.claude/settings.json`. Scripts en `~/.claude/hooks/`.
-
-| Hook | Accion |
-|------|--------|
-| `block-no-verify` | **BLOQUEA** git --no-verify, rm -rf, git reset --hard, DROP TABLE, chmod 777, curl\|sh |
-| `config-protection` | **BLOQUEA** secrets (.env, .pem, .key). **ADVIERTE** configs de linting |
-| `quality-gate` | **ADVIERTE** debugger, .only(), @ts-ignore, secrets hardcodeados |
-| `console-log-warning` | **ADVIERTE** console.log/warn/error en produccion (ignora tests) |
-| `suggest-compact` | **ADVIERTE** cada ~50 tool calls (async) |
-| `pre-compact-engram` | **GUARDA** snapshot a disco antes de compactar (v2.2) |
-| `cost-tracker` | **REGISTRA** tool calls por categoria (async) |
-| `session-summary` | **LOGUEA** actividad en JSONL (async) |
-| `engram-sync` | **SINCRONIZA** Engram con GitHub al parar sesion (async, 60s) |
-| `session-start-context` | **CARGA** contexto de sesion anterior al iniciar |
-| `dual-write-sync` | **ESCRIBE** a .pipeline/{cajon}.md en paralelo a Engram (fallback si Engram timeout). Phase 0.6A+ |
-
-**Comportamiento**: Exit 2 = BLOCK | Exit 0 + stderr = WARN | Fail-open (nunca rompe el flujo)
-
-**Utilidades manuales**: `node ~/.claude/hooks/audit-system.js` (health check) | `cost-report.js` (uso de tools) | `learning-index.js` (discoveries)
-
-## Herramientas por agente
-
-| Agente | Tools principales |
-|--------|-------------------|
-| orquestador | Agent (spawn subagentes), Engram MCP |
-| project-manager-senior | Read, Write, Engram MCP |
-| ux-architect | Read, Write, Engram MCP |
-| ui-designer | Read, Write, Engram MCP |
-| security-engineer | Read, Write, Engram MCP |
-| frontend-developer | Read, Write, Edit, Bash, Engram MCP |
-| backend-architect | Read, Write, Edit, Bash, Engram MCP |
-| rapid-prototyper | Read, Write, Edit, Bash, Engram MCP |
-| mobile-developer | Read, Write, Edit, Bash, Engram MCP |
-| game-designer | Read, Write, Engram MCP |
-| xr-immersive-developer | Read, Write, Edit, Bash, Engram MCP |
-| evidence-collector | Read, Bash, Playwright MCP, Engram MCP |
-| reality-checker | Read, Bash, Glob, Grep, Playwright MCP, Engram MCP |
-| seo-discovery | Read, Write, Edit, Bash, Engram MCP |
-| api-tester | Read, Bash, Engram MCP |
-| performance-benchmarker | Read, Bash, Playwright MCP, Engram MCP |
-| brand-agent | Read, Write, Bash, Engram MCP |
-| image-agent | Read, Write, Bash, Engram MCP |
-| logo-agent | Read, Write, Bash, Engram MCP |
-| video-agent | Read, Write, Bash, Engram MCP |
-| git | Bash (git, gh), Engram MCP |
-| deployer | Bash (vercel, eas), Engram MCP |
-| codepen-explorer | Playwright MCP (browser_navigate, browser_evaluate, browser_snapshot, browser_click, browser_wait_for, browser_take_screenshot), Engram MCP |
-| self-auditor | Read, Bash, Glob, Grep, Engram MCP |
-| build-resolver | Read, Write, Edit, Bash, Grep, Glob, Engram MCP |
-
-## Protocolo compartido de subagentes
-- **Referencia completa**: `~/.claude/agents/agent-protocol.md`
-- Todo subagente DEBE seguir los patrones definidos ahí (Engram 2-pasos, topic_key obligatorio, Return Envelope estándar)
-- No duplicar esos patrones en los archivos de agente — solo referenciar
-
-### Coordinación cross-agent
-Ver tabla completa de inputs/outputs por agente en `orquestador.md` § "Qué cajón lee cada agente".
-
-## Referencias técnicas (archivos no-agente en `~/.claude/agents/`)
-| Archivo | Usado por | Contenido |
-|---------|-----------|-----------|
-| `agent-protocol.md` | todos los subagentes | Engram 2-pasos, Return Envelope, reglas universales |
-| `better-auth-reference.md` | backend-architect, frontend-developer, rapid-prototyper | Better Auth 1.5 + Supabase + Vercel |
-| `better-gsap-reference.md` | frontend-developer | GSAP Tier 3 para React/Next.js |
-| `react-patterns-reference.md` | frontend-developer | React 19, Next.js 15/16, Tailwind 4, Zustand 5 |
-| `redis-patterns-reference.md` | backend-architect | Cache-aside, Pub/Sub, HyperLogLog, cursor pagination |
-| `pocketbase-reference.md` | backend-architect | Boolean fields, rules, auth, sort, Docker, HTTPS |
-| `devops-vps-reference.md` | deployer | Mixed Content HTTPS, Oracle Cloud, nginx, Let's Encrypt |
-| `nothing-design-reference.md` | ux-architect, ui-designer, frontend-developer, brand-agent | Nothing Design System v3.0.0 — tokens, componentes, platform mapping |
-| `scroll-storytelling-reference.md` | frontend-developer | Lenis, GSAP ScrollTrigger pinning, snap, horizontal scroll, parallax |
-| `advanced-effects-reference.md` | frontend-developer | Lottie, Rive, cursor effects, magnetic buttons, micro-interactions |
-| `creative-coding-reference.md` | frontend-developer, xr-immersive-developer | p5.js, GLSL shaders, generative art, particle systems |
-| `reactive-audio-reference.md` | frontend-developer, xr-immersive-developer | Tone.js, Web Audio API, audio visualization, sound design |
+Model routing: **Opus** (orquestador, project-manager-senior, security-engineer,
+game-designer, reality-checker), **Sonnet** (los demás). Cada agente lo declara en
+su frontmatter. Detalle de pipeline: `.claude/agents/orquestador.md`.
 
 ## Reglas clave
 - Solo el **orquestador** guarda DAG State en Engram
@@ -361,184 +59,57 @@ Ver tabla completa de inputs/outputs por agente en `orquestador.md` § "Qué caj
 - **Bóveda CodePen** (`~/.claude/codepen-vault/`) — solo guarda efectos aprobados por el usuario. Engram tiene metadata buscable (`codepen-vault/{slug}`), disco tiene el código.
 - **Checkpoint post-efectos en Fase 3** — si se usaron efectos de CodePen, mostrar página completa al usuario antes de pasar a Fase 4 para que pueda pedir cambios.
 
-## Stack adaptable por proyecto
+## Seguridad esencial (hooks en tiempo real)
 
-El orquestador decide el stack en Fase 1 basándose en los requisitos. No hay stack fijo — se adapta:
+Los hooks (`.claude/hooks/`, en `~/.claude/settings.json`) interceptan tool calls.
+Comportamiento: Exit 2 = BLOCK | Exit 0 + stderr = WARN | fail-open.
+- `block-no-verify` **BLOQUEA** `git --no-verify`, `rm -rf`, `git reset --hard`, `DROP TABLE`, `chmod 777`, `curl|sh`.
+- `config-protection` **BLOQUEA** secrets (`.env`, `.pem`, `.key`).
+- `quality-gate` / `console-log-warning` **ADVIERTEN**.
 
-| Capa | Opciones disponibles | Preferido |
-|------|---------------------|-----------|
-| Frontend | Next.js, SvelteKit, Nuxt, Astro, Vite+React | Next.js (apps), Vite+React (landing) |
-| Backend | Hono, Express, Fastify | Hono (edge-ready, liviano) |
-| DB | PostgreSQL, SQLite, Supabase | PostgreSQL (prod), Supabase (MVP) |
-| ORM | Drizzle, Prisma | Drizzle (type-safe, edge) |
-| API type-safe | tRPC, oRPC, ts-rest | tRPC (si frontend+backend TS) |
-| Validación | Zod | Siempre |
-| State mgmt | Zustand, Jotai, Pinia | Zustand (React) |
-| Data fetching | TanStack Query | Siempre en apps con API |
-| Forms | react-hook-form + Zod | Siempre en apps con forms |
-| Jobs/Background | BullMQ, Inngest | BullMQ (si Redis), Inngest (serverless) |
-| Email | React Email + Resend | Siempre que haya transaccional |
-| Estructura | Single-repo, Monorepo (apps/+packages/) | Monorepo si frontend+backend separados |
-| Mobile | React Native + Expo SDK 52+, NativeWind 4, Expo Router | React Native + Expo (iOS + Android desde un repo) |
-| Animación | CSS transitions (Tier 1), Framer Motion (Tier 2), GSAP (Tier 3) | CSS → Framer → GSAP segun complejidad. Ver `better-gsap-reference.md` para Tier 3 |
-| Scroll avanzado | Lenis + GSAP ScrollTrigger | Lenis (storytelling, smooth scroll), GSAP solo (pinning simple). Ver `scroll-storytelling-reference.md` |
-| Animación vectorial | Lottie, Rive | Lottie (After Effects export), Rive (interactivo con state machines). Ver `advanced-effects-reference.md` |
-| Creative coding | p5.js, GLSL shaders, simplex-noise, Canvas 2D | p5.js (2D generativo), Three.js shaders (3D). Ver `creative-coding-reference.md` |
-| Audio reactivo | Tone.js, Web Audio API | Tone.js (completo), Web Audio nativa (simple). Ver `reactive-audio-reference.md` |
-| Data Viz | Recharts (React), Chart.js (vanilla), D3.js (custom) | Recharts |
-| Linting | ESLint + Stylelint | Siempre |
-| Game 2D | Phaser.js 3, PixiJS, Canvas API | Phaser.js (completo), PixiJS (renderer puro) |
-| Game 3D | Three.js, Babylon.js | Three.js |
-| Game Audio | Howler.js, Web Audio API | Howler.js |
-| Game Physics | Matter.js (2D, integrado Phaser), Cannon-es (3D) | Matter.js |
-| Level Design | Tiled (JSON/TMX), LDtk | Tiled |
-| Sprites | Aseprite (paid), LibreSprite/Piskel (FOSS) | Aseprite o LibreSprite |
-| Design System | Nothing Design (full/partial), custom, none | custom (default). Nothing si el usuario lo pide |
+Tabla completa de 13 hooks + utilidades: `docs/atlas-operational-capabilities.md`.
 
-## Nothing Design System (opcional)
+## Engram (memoria persistente) — esencia
 
-Nothing Design es un design system inspirado en Nothing Phone/tech (tipografía suiza, OLED blacks, dot-matrix). Se activa solo si el usuario lo pide.
+Lectura SIEMPRE en 2 pasos (`mem_search` → `mem_get_observation`, nunca preview
+truncada). Escritura SIEMPRE con `topic_key`. Dual-write crítico (Engram + disco
+`.pipeline/`). Protocolo completo, resiliencia y cajones críticos:
+**`docs/atlas-engram-reference.md`**.
 
-### Modos de uso
-| Modo | Cuándo | Efecto |
-|------|--------|--------|
-| `nothing-full` | "estilo Nothing", "Nothing design" | Todo el proyecto usa tokens/componentes Nothing |
-| `nothing-partial` | "hero estilo Nothing", "dashboard Nothing style" | Solo secciones específicas usan Nothing, el resto tiene design system propio |
-| `custom` | Default — sin mención de Nothing | ux-architect + ui-designer crean design system propio |
-| `none` | "sin design system" | Sin sistema de diseño formal |
+## Protocolo de subagentes
 
-### Referencia
-- **Archivo**: `~/.claude/agents/nothing-design-reference.md` — tokens, componentes, platform mapping
-- **Agentes que lo cargan**: ux-architect (§ Tokens), ui-designer (§ Componentes), frontend-developer (§ Platform Mapping), brand-agent (alineación de identidad)
-- **Activación**: el orquestador detecta en Fase 1 y propaga via `DESIGN_SYSTEM` + `NOTHING_SCOPE` en handoffs
-- **DAG State**: campo `design_system` y `nothing_scope` en stack
+Todo subagente sigue `~/.claude/agents/agent-protocol.md` (Engram 2-pasos,
+`topic_key` obligatorio, Return Envelope estándar). No duplicar esos patrones.
 
-### Modo parcial — Aislamiento CSS
-- Tokens Nothing bajo `.nd` o `[data-design="nothing"]`, NO en `:root`
-- Variables con prefijo `--nd-*` para evitar colisiones
-- Componentes con clases prefijadas `nd-btn`, `nd-card`, etc.
-- Anti-patterns Nothing (no shadows, no gradients) solo aplican dentro de `.nd`
+## Mapa de referencias (cargar por demanda)
 
-## Autenticación estándar — Better Auth
-- **Better Auth** es el sistema de auth por defecto para todos los proyectos nuevos
-- Referencia completa: `~/.claude/agents/better-auth-reference.md`
-- Agentes que lo usan: backend-architect (server), frontend-developer (client), rapid-prototyper (full-stack)
-- Solo usar Clerk/Supabase Auth/JWT custom si el proyecto ya los tiene implementados
+| Cuando necesites… | Leé |
+|-------------------|-----|
+| Por qué/ cómo carga el boot, escape hatch | `docs/atlas-boot-reference.md` |
+| Capacidades operativas, dispatcher, design-quality, hooks, tools por agente | `docs/atlas-operational-capabilities.md` |
+| Protocolo Engram completo | `docs/atlas-engram-reference.md` |
+| Release gates, RC, CI, warnings permitidos, estados (PASS/WARN/SKIP/…) | `docs/atlas-release-reference.md` |
+| Stack, Nothing DS, Better Auth, agentes creativos, best practices, **overrides Windows** | `docs/atlas-build-reference.md` |
+| Pipeline de 5 fases (comportamiento) | `.claude/agents/orquestador.md` |
+| Contrato de subagente | `.claude/agents/agent-protocol.md` |
+| Refs técnicas (GSAP, React, PocketBase, Redis, scroll, audio, creative coding…) | `.claude/agents/*-reference.md` |
 
-### Reglas críticas (validadas en producción)
-- **Migración NO es automática**: siempre agregar `"migrate": "npx @better-auth/cli migrate"` al `package.json` y ejecutarlo antes del primer `npm run dev`
-- **Next.js 16+**: usar `proxy.ts` con `export async function proxy()` — el archivo `middleware.ts` está deprecado
+> **Windows / Claude Desktop:** NO arrancar servers con `npm run dev` vía Bash —
+> usar `preview_start` del Claude Preview MCP. Reglas completas de Windows en
+> `docs/atlas-build-reference.md`.
 
-### Better Auth + Supabase + Vercel + Next.js 16
-- **Referencia completa con código y checklist**: `~/.claude/agents/better-auth-reference.md` § "Better Auth + Supabase + Vercel"
-- **Reglas clave**: postgres.js (no pg), Transaction Pooler (puerto 6543), `prepare: false`, dynamic imports en route handler, `toCleanRequest()` para Request limpio, `getSessionCookie` con `cookiePrefix`
+## Comandos mínimos
 
-## Agentes creativos — Assets visuales
-
-> El flujo completo (orden, gates, pausas, manejo de errores, cost tracking) está en `orquestador.md` § "FASE 2B". Esta sección solo tiene las reglas que aplican fuera del orquestador.
-
-- **Orden obligatorio**: brand-agent → (aprobación usuario) → logo-agent + image-agent (paralelo) → video-agent
-- **brand-agent SIEMPRE primero** — ningún agente creativo funciona sin `brand.json`
-- **NO auto-generar assets sin confirmación del usuario**
-- Cada agente creativo escribe SOLO su cajón Engram — sin race conditions
-- NO guardar binarios ni SVG completos en Engram — solo paths y metadata
-
-### Variables de entorno requeridas
-
-| Variable | Servicio | Costo |
-|----------|----------|-------|
-| `GEMINI_API_KEY` | Google AI Studio | ~$0.02-0.04/img (billing requerido) |
-| `HF_TOKEN` | HuggingFace | Gratis (free tier) |
-| `REPLICATE_API_TOKEN` | Replicate | ~$0.03-0.10/video |
-
-Al menos una key de imagen obligatoria (`GEMINI_API_KEY` o `HF_TOKEN`). Resolución: env var del sistema → `.env` del proyecto → `~/.claude/.env`
-
-## Best Practices Cross-Cutting (validadas en producción)
-
-> Las best practices de SEO, performance web, accesibilidad, WebGL safety y Mixed Content ya están integradas en los agentes que las aplican (frontend-developer.md, seo-discovery.md, evidence-collector.md, xr-immersive-developer.md). Esta sección solo contiene patterns que NO están en ningún agente.
-
-### Vercel — Sitios Estáticos
-- **`Cache-Control: max-age=0` es el default de Vercel**. Para browser caching, crear `vercel.json` con headers: `max-age=604800` para `/assets/**`, `max-age=3600` para `/js/**` y `/css/**`
-- **Security headers via `vercel.json`**: agregar X-Content-Type-Options (nosniff), X-Frame-Options (SAMEORIGIN), Referrer-Policy, Permissions-Policy bajo `"source": "/(.*)"`. Vercel no los agrega por defecto.
-- **Admin panel en sitio estático**: `X-Robots-Tag: noindex, nofollow` + `Cache-Control: no-store` para `/admin.html`
-
-### CSS Patterns (validados en producción)
-- **`::after` para background images**: pseudo-elemento con `position: absolute; inset: 0; z-index: 0; pointer-events: none`. Hijos con `position: relative; z-index: 1`.
-- **`max()` para secciones full-width centradas**: `padding: Xpx max(24px, calc((100vw - 1200px) / 2))` — reemplaza `max-width + margin: auto`.
-- **`translateX` en `position: fixed` puede fijar scroll horizontal**: usar `translateY` para animar toasts/modales fuera del viewport.
-- **Clases genéricas colisionan entre admin y sitio público**: usar IDs específicos o clases prefijadas para paneles admin.
-
-### Bundle Size Gates
-- **bundlewatch** en `package.json`: main < 250KB gzip, vendor < 150KB gzip, páginas < 50KB gzip. Gate en Fase 4.
-
-### QA & Certificación (reglas que NO están en agentes)
-- Testear contra **build de producción** (`npm run build && npm start`), no dev server
-- SEO Score mínimo 85/100 para certificación
-- **Playwright solo corre Chromium** — issues Safari/Webkit NO detectados. Para WebGL, aplicar safety patterns ANTES de Fase 4.
-
-### Referencias externas
-- **PocketBase**: `pocketbase-reference.md` | **DevOps VPS**: `devops-vps-reference.md`
-
-## Overrides Windows — Diferencias con Linux/Claude Code
-
-> **SOLO APLICA en Windows/Claude Desktop.** En Linux/Claude Code CLI, ignorar esta seccion completa.
-
-### Servidores de desarrollo (agentes: frontend-developer, backend-architect, rapid-prototyper, xr-immersive-developer)
-
-**NUNCA** arrancar servidores con `npm run dev` via Bash directamente.
-**SIEMPRE** usar `preview_start` del Claude Preview MCP.
-
-Pasos obligatorios:
-1. Crear o verificar `.claude/launch.json` en el directorio de trabajo con la configuracion del proyecto
-2. Llamar `preview_start` con el nombre definido en `launch.json`
-3. Usar `preview_logs` para verificar que arranco sin errores
-4. Pasar la URL (`http://localhost:{puerto}`) al agente de QA
-
-Formato de `.claude/launch.json` en Windows:
-```json
-{
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "nombre-proyecto",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "cd nombre-proyecto && npm run dev"],
-      "port": 3000
-    }
-  ]
-}
-```
-
-> **Motivo**: En Claude Desktop/Windows, `npm` no esta disponible directamente en el PATH del entorno de herramientas. `cmd /c` resuelve el PATH correctamente.
-
-### Comandos de una sola vez (instalar deps, migrar DB, build)
-Estos si se ejecutan via Bash normal:
 ```bash
-cd nombre-proyecto && npm install
-cd nombre-proyecto && npm run migrate
-cd nombre-proyecto && npm run build
+python tools/atlas_healthcheck.py          # salud del sistema (exit 0 = HEALTHY)
+python tools/run_all.py --quick            # validación de desarrollo (~30 suites)
+python tools/run_all.py --release          # gate antes de publicar/taggear
+python tools/secrets_check.py              # tokens configurados vs pendientes
 ```
 
-### Puertos en Windows
-- Matar procesos: `netstat -ano | findstr :PORT` + `taskkill /PID <pid> /F`
-- Linux equivalente: `lsof -ti:PORT | xargs kill -9`
+## Escape hatch
 
-### Next.js — Versiones
-- Usar **Next.js 15 o 16** (no 14)
-- Next.js 16+: `proxy.ts` en raiz del proyecto (no `middleware.ts`)
-
-### Preview verification — proporcionalidad
-
-El hook `stop` dispara `verification_workflow` cuando se edita código con un preview server activo. Aplicar con criterio según el tipo de cambio:
-
-| Tipo de cambio | Verificación requerida |
-|----------------|----------------------|
-| Layout, UI, estilos, lógica nueva | Workflow completo: snapshot → navigate → screenshot |
-| Texto/copy en estado visible (hero, nav, botones) | `preview_eval` único para confirmar el texto nuevo existe |
-| Typo en empty state / texto condicional | `preview_eval` único: `document.body.innerText.includes("texto_correcto")` — si retorna `true`, PASS sin navegación ni snapshot |
-| Cambio en archivo no-UI (config, tipos, API routes) | Saltar verificación completamente |
-
-**Regla clave**: un typo fix en un string estático NO requiere navegar, hacer snapshot ni tomar screenshot. Un solo `preview_eval` de búsqueda de texto es suficiente y correcto.
-
-## Herramientas de diseno
-- **Figma/FigJam**: Solo usar cuando el usuario comparte una URL de Figma o lo pide explicitamente
+Si vas a actuar y te falta el detalle operativo del caso (gobernanza, release,
+Engram, Windows, build), **leé primero la referencia del mapa** — no improvises
+desde memoria. CLAUDE.md tiene lo esencial; las referencias tienen las reglas
+completas.

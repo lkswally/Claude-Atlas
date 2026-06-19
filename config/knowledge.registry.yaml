@@ -34,14 +34,15 @@ knowledge:
     owner: core
     required_at_boot: true
     trigger: startup
-    estimated_tokens: 8700
+    estimated_tokens: 1700
     replacement_candidate: false
-    duplication_risk: high
+    duplication_risk: low
     notes: >
-      Auto-injected every session. ~88% is reference/conditional material (F28).
-      Primary F30 target: slim to a boot loader + index, move reference sections
-      to lazy refs. Duplicates Engram protocol / golden rule / pipeline with
-      orquestador.md and agent-protocol.md.
+      Slimmed in F30 from ~8700 to ~1700 tokens (-81%). Now a thin boot loader +
+      index: identity, modes, non-negotiable principles, hard rules (verbatim),
+      safety essentials, reference map, minimal commands, escape hatch. Reference
+      detail moved to docs/atlas-*-reference.md (lazy). Engram duplication removed
+      (essence inline + pointer to atlas-engram-reference.md).
 
   # --- Orchestrator + protocol (LAZY, large) -------------------------------
   - id: orquestador
@@ -194,3 +195,64 @@ knowledge:
     replacement_candidate: false
     duplication_risk: low
     notes: "Boot architecture audit feeding F29/F30. Read on demand."
+
+  # --- F30 lazy reference docs (moved out of CLAUDE.md) ---------------------
+  - id: atlas-boot-reference
+    path: docs/atlas-boot-reference.md
+    category: doc
+    load_policy: lazy
+    owner: core
+    required_at_boot: false
+    trigger: boot_detail
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F30: extended boot/load model + reference map + escape hatch. Refresh tokens via --scan."
+
+  - id: atlas-operational-capabilities
+    path: docs/atlas-operational-capabilities.md
+    category: doc
+    load_policy: lazy
+    owner: core
+    required_at_boot: false
+    trigger: operational_detail
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F30: capability history + dispatcher + design-quality + hooks + per-agent tools (moved from CLAUDE.md)."
+
+  - id: atlas-engram-reference
+    path: docs/atlas-engram-reference.md
+    category: doc
+    load_policy: lazy
+    owner: memory
+    required_at_boot: false
+    trigger: memory
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F30: single source of truth for Engram protocol (de-duplicated from CLAUDE.md)."
+
+  - id: atlas-release-reference
+    path: docs/atlas-release-reference.md
+    category: doc
+    load_policy: lazy
+    owner: qa
+    required_at_boot: false
+    trigger: release
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F30: release gates, RC status, CI policy, allowed warnings, states glossary."
+
+  - id: atlas-build-reference
+    path: docs/atlas-build-reference.md
+    category: doc
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: project_build
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F30: stack, Nothing DS, Better Auth, creative agents, best practices, Windows overrides (moved from CLAUDE.md)."
