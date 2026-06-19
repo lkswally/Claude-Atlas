@@ -35,7 +35,14 @@ ENGRAM_BIN = (
 
 PASS_COUNT = 0
 FAIL_COUNT = 0
+SKIP_COUNT = 0
 RESULTS = []
+
+# The Engram Go binary + DB are an optional local install. Absent in a clean CI
+# runner → the live probes (T1-T5, T8) SKIP instead of FAILing. They still run
+# fully when Engram is installed (Windows/Claude Desktop). Config checks (T6/T7)
+# always run.
+ENGRAM_AVAILABLE = bool(ENGRAM_BIN) and Path(ENGRAM_BIN).exists()
 
 def ok(name: str, detail: str = "") -> None:
     global PASS_COUNT
@@ -57,6 +64,14 @@ def warn(name: str, detail: str = "") -> None:
     print(f"  [WARN] {name}{suffix}")
     RESULTS.append(("WARN", name, detail))
 
+def skip(name: str, detail: str = "") -> None:
+    """Non-blocking: env dependency absent (e.g. CI). Does not affect exit code."""
+    global SKIP_COUNT
+    SKIP_COUNT += 1
+    suffix = f" — {detail}" if detail else ""
+    print(f"  [SKIP] {name}{suffix}")
+    RESULTS.append(("SKIP", name, detail))
+
 def run_engram(*args, timeout=10) -> subprocess.CompletedProcess:
     return subprocess.run(
         [ENGRAM_BIN, *args],
@@ -70,8 +85,8 @@ def run_engram(*args, timeout=10) -> subprocess.CompletedProcess:
 # T1: Binary ejecutable y versión correcta
 # ---------------------------------------------------------------------------
 def test_binary_version():
-    if not ENGRAM_BIN or not Path(ENGRAM_BIN).exists():
-        fail("T1 Binary version", f"no encontrado: {ENGRAM_BIN}")
+    if not ENGRAM_AVAILABLE:
+        skip("T1 Binary version", f"binario Engram ausente (CI/entorno limpio): {ENGRAM_BIN}")
         return
     try:
         r = run_engram("--version")
@@ -92,7 +107,10 @@ def test_binary_version():
 def test_db_exists():
     db = HOME / ".engram" / "engram.db"
     if not db.exists():
-        fail("T2 DB exists", f"no encontrada: {db}")
+        if not ENGRAM_AVAILABLE:
+            skip("T2 DB exists", f"DB Engram ausente (CI/entorno limpio): {db}")
+        else:
+            fail("T2 DB exists", f"no encontrada: {db}")
         return
     size_kb = db.stat().st_size // 1024
     if size_kb > 0:
@@ -108,8 +126,8 @@ VALIDATION_TITLE = "ATLAS F13 active validation test"
 VALIDATION_CONTENT = "F13 live MCP validation — bloque-F13-engram-active.py run"
 
 def test_save():
-    if not Path(ENGRAM_BIN).exists():
-        fail("T3 Save memory", "binary no disponible")
+    if not ENGRAM_AVAILABLE:
+        skip("T3 Save memory", "binario Engram ausente (CI/entorno limpio)")
         return
     try:
         r = run_engram("save", VALIDATION_TITLE, VALIDATION_CONTENT)
@@ -126,8 +144,8 @@ def test_save():
 # T4: search — recuperar la memoria guardada
 # ---------------------------------------------------------------------------
 def test_search():
-    if not Path(ENGRAM_BIN).exists():
-        fail("T4 Search memory", "binary no disponible")
+    if not ENGRAM_AVAILABLE:
+        skip("T4 Search memory", "binario Engram ausente (CI/entorno limpio)")
         return
     try:
         r = run_engram("search", "F13 active validation")
@@ -147,8 +165,8 @@ def test_search():
 # T5: stats — DB tiene al menos 1 memoria
 # ---------------------------------------------------------------------------
 def test_stats():
-    if not Path(ENGRAM_BIN).exists():
-        fail("T5 Stats", "binary no disponible")
+    if not ENGRAM_AVAILABLE:
+        skip("T5 Stats", "binario Engram ausente (CI/entorno limpio)")
         return
     try:
         r = run_engram("stats")
@@ -226,6 +244,11 @@ def test_healthcheck_engram():
         )
         if engram_check and engram_check["status"] == "PASS":
             ok("T8 Healthcheck ENGRAM_ACTIVE", engram_check.get("detail", "PASS"))
+        elif engram_check and not ENGRAM_AVAILABLE:
+            # Binary absent → healthcheck legitimately reports ENGRAM_FAIL_OPEN (WARN).
+            # Env dependency, not a release blocker → SKIP.
+            skip("T8 Healthcheck ENGRAM_ACTIVE",
+                 f"binario Engram ausente (CI/entorno limpio): {engram_check.get('detail','')}")
         elif engram_check:
             fail("T8 Healthcheck ENGRAM_ACTIVE",
                  f"{engram_check['status']}: {engram_check.get('detail','')}")
@@ -256,13 +279,15 @@ def main():
     test_settings_json()
     test_healthcheck_engram()
 
-    total = PASS_COUNT + FAIL_COUNT
+    total = PASS_COUNT + FAIL_COUNT + SKIP_COUNT
     print()
-    print(f"Total: {total} | PASS: {PASS_COUNT} | FAIL: {FAIL_COUNT}")
+    print(f"Total: {total} | PASS: {PASS_COUNT} | FAIL: {FAIL_COUNT} | SKIP: {SKIP_COUNT}")
     print()
 
-    if FAIL_COUNT == 0:
+    if FAIL_COUNT == 0 and SKIP_COUNT == 0:
         veredicto = "ACTIVE_LIVE"
+    elif FAIL_COUNT == 0 and SKIP_COUNT > 0:
+        veredicto = "ACTIVE_CONFIG_ONLY (live probes skipped — Engram binary ausente)"
     elif PASS_COUNT >= 6:
         veredicto = "ACTIVE_CONFIG_ONLY"
     else:
