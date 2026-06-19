@@ -59,48 +59,66 @@ def _meta(entry: dict, reason: str, score: int) -> dict:
     }
 
 
+def _score_term(term: str, e: dict) -> tuple[int, list[str]]:
+    """Score one query term against one entry. Returns (score, reasons)."""
+    eid = str(e.get("id", "")).lower()
+    cat = str(e.get("category", "")).lower()
+    trig = str(e.get("trigger", "")).lower()
+    tags = [str(t).lower() for t in (e.get("tags") or [])]
+    path = str(e.get("path", "")).lower()
+    notes = str(e.get("notes", "")).lower()
+
+    score = 0
+    reasons: list[str] = []
+    if term == eid:
+        score += 100; reasons.append("id exact")
+    elif term in eid:
+        score += 50; reasons.append("id match")
+    if term == cat:
+        score += 40; reasons.append("category exact")
+    elif term in cat:
+        score += 20; reasons.append("category match")
+    if term in trig:
+        score += 30; reasons.append("trigger match")
+    if term in tags:
+        score += 35; reasons.append("tag exact")
+    elif any(term in t for t in tags):
+        score += 18; reasons.append("tag match")
+    if term in Path(path).name:
+        score += 15; reasons.append("path match")
+    if term in notes:
+        score += 8; reasons.append("notes match")
+    return score, reasons
+
+
 def resolve_knowledge(query: str, registry: list[dict] | None = None, limit: int = 8) -> list[dict]:
     """
     Resolve a query to ranked knowledge refs (metadata only). Higher score = better.
-    Never raises; unknown query → []. Does NOT read file content.
+    Multi-word queries (e.g. "pipeline phase-1") are tokenized and scored per term;
+    entries matching MORE terms rank higher. Never raises; unknown query → [].
+    Does NOT read file content.
     """
     entries = registry if registry is not None else load_registry()
-    if not query:
+    if not query or not query.strip():
         return []
-    q = query.strip().lower()
+    terms = [t for t in query.strip().lower().split() if t]
     hits: list[dict] = []
 
     for e in entries:
-        eid = str(e.get("id", "")).lower()
-        cat = str(e.get("category", "")).lower()
-        trig = str(e.get("trigger", "")).lower()
-        tags = [str(t).lower() for t in (e.get("tags") or [])]
-        path = str(e.get("path", "")).lower()
-        notes = str(e.get("notes", "")).lower()
-
-        score = 0
-        reasons = []
-        if q == eid:
-            score += 100; reasons.append("id exact")
-        elif q in eid:
-            score += 50; reasons.append("id match")
-        if q == cat:
-            score += 40; reasons.append("category exact")
-        elif q in cat:
-            score += 20; reasons.append("category match")
-        if q in trig:
-            score += 30; reasons.append("trigger match")
-        if q in tags:
-            score += 35; reasons.append("tag exact")
-        elif any(q in t for t in tags):
-            score += 18; reasons.append("tag match")
-        if q in Path(path).name:
-            score += 15; reasons.append("path match")
-        if q in notes:
-            score += 8; reasons.append("notes match")
-
-        if score > 0:
-            hits.append(_meta(e, " + ".join(reasons), score))
+        total = 0
+        reasons: list[str] = []
+        matched_terms = 0
+        for term in terms:
+            s, rs = _score_term(term, e)
+            if s > 0:
+                matched_terms += 1
+                total += s
+                reasons.extend(rs)
+        if total > 0:
+            # Bonus for matching multiple distinct terms (more specific intent).
+            total += (matched_terms - 1) * 10
+            uniq_reasons = list(dict.fromkeys(reasons))
+            hits.append(_meta(e, " + ".join(uniq_reasons), total))
 
     hits.sort(key=lambda h: h["score"], reverse=True)
     return hits[:limit]

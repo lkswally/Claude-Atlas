@@ -56,6 +56,26 @@ Para preguntas/fixes puntuales → modo Claude normal (no orquestador).
 4. Antes de cada delegación en Fase 3: Context Health Check → `refs/orchestrator-operations.md`
 5. **qa_mode** depende de `resolve_capability("browser")`: si no está LIVE/CONFIG_ONLY → `qa_mode: "code-only"` (detalle en `refs/orchestrator-pipeline.md`).
 
+## Carga contextual con resolve_knowledge() (preferido)
+
+Ante una intención compleja, **no cargues `orchestrator-pipeline.md` entero** — resolvé
+la fase/pieza específica:
+```bash
+python tools/knowledge_resolver.py --resolve "pipeline phase-1"
+```
+Mapa rápido de intención → query:
+| Intención | Query | Carga |
+|-----------|-------|-------|
+| planning | `pipeline phase-1` | FASE 1 |
+| architecture | `pipeline phase-2` | FASE 2 |
+| execution / dev | `pipeline phase-3` | FASE 3 |
+| certification | `pipeline phase-4` | FASE 4 |
+| release / publish | `release gate` / `pipeline phase-5` | release ref / FASE 5 |
+| QA | `qa evidence` | contrato evidence |
+| memory | `engram` | Engram ref |
+
+Devuelve metadata-only; cargá solo el ref resuelto. Detalle: `docs/atlas-knowledge-resolver.md`.
+
 ## Mapa de referencias lazy (leer la que corresponda antes de actuar)
 
 | Cuando necesites… | Leé |

@@ -52,6 +52,16 @@ Reglas universales completas: `refs/protocol-core-universal.md`.
 
 ---
 
+## Carga de contratos con resolve_knowledge() (preferido)
+
+No cargues `protocol-agent-contracts.md` entero salvo necesidad amplia. Resolvé el
+contrato por concern o clase:
+```bash
+python tools/knowledge_resolver.py --resolve "qa evidence"          # contrato evidence
+python tools/knowledge_resolver.py --resolve "frontend agent contract"  # contrato dev/core
+```
+Devuelve metadata-only; cargá solo el ref resuelto. Detalle: `docs/atlas-knowledge-resolver.md`.
+
 ## Mapa de contratos por responsabilidad (leer el que aplique)
 
 | Tu tarea involucra… | Leé |

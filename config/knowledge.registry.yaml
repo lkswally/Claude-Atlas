@@ -261,6 +261,19 @@ knowledge:
     duplication_risk: low
     notes: "F30: stack, Nothing DS, Better Auth, creative agents, best practices, Windows overrides (moved from CLAUDE.md)."
 
+  - id: atlas-knowledge-resolver
+    path: docs/atlas-knowledge-resolver.md
+    category: doc
+    load_policy: lazy
+    owner: core
+    required_at_boot: false
+    trigger: resolve_knowledge
+    tags: [resolver, knowledge, routing, contract]
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F34: resolve_knowledge() contract — when/how to select refs by intent. vs resolve_capability."
+
   # --- F32 orchestrator refs (moved verbatim from orquestador.md) -----------
   - id: orchestrator-routing
     path: .claude/agents/refs/orchestrator-routing.md

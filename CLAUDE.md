@@ -81,10 +81,21 @@ truncada). Escritura SIEMPRE con `topic_key`. Dual-write crítico (Engram + disc
 Todo subagente sigue `~/.claude/agents/agent-protocol.md` (Engram 2-pasos,
 `topic_key` obligatorio, Return Envelope estándar). No duplicar esos patrones.
 
+## Knowledge Resolver (cómo elegir qué ref cargar)
+
+Antes de cargar un ref grande (pipeline, contratos), resolvé la pieza específica:
+```bash
+python tools/knowledge_resolver.py --resolve "<intención>"   # ej: "pipeline phase-1", "qa evidence"
+```
+Devuelve metadata-only (path + tokens + policy), nunca contenido — vos cargás el ref
+indicado. Detalle y mapa intención→query: `docs/atlas-knowledge-resolver.md`.
+Es a conocimiento lo que `resolve_capability()` es a MCPs.
+
 ## Mapa de referencias (cargar por demanda)
 
 | Cuando necesites… | Leé |
 |-------------------|-----|
+| Cómo elegir qué ref cargar (`resolve_knowledge`) | `docs/atlas-knowledge-resolver.md` |
 | Por qué/ cómo carga el boot, escape hatch | `docs/atlas-boot-reference.md` |
 | Capacidades operativas, dispatcher, design-quality, hooks, tools por agente | `docs/atlas-operational-capabilities.md` |
 | Protocolo Engram completo | `docs/atlas-engram-reference.md` |
