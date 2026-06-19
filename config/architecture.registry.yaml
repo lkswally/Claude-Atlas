@@ -1,0 +1,64 @@
+# ATLAS Architecture Registry — F31
+# Configuration for tools/architecture_audit.py — the "Architecture Intelligence"
+# analyzer. ANALYSIS ONLY: thresholds, weights, and inputs. Nothing here changes
+# runtime behavior; it tunes what the auditor flags.
+#
+# Refresh findings with: python tools/architecture_audit.py --report
+
+version: "1.0"
+updated: "2026-06-19"
+
+# --- Size thresholds (estimated tokens, bytes/4 heuristic) -----------------
+thresholds:
+  doc_warn_tokens: 6000        # a knowledge file above this is "large"
+  doc_high_tokens: 12000       # above this is "oversized" (decompose candidate)
+  always_on_budget_tokens: 2500  # CLAUDE.md should stay under this (F30 target)
+  duplication_min_files: 5     # keyword in >= N files = duplication candidate
+  mixed_responsibility_min: 6  # file touching >= N responsibility domains = mixed (god-file)
+  decompose_min_tokens: 12000  # decompose candidate if oversized AND mixed
+
+# --- Responsibility domains (keyword -> domain) ----------------------------
+# Used to estimate "mixed responsibilities": how many distinct domains a single
+# file spans. High count in one file = blurred separation of concerns.
+responsibility_domains:
+  boot: ["boot", "startup", "always_on", "index", "escape hatch"]
+  memory: ["engram", "topic_key", "mem_search", "mem_save", "dual-write"]
+  pipeline: ["fase ", "phase", "orquestador", "pipeline", "subagente", "dispatcher"]
+  qa: ["evidence-collector", "reality-checker", "qa", "test", "healthcheck"]
+  security: ["hook", "block-no-verify", "secrets", "config-protection"]
+  release: ["release", "ci", "tag", "rc1", "rc2", "gate"]
+  build: ["stack", "next.js", "better auth", "nothing", "vercel", "tailwind"]
+  capability: ["capability", "resolve_capability", "mcp", "registry"]
+
+# --- Architecture Score weights (penalty points per finding) ---------------
+# Score starts at 100; penalties subtract; clamped to [0, 100].
+score_weights:
+  oversized_file: 6           # per file over doc_high_tokens (hard signal)
+  large_file: 1               # per file over doc_warn_tokens (soft signal)
+  duplication_candidate: 1    # per doctrinal keyword spread (soft; vocabulary partly inherent)
+  mixed_responsibility: 0     # informational only — captured by decompose_candidate when it matters
+  decompose_candidate: 6      # large AND mixed = real god-file debt (hard signal)
+  unused_reference: 3         # per registry doc never referenced (orphan)
+  boot_dependency_risk: 12    # per broken/missing always-on dependency (critical)
+  obsolete_doc: 2             # per doc heuristically obsolete
+  always_on_over_budget: 10   # if always-on total exceeds budget
+
+# --- Inputs the auditor reads (for traceability in the report) -------------
+inputs:
+  knowledge_registry: config/knowledge.registry.yaml
+  test_registry: config/test.registry.yaml
+  mcp_registry: config/mcp.registry.yaml
+  projects_registry: config/projects.registry.yaml
+  adr_dir: ADR
+  reports:
+    - docs/F26-VIBECODING-PATTERN-AUDIT.md
+    - docs/F28-BOOT-ARCHITECTURE-AUDIT.md
+    - docs/F29-BOOT-PROFILER-REPORT.md
+    - docs/F30-BOOT-SLIMMING-REPORT.md
+
+# --- Obsolescence heuristics ----------------------------------------------
+obsolete:
+  # docs not referenced anywhere AND not a registered report/registry
+  flag_unreferenced_docs: true
+  # registry entries whose path no longer exists on disk
+  flag_missing_paths: true
