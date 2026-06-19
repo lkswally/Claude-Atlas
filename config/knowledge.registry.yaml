@@ -1,0 +1,196 @@
+# ATLAS Knowledge Registry — F29
+# Declarative catalog of knowledge files and how they should be loaded into context.
+# Purpose: drive the F30 boot-loader redesign from evidence, not guesses.
+#
+# This registry is DESCRIPTIVE (audit/observability), not enforcing. The boot
+# profiler (tools/boot_profiler.py) and a WARN-only healthcheck read it; nothing
+# changes runtime loading yet.
+#
+# load_policy values:
+#   always_on    — injected into every session (boot cost paid 100% of the time)
+#   lazy         — loaded on demand when a mode/agent/trigger needs it
+#   manual       — read by tools/CLI/CI, not into Claude's context by default
+#   runtime      — produced/consumed at runtime (logs, state)
+#   deprecated   — kept for history; should not load
+#   unknown      — not yet classified
+#
+# Fields per entry:
+#   id, path, category, load_policy, owner, required_at_boot, trigger,
+#   estimated_tokens, replacement_candidate, duplication_risk, notes
+#
+# NOTE: estimated_tokens uses the F28/F29 heuristic (bytes / 4). Refresh with:
+#   python tools/boot_profiler.py --scan
+
+version: "1.0"
+updated: "2026-06-19"
+
+knowledge:
+
+  # --- System contract (ALWAYS-ON) -----------------------------------------
+  - id: claude-md
+    path: CLAUDE.md
+    category: system
+    load_policy: always_on
+    owner: core
+    required_at_boot: true
+    trigger: startup
+    estimated_tokens: 8700
+    replacement_candidate: false
+    duplication_risk: high
+    notes: >
+      Auto-injected every session. ~88% is reference/conditional material (F28).
+      Primary F30 target: slim to a boot loader + index, move reference sections
+      to lazy refs. Duplicates Engram protocol / golden rule / pipeline with
+      orquestador.md and agent-protocol.md.
+
+  # --- Orchestrator + protocol (LAZY, large) -------------------------------
+  - id: orquestador
+    path: .claude/agents/orquestador.md
+    category: orchestrator
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: orchestrator_mode
+    estimated_tokens: 28700
+    replacement_candidate: true
+    duplication_risk: high
+    notes: >
+      Loaded only in orchestrator mode. ~70% premature: all 5 phases load even
+      when only phase 1 is active. F30 candidate to split core + per-phase refs.
+
+  - id: agent-protocol
+    path: .claude/agents/agent-protocol.md
+    category: agent-protocol
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: subagent_spawn
+    estimated_tokens: 27100
+    replacement_candidate: true
+    duplication_risk: high
+    notes: >
+      Loaded per subagent. ~75% is class-specific contracts (QA/design/dev) that
+      a given agent doesn't need. Duplicates Engram protocol with CLAUDE.md.
+
+  # --- Principal agent references (LAZY) ------------------------------------
+  - id: pipeline-reference
+    path: .claude/agents/pipeline-reference.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: phase_planning
+    estimated_tokens: 4800
+    replacement_candidate: false
+    duplication_risk: medium
+    notes: "Pipeline detail; loaded when planning phases."
+
+  - id: nothing-design-reference
+    path: .claude/agents/nothing-design-reference.md
+    category: agent-ref
+    load_policy: lazy
+    owner: design
+    required_at_boot: false
+    trigger: design_nothing
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Loaded only when Nothing Design System requested. Refresh tokens via --scan."
+
+  - id: better-auth-reference
+    path: .claude/agents/better-auth-reference.md
+    category: agent-ref
+    load_policy: lazy
+    owner: backend
+    required_at_boot: false
+    trigger: auth_project
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Loaded only for auth-bearing projects. Refresh tokens via --scan."
+
+  # --- Registries (MANUAL — read by tools/CI, not into context) ------------
+  - id: test-registry
+    path: config/test.registry.yaml
+    category: registry
+    load_policy: manual
+    owner: qa
+    required_at_boot: false
+    trigger: run_all
+    estimated_tokens: 4400
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Consumed by run_all/CI. Not injected into Claude context."
+
+  - id: mcp-registry
+    path: config/mcp.registry.yaml
+    category: registry
+    load_policy: manual
+    owner: integrations
+    required_at_boot: false
+    trigger: capability_resolve
+    estimated_tokens: 5100
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Consumed by mcp_registry tool / capability router."
+
+  - id: projects-registry
+    path: config/projects.registry.yaml
+    category: registry
+    load_policy: manual
+    owner: orchestrator
+    required_at_boot: false
+    trigger: project_resume
+    estimated_tokens: 2100
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Consumed by projects_registry tool / healthcheck."
+
+  - id: skills-registry
+    path: .claude/skills.registry.yaml
+    category: registry
+    load_policy: manual
+    owner: skills
+    required_at_boot: false
+    trigger: skill_lookup
+    estimated_tokens: 1300
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Consumed by skills_registry tool. Not always-on."
+
+  # --- Reports / docs (MANUAL) ---------------------------------------------
+  - id: f25-integral-validation
+    path: docs/F25-INTEGRAL-VALIDATION.md
+    category: doc
+    load_policy: manual
+    owner: docs
+    required_at_boot: false
+    trigger: audit_review
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Validation report. Read on demand. Refresh tokens via --scan."
+
+  - id: f26-vibecoding-pattern-audit
+    path: docs/F26-VIBECODING-PATTERN-AUDIT.md
+    category: doc
+    load_policy: manual
+    owner: docs
+    required_at_boot: false
+    trigger: audit_review
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "External pattern audit. Read on demand. Refresh tokens via --scan."
+
+  - id: f28-boot-architecture-audit
+    path: docs/F28-BOOT-ARCHITECTURE-AUDIT.md
+    category: doc
+    load_policy: manual
+    owner: docs
+    required_at_boot: false
+    trigger: audit_review
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "Boot architecture audit feeding F29/F30. Read on demand."

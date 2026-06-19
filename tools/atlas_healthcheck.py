@@ -488,6 +488,81 @@ def check_skills_registry() -> None:
              f"{len(valid)} skills, dominios: {domains}")
 
 
+def check_knowledge_registry() -> None:
+    """
+    Knowledge Registry (F29): catalogo de archivos de conocimiento + load_policy.
+
+    WARN-only por disenio (F29.5) — es observabilidad para guiar F30, NO debe
+    bloquear release. Verifica: existe, campos minimos, paths criticos en disco,
+    load_policy valido, y las invariantes de politica (CLAUDE.md always_on,
+    orquestador/agent-protocol lazy).
+    """
+    registry_path = PROJECT_ROOT / "config" / "knowledge.registry.yaml"
+
+    try:
+        import yaml  # type: ignore[import]
+    except ImportError:
+        WARN("Knowledge registry", "PyYAML no instalado — no se puede validar")
+        return
+
+    if not registry_path.exists():
+        WARN("Knowledge registry", "config/knowledge.registry.yaml no encontrado (F29)")
+        return
+
+    try:
+        data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    except Exception as e:
+        WARN("Knowledge registry", f"YAML invalido: {e}")
+        return
+
+    entries = data.get("knowledge", []) if isinstance(data, dict) else []
+    if not isinstance(entries, list) or not entries:
+        WARN("Knowledge registry", "lista 'knowledge' vacia o ausente")
+        return
+
+    VALID_POLICIES = {"always_on", "lazy", "manual", "runtime", "deprecated", "unknown"}
+    REQUIRED = ("id", "path", "category", "load_policy")
+    by_path = {}
+    issues = []
+
+    for e in entries:
+        if not isinstance(e, dict):
+            issues.append("entrada no-dict")
+            continue
+        miss = [k for k in REQUIRED if k not in e]
+        if miss:
+            issues.append(f"{e.get('id', '?')}: faltan {miss}")
+            continue
+        by_path[str(e["path"]).replace("\\", "/")] = e
+        if e["load_policy"] not in VALID_POLICIES:
+            issues.append(f"{e['id']}: load_policy invalido '{e['load_policy']}'")
+        # paths criticos deben existir en disco
+        if not (PROJECT_ROOT / e["path"]).exists():
+            issues.append(f"{e['id']}: path no existe ({e['path']})")
+
+    # Invariantes de politica (F29.3)
+    invariants = {
+        "CLAUDE.md": "always_on",
+        ".claude/agents/orquestador.md": "lazy",
+        ".claude/agents/agent-protocol.md": "lazy",
+    }
+    for path, expected in invariants.items():
+        ent = by_path.get(path)
+        if not ent:
+            issues.append(f"{path} no registrado")
+        elif ent.get("load_policy") != expected:
+            issues.append(f"{path} deberia ser {expected}, es {ent.get('load_policy')}")
+
+    # F29.5: WARN-only — nunca FAIL (no bloquea release). PASS si todo correcto.
+    if issues:
+        WARN("Knowledge registry",
+             f"{len(entries)} entradas; {len(issues)} observacion(es): {'; '.join(issues[:4])}"
+             + (" ..." if len(issues) > 4 else ""))
+    else:
+        PASS("Knowledge registry",
+             f"{len(entries)} entradas, invariantes de politica OK, paths criticos en disco")
+
+
 def check_projects_registry() -> None:
     """Projects registry: existe, es YAML valido y proyectos activos tienen paths en disco."""
     registry_path = PROJECT_ROOT / "config" / "projects.registry.yaml"
@@ -974,6 +1049,7 @@ def run_all() -> int:
     check_snapshots_dir()
     check_hard_rules()
     check_skills_registry()
+    check_knowledge_registry()
     check_projects_registry()
     check_engram()
     check_mcp_registry()
