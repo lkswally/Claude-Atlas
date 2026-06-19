@@ -2,293 +2,324 @@
 
 > **Give Claude a nervous system.**
 
-ATLAS is not a chatbot wrapper. It's not a prompt template. It's not another collection of agent definitions.
-
-ATLAS is an **operating system layer** built on top of Claude that transforms it into a structured, disciplined, multi-agent engineering team — with memory, security enforcement, capability abstractions, quality gates, and full observability.
-
-You describe what you want to build. ATLAS plans it, architects it, builds it with visual QA, certifies it, and deploys it — without you writing a single line of code.
+[![CI](https://github.com/lkswally/Claude-Atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/lkswally/Claude-Atlas/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/lkswally/Claude-Atlas?include_prereleases)](https://github.com/lkswally/Claude-Atlas/releases)
 
 ---
 
-## The Problem
+## 1. What ATLAS Is
 
-Claude is extraordinarily capable. But raw Claude has no memory between sessions, no team coordination, no security enforcement, no quality gates, no deployment pipeline, and no way to reliably build a complete software project without constant human steering.
+ATLAS is an **operating framework for AI-assisted software development** — not an AI model.
 
-Every developer who has tried to build something serious with Claude has hit the same wall:
+It runs **on top of** Claude (via Claude Code CLI or Claude Desktop) and turns a raw Claude session into a structured, disciplined engineering environment: persistent memory, security enforcement, capability abstractions, quality gates, registries, and full observability.
 
-- You lose context after 30 minutes
-- Claude starts doing architecture when it should be writing tests
-- Nobody is enforcing that QA passes before code ships
-- One session starts over what the last one decided
-- There's no way to know if the system is healthy
+You don't replace Claude with ATLAS. You give Claude a backbone. Claude is the brain; ATLAS is the nervous system — the reflexes, memory, and rules that keep work consistent across sessions.
 
-ATLAS exists to eliminate that wall.
-
----
-
-## What ATLAS Is
-
-**An orchestration and enforcement layer** that runs on top of Claude Code or Claude Desktop.
-
-It adds:
-
-| What | How |
-|------|-----|
-| **Persistent memory** | Engram MCP — decisions survive across sessions |
-| **Team structure** | 25 specialized agents with defined roles and boundaries |
-| **5-phase pipeline** | Plan → Architect → Build+QA → Certify → Deploy |
-| **Security enforcement** | 13 hooks blocking destructive commands in real time |
-| **Capability abstraction** | Stable API over MCPs with fallback chains |
-| **Policy engine** | Declarative rules per capability — ALLOW / WARN / BLOCK |
-| **Quality gates** | Every task goes through visual QA before advancing |
-| **Full observability** | Healthcheck, metrics, dependency graph, event log |
+**What ATLAS is NOT:**
+- Not an AI model (it needs Claude to run).
+- Not a Python package you `import`. It's a configuration + tooling layer: `CLAUDE.md`, agents, hooks, registries, and CLI tools.
+- Not a SaaS — it runs entirely on your machine.
+- Not magic — if Claude can't do something, ATLAS can't either. It makes Claude *more reliable*, not more capable.
 
 ---
 
-## What ATLAS Is NOT
+## 2. What Problem It Solves
 
-- **Not a replacement for Claude.** ATLAS extends Claude; it requires Claude Code or Claude Desktop.
-- **Not a framework you import.** It's a configuration layer — agents, hooks, CLAUDE.md.
-- **Not opinionated about your stack.** It adapts: Next.js, React Native, Phaser.js, Hono, Drizzle, whatever the project needs.
-- **Not magic.** If Claude can't do something, ATLAS can't either. It makes Claude more reliable, not more capable.
-- **Not a SaaS.** It runs entirely locally.
+Anyone who has tried to build something serious with a raw LLM hits the same walls. ATLAS attacks each one with code, not good intentions:
 
----
-
-## Why This Is Not Just "Another Agent System"
-
-Most agent repositories are collections of prompts. They add agents, but not discipline.
-
-ATLAS adds **structural guarantees**:
-
-1. **A hook that fires before every command** — and blocks `git push --force`, `rm -rf`, `chmod 777`, and other destructive patterns before they execute.
-2. **A capability router** — so agents never call `mcp__playwright__browser_navigate` directly. They call `resolve_capability("browser")` and the system selects the best available provider with fallback.
-3. **A policy engine** — so if the browser MCP goes down, ATLAS knows whether to WARN, DEGRADE, or BLOCK based on a declared policy, not per-agent ad-hoc logic.
-4. **Phase gates** — the pipeline cannot advance from Architecture to Development until Architecture artifacts exist in memory. No skipping.
-5. **A healthcheck with 25 checks** that validates the entire system state in one command.
-6. **Architecture Decision Records** monitored by the self-auditor — if a decision's referenced files disappear, drift is detected automatically.
-
-These aren't features you configure. They're invariants the system enforces.
+| Problem | ATLAS answer |
+|---------|--------------|
+| **Context loss** between sessions | Engram persistent memory + disk fallback |
+| **No traceability** of what happened | Event logs, metrics, healthcheck, session summaries |
+| **Hallucinations** (invented files, fake evidence) | Pre-return audit, screenshot hash verification, drift detection |
+| **Weak validation** | Test registry + `run_all` runner + CI/Release Validation |
+| **Fragile prompts** | Declarative agents/policies in markdown/YAML, not ad-hoc prompting |
+| **No persistent memory** | Engram MCP with `topic_key` writes |
+| **No systematic QA** | Visual QA loop (Playwright) gating every dev task |
 
 ---
 
-## ATLAS vs. Everything Else
+## 3. Real Advantages
 
-| | Claude Code | Cursor / Copilot | Other agent repos | **ATLAS** |
-|---|---|---|---|---|
-| Persistent memory | No | No | Rarely | Yes (Engram MCP) |
-| Multi-agent pipeline | No | No | Sometimes | Yes (25 agents, 5 phases) |
-| Security hooks | No | No | No | Yes (13 hooks, real-time) |
-| Capability abstraction | No | No | No | Yes (F16–F19) |
-| Policy engine | No | No | No | Yes (declarative YAML) |
-| Phase gates | No | No | No | Yes (enforced) |
-| Observability | No | No | No | Yes (metrics, graph, healthcheck) |
-| Visual QA | No | No | No | Yes (Playwright, 3 viewports) |
-| Architecture drift detection | No | No | No | Yes (ADR + self-auditor T9) |
+These are **enforced invariants**, not features you have to remember to use:
 
-Claude Code is the runtime. ATLAS is the operating system on top of it.
-
----
-
-## Philosophy
-
-**1. Fail-open.** Every feature has an `ATLAS_*_DISABLED=1` env var. Nothing ATLAS adds can break your base Claude. If a hook crashes, Claude proceeds. If a capability resolves wrong, the escape hatch is always available.
-
-**2. Declarative over imperative.** Policies are YAML files. Agent behaviors are markdown files. Hard rules are JSON. No hidden logic in unreachable code paths.
-
-**3. Invariants over best practices.** A QA suite, a healthcheck, and a drift detector that runs on every audit are worth more than a style guide that nobody reads.
-
-**4. No agent does real work.** The orchestrator only coordinates. It never writes code, reads files, or makes architectural decisions. Every token the orchestrator uses inline is context wasted.
-
-**5. Memory or it didn't happen.** Every significant decision goes into Engram with a `topic_key`. Every agent writes its result before returning. Every critical path has a disk fallback.
+- **Enforcement by code** — a hook fires before every command and blocks `rm -rf`, `git push --force`, `chmod 777`, `curl | sh`, `DROP TABLE`, etc.
+- **Hooks** — 13 reactive hooks (block / warn / log) intercepting tool calls in real time.
+- **Registries** — declarative catalogs for MCPs, tests, projects, and skills.
+- **Healthcheck** — one command validates ~24 aspects of system state.
+- **Test runner** — `run_all` with quick / release / full layers, JSON output, CI-ready.
+- **MCP registry** — every MCP declared with status, capability, and validation.
+- **Capability router** — agents call `resolve_capability("browser")`, not a raw MCP tool; the system picks the best provider with fallback.
+- **Engram memory** — decisions survive across sessions and compactions.
+- **Visual QA with Playwright** — screenshots, network, and console inspection.
+- **Docs with Context7** — current library documentation on demand.
+- **Notion integration** — project management surface.
+- **CI / Release Validation** — GitHub Actions gates on every push and tag.
+- **Registered projects** — known projects tracked so context survives between sessions.
 
 ---
 
-## Architecture
+## 4. What You Can Build With It
 
-```
-Developer
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Claude Session (Claude Code CLI / Claude Desktop)              │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  CLAUDE.md — System instructions (auto-read by Claude)  │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Orquestador (Opus)                                    │    │
-│  │  Central coordinator — runs the 5-phase pipeline       │    │
-│  │  Reads DAG State from memory. Never does real work.    │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ spawns                                  │
-│                       ▼                                         │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  24 Sub-Agents (Sonnet/Opus, per role)                 │    │
-│  │  Phase 1: project-manager-senior                       │    │
-│  │  Phase 2: ux-architect, ui-designer, security-engineer │    │
-│  │  Phase 3: dev-agents ↔ evidence-collector (QA loop)   │    │
-│  │  Phase 4: seo, api-tester, performance, reality-check  │    │
-│  │  Phase 5: git, deployer                                │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ calls                                   │
-│                       ▼                                         │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Capability Router  (core/capabilities/router.py)      │    │
-│  │  resolve_capability("browser")                         │    │
-│  │    → Resolution(provider, status, fallback, action)    │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ evaluates                               │
-│                       ▼                                         │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Policy Engine  (core/capabilities/policy.py)          │    │
-│  │  evaluate_capability("browser")                        │    │
-│  │    → PolicyDecision(ALLOW | WARN | DEGRADED | BLOCK)   │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ logs to                                 │
-│                       ▼                                         │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Capability Metrics  (.pipeline/capability-events.jsonl)│   │
-│  │  python tools/capability_metrics.py                    │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ backed by                               │
-│                       ▼                                         │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  Registries                                            │    │
-│  │  • Projects Registry  (config/projects.registry.yaml)  │    │
-│  │  • Skills Registry    (config/skills.registry.yaml)    │    │
-│  │  • MCP Registry       (config/mcp.registry.yaml)       │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ connects to                             │
-│                       ▼                                         │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │  MCP Layer                                             │    │
-│  │  • engram (memory)       • playwright (browser)        │    │
-│  │  • context7 (docs)       • github (repository)         │    │
-│  │  • computer-use (desktop) • notion (projects)          │    │
-│  └────────────────────┬───────────────────────────────────┘    │
-│                       │ invokes                                 │
-│                       ▼                                         │
-│  Provider → CLI → Runtime                                       │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         │  every tool call intercepted by
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Hook System  (.claude/hooks/)                                  │
-│  block-no-verify.js  — BLOCKS destructive commands             │
-│  config-protection.js — BLOCKS secret file writes              │
-│  quality-gate.js     — WARNS on debugger / @ts-ignore          │
-│  cost-tracker.js     — LOGS every tool call                    │
-│  + 9 more reactive hooks                                        │
-└─────────────────────────────────────────────────────────────────┘
-```
+ATLAS is stack-agnostic and project-agnostic. It helps build and maintain:
 
-### The 5 Phases
-
-```
-Phase 1  Planning       → project-manager-senior
-                          Tasks, acceptance criteria, stack decision
-
-Phase 2  Architecture   → ux-architect → ui-designer + security-engineer (parallel)
-                          CSS foundation, design system, threat model
-
-Phase 2B Visual Assets  → brand-agent → logo + image + video (optional)
-                          Brand identity, AI-generated assets
-
-Phase 3  Dev + QA Loop  → dev-agents ↔ evidence-collector
-                          Build → Visual QA → Fix → Repeat (max 3 retries)
-
-Phase 4  Certification  → seo-discovery + api-tester + performance + reality-checker
-                          SEO, API coverage, Core Web Vitals, final gate
-
-Phase 5  Deployment     → git (user confirms) → deployer (user confirms)
-                          Commit, push, deploy to Vercel
-```
+- **Web apps** (Next.js, Vite+React, SvelteKit, Astro…)
+- **Automations** and scripted workflows
+- **AI pipelines** (multi-step, tool-using)
+- **Multi-agent systems** (the 5-phase orchestrator itself is one)
+- **Visual QA** for existing sites/apps
+- **Project audits** (architecture, drift, security review)
+- **Technical documentation**
+- **Engineering workflows** (CI, release gates, registries)
+- **Internal assistants**
+- **OS-like systems for managing many projects**
 
 ---
 
-## Quick Start
+## 5. Prerequisites
 
-**Prerequisites:** Claude Code CLI (Linux/macOS) or Claude Desktop (Windows), Python 3.10+, Node.js 18+, Go 1.21+ (for Engram), git
+| Tool | Why | Required? |
+|------|-----|-----------|
+| **Claude Desktop or Claude Code** | The runtime ATLAS runs on | **Yes** |
+| **Git** | Clone repo, version control | **Yes** |
+| **Python 3.10+** | Healthcheck, runners, registries | **Yes** |
+| **Node.js 18+** | Hooks (JS) and Node-based MCPs | **Yes** |
+| **Go 1.21+** | Build/run Engram (persistent memory) | Recommended |
+| **GitHub CLI (`gh`)** | CI/release inspection, GitHub MCP | Optional |
+| **Playwright** | Visual QA | Optional (QA only) |
+| **Engram** | Persistent memory MCP | Recommended (fail-open without it) |
+| **Context7** | Live library docs MCP | Optional |
+| **Notion** | Project management MCP | Optional |
+| **`GITHUB_TOKEN` / `VERCEL_TOKEN`** | GitHub MCP / Vercel deploy | Optional (PENDING_TOKEN until set) |
 
+ATLAS is **fail-open**: missing optional dependencies degrade to WARN/SKIP, never a hard failure.
+
+---
+
+## 6. Install From Scratch
+
+**A.** Install **Claude Desktop** (Windows/macOS) or **Claude Code CLI** (Linux/macOS).
+**B.** Install **Git** — https://git-scm.com
+**C.** Install **Python 3.10+** — https://python.org
+**D.** Install **Node.js 18+** — https://nodejs.org
+**E.** Install **Go 1.21+** (for Engram) — https://go.dev
+
+**F.** Clone the repo:
 ```bash
-# 1. Clone
 git clone https://github.com/lkswally/Claude-Atlas.git
 cd Claude-Atlas
-
-# 2. Install
-bash install.sh          # Linux/macOS
-# Windows: follow install/windows.md
-
-# 3. Verify
-python tools/atlas_healthcheck.py
-
-# 4. Start
-# Open Claude in this directory and say:
-# "modo orquestador — quiero crear [your idea]"
 ```
 
-→ Full installation guide: [INSTALL.md](INSTALL.md)
-→ Post-install checklist: [FIRST_RUN.md](FIRST_RUN.md)
-→ Troubleshooting: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+**G.** Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+**H.** Run the healthcheck:
+```bash
+python tools/atlas_healthcheck.py
+```
+
+**I.** Run quick validation:
+```bash
+python tools/run_all.py --quick
+```
+
+**J.** Run release validation locally:
+```bash
+python tools/run_all.py --release
+```
+
+> An automated installer exists for hooks/agents wiring: `bash install.sh` (Linux/macOS) or follow [`install/windows.md`](install/windows.md). Full guide: [INSTALL.md](INSTALL.md) · post-install: [FIRST_RUN.md](FIRST_RUN.md).
 
 ---
 
-## Usage
+## 7. First Prompt — Use ATLAS With Claude
 
-The system has two modes:
+Open Claude in this repository directory and paste:
+
+```
+Estoy en el repositorio Claude-Atlas. Quiero que actúes como runtime de ATLAS.
+Primero leé README.md, CLAUDE.md, ROADMAP.md, config/mcp.registry.yaml,
+config/test.registry.yaml y config/projects.registry.yaml. Luego ejecutá
+healthcheck, diagnosticá el estado del entorno y proponé el siguiente paso
+sin modificar código todavía.
+```
+
+This boots Claude into ATLAS-aware mode: it reads the system contract, inspects the registries, runs the healthcheck, and reports the environment state before touching anything.
+
+---
+
+## 8. Day-to-Day Usage
+
+```bash
+# System health (≈24 checks, exit 0 = HEALTHY)
+python tools/atlas_healthcheck.py
+python tools/atlas_healthcheck.py --strict          # release gate (stable expected config)
+
+# Test runner
+python tools/run_all.py --quick                      # fast layer (~30 suites)
+python tools/run_all.py --release                    # release layer (+ healthcheck gate)
+python tools/run_all.py --release --json --out run_all.json   # machine-readable
+
+# Secrets / tokens
+python tools/secrets_check.py                        # what's configured vs pending
+
+# Registry summaries
+python tools/test_registry.py --summary
+python tools/mcp_registry.py --summary
+python tools/projects_registry.py --summary
+```
+
+Two interaction modes inside Claude:
 
 | Mode | When | How |
 |------|------|-----|
 | **Normal** | Questions, fixes, reviews | Just talk to Claude |
 | **Orchestrator** | Complete projects end-to-end | Say: *"modo orquestador — quiero crear X"* |
 
-**New project:**
-```
-modo orquestador — quiero crear un SaaS de gestión de inventario
-```
+---
 
-**Resume existing project:**
-```
-retomar [project-name]
-```
+## 9. How to Add a Project
 
-The orchestrator reads project state from memory and resumes exactly where it left off.
+Register external/known projects in [`config/projects.registry.yaml`](config/projects.registry.yaml) so context survives between sessions:
+
+1. Add an entry with a unique `id` and human `name`.
+2. Set `status`: `active` | `paused` | `archived` | `broken`.
+3. Set `path` to the project's absolute directory.
+4. Add `risks` / `last_known_phase` notes for continuity.
+5. Verify:
+   ```bash
+   python tools/projects_registry.py --summary
+   python tools/atlas_healthcheck.py
+   ```
+
+ATLAS only *reads* this catalog — it never modifies external projects.
 
 ---
 
-## System Health
+## 10. How to Add an MCP
 
-At any time:
+Register Model Context Protocol servers in [`config/mcp.registry.yaml`](config/mcp.registry.yaml):
 
-```bash
-# Full system health (25 checks, exit 0 = healthy)
-python tools/atlas_healthcheck.py
+1. Add the entry with `id`, `command`/`args`, and `atlas_capability` (e.g. `browser`, `documentation`, `memory`).
+2. Set `status`: `LIVE` | `CONFIG_ONLY` | `PENDING_TOKEN` | `DEFERRED_PAID` | `MISSING` | `OPTIONAL`.
+3. Add a **smoke test** suite under `_qa/` (mirror an existing `bloque-F15-*.py`).
+4. Update the healthcheck only if the MCP needs a dedicated check.
+5. **Never hardcode tokens** — reference env vars (e.g. `GITHUB_TOKEN`); store secrets in `.env.local` (gitignored).
 
-# Capability status (all 14 capabilities)
-python tools/capability_metrics.py --critical
-
-# Dependency tree
-python tools/dependency_graph.py --broken
-
-# Architecture drift (ADRs vs. runtime)
-# → Self-auditor T9, run via Claude: "ejecuta self-auditor"
-```
+Validate: `python tools/mcp_registry.py --summary` and run your new suite. Guide: [docs/MCP.md](docs/MCP.md).
 
 ---
 
-## Extend ATLAS
+## 11. How to Add a Skill
 
-| What to extend | Where | Guide |
-|---|---|---|
-| Add a new agent | `.claude/agents/` | [docs/AGENTS.md](docs/AGENTS.md) |
-| Add a new capability | `core/capabilities/registry.py` | [docs/CAPABILITIES.md](docs/CAPABILITIES.md) |
-| Add a new MCP | `config/mcp.registry.yaml` | [docs/MCP.md](docs/MCP.md) |
-| Add a new hook | `.claude/hooks/` | [docs/HOOKS.md](docs/HOOKS.md) |
-| Add a new skill | `config/skills.registry.yaml` | [docs/SKILLS.md](docs/SKILLS.md) |
-| Record an architecture decision | `ADR/` | [ADR/0000-adr-template.md](ADR/0000-adr-template.md) |
+Skills are declared in the skills registry at **`.claude/skills.registry.yaml`**:
+
+1. Add the skill with `id` (`domain.name`), `domain`, `cost_tier`, and `applies_when`.
+2. The registry is queried via `tools/skills_registry.py` (`find_skills`, `get_skill`, `list_domains`).
+3. Validate:
+   ```bash
+   python tools/skills_registry.py        # lists / validates
+   python tools/atlas_healthcheck.py      # "Skills registry" check must be PASS
+   ```
+
+Fail-open: if the registry or PyYAML is missing, queries return `[]` (no crash). Guide: [docs/SKILLS.md](docs/SKILLS.md).
+
+---
+
+## 12. How to Run QA
+
+- **Test registry** ([`config/test.registry.yaml`](config/test.registry.yaml)) declares every suite, its layer, and timeout.
+- **Quick** — fast feedback layer (~30 suites): `python tools/run_all.py --quick`
+- **Release** — full release gate (active suites + healthcheck): `python tools/run_all.py --release`
+- **Full** — includes legacy suites: `python tools/run_all.py --full`
+- **Legacy** suites are registered but not all run in quick (kept for regression history).
+- **Skips** — suites whose external dependency is absent (e.g. Engram binary, Chromium, `.mcp.json` in clean CI) report `[SKIP]` and do **not** affect exit code.
+- **Warnings** — non-blocking notices (e.g. runtime-mutable files); they don't fail a gate.
+
+---
+
+## 13. Important States
+
+| State | Meaning |
+|-------|---------|
+| **PASS** | Check/suite succeeded |
+| **WARN** | Non-blocking notice; does not fail the gate |
+| **FAIL** | Blocking failure; non-zero exit |
+| **SKIP** | Skipped because an optional dependency is absent (not a failure) |
+| **RUNTIME_MUTABLE** | File managed by the runtime (e.g. `.claude/settings.json` by Claude Desktop on Windows) — absence is expected, treated as WARN |
+| **PENDING_TOKEN** | Component configured but waiting for a token (e.g. GitHub/Vercel MCP) — not blocking |
+| **CONFIG_ONLY** | Declared/configured but not verified live this run |
+| **LIVE** | Verified active and responding |
+
+---
+
+## 14. Current Limitations (Honest)
+
+- **GitHub/Vercel MCPs require a token** — without `GITHUB_TOKEN` / `VERCEL_TOKEN` they stay `PENDING_TOKEN` (not validated live).
+- **Some dependencies are optional in CI** — Engram binary, Chromium, and runtime `.mcp.json` are absent on clean runners and correctly `SKIP`; live coverage of those paths depends on your local environment.
+- **`.claude/settings.json` is runtime-mutable** — it's owned by Claude Desktop on Windows; the stable source of truth is the committed `templates/settings.json` + `config/atlas.runtime.expected.yaml`.
+- **Legacy suites are registered but not all run in quick** — use `--full` to include them.
+- **ATLAS is at Release Candidate (`v1.0.0-rc2`), not GA.** Expect rough edges; see the roadmap below.
+
+---
+
+## 15. Roadmap
+
+Toward **v1.0 final**:
+
+- **Complete documentation** pass across all docs
+- **Bootstrap installer** — one-command setup across platforms
+- **`doctor` command** — expand `tools/doctor.py` into a full guided diagnose/repair flow
+- **Dispatcher decomposition** — break `atlas_dispatcher.py` into smaller modules
+- **Plugin architecture** — third-party extensions
+- **Event bus** — decoupled internal events
+- **Provider abstraction** — pluggable model/MCP providers
+- **v1.0 GA** — once the above stabilize
+
+Full detail: [ROADMAP.md](ROADMAP.md) · latest validation: [docs/F25-INTEGRAL-VALIDATION.md](docs/F25-INTEGRAL-VALIDATION.md).
+
+---
+
+## Architecture (at a glance)
+
+```
+Developer
+    │
+    ▼
+Claude Session (Claude Code CLI / Claude Desktop)
+    │  reads CLAUDE.md (system contract)
+    ▼
+Orquestador (Opus) ── coordinates, never does real work
+    │  spawns
+    ▼
+24 Sub-Agents (per role) ── Plan → Architect → Build+QA → Certify → Deploy
+    │  call
+    ▼
+Capability Router → Policy Engine → Metrics
+    │  backed by
+    ▼
+Registries (projects / skills / MCP / tests)
+    │  connect to
+    ▼
+MCP Layer (engram, playwright, context7, github, notion, …)
+
+Every tool call is intercepted by the Hook System (.claude/hooks/):
+  block-no-verify (BLOCK destructive) · config-protection (BLOCK secrets)
+  quality-gate (WARN) · cost-tracker (LOG) · + 9 more
+```
+
+### The 5 Phases
+
+```
+Phase 1  Planning       → project-manager-senior
+Phase 2  Architecture   → ux-architect → ui-designer + security-engineer
+Phase 2B Visual Assets  → brand-agent → logo + image + video (optional)
+Phase 3  Dev + QA Loop  → dev-agents ↔ evidence-collector (max 3 retries)
+Phase 4  Certification  → seo + api-tester + performance + reality-checker
+Phase 5  Deployment     → git (user confirms) → deployer (user confirms)
+```
 
 ---
 
@@ -307,11 +338,12 @@ python tools/dependency_graph.py --broken
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [ROADMAP.md](ROADMAP.md) | What's coming and what blocks v1.0 |
-| [docs/CAPABILITIES.md](docs/CAPABILITIES.md) | All 14 capabilities, providers, policies |
+| [docs/CAPABILITIES.md](docs/CAPABILITIES.md) | All capabilities, providers, policies |
 | [docs/MCP.md](docs/MCP.md) | MCP inventory with install/verify steps |
-| [docs/AGENTS.md](docs/AGENTS.md) | All 25 agents, roles, tools |
-| [docs/HOOKS.md](docs/HOOKS.md) | All 16 hooks, behavior, writing guide |
+| [docs/AGENTS.md](docs/AGENTS.md) | All agents, roles, tools |
+| [docs/HOOKS.md](docs/HOOKS.md) | All hooks, behavior, writing guide |
 | [docs/SKILLS.md](docs/SKILLS.md) | Skills registry, creating skills |
+| [docs/F25-INTEGRAL-VALIDATION.md](docs/F25-INTEGRAL-VALIDATION.md) | Latest integral validation report |
 | [ADR/](ADR/) | Architecture Decision Records |
 
 ---

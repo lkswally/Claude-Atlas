@@ -254,6 +254,13 @@ def _cli() -> None:
     import json
     import sys
 
+    # Windows consoles default to cp1252, which cannot encode the status icons
+    # (✓ ~ x !) → reconfigure stdout to UTF-8 (fail-open: ignore if unsupported).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     args = sys.argv[1:]
     as_json = "--json" in args
     args = [a for a in args if not a.startswith("--")]
