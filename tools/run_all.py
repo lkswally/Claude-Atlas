@@ -35,6 +35,23 @@ import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Registry integration (P1)
+# ---------------------------------------------------------------------------
+
+# Ensure project root is on sys.path so test_registry is importable regardless
+# of whether this script is invoked as `python tools/run_all.py` (adds tools/ to
+# sys.path) or `python -m tools.run_all` or via importlib from tests.
+_PROJECT_ROOT_STR = str(Path(__file__).parent.parent)
+if _PROJECT_ROOT_STR not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT_STR)
+
+try:
+    from tools.test_registry import TestRegistry as _TestRegistry
+    _REGISTRY = _TestRegistry()
+except Exception:
+    _REGISTRY = None  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
 # Suite classification
 # ---------------------------------------------------------------------------
 
@@ -69,10 +86,10 @@ SUITE_TIMEOUTS: dict[str, int] = {
     "bloque-F20-capability-contracts": 120,          # imports dispatcher — slow cold start
     "bloque-F13-engram": 90,                         # engram MCP startup + DB check
     "bloque-F20-security-hooks": 120,               # spawns node processes for hook tests
-    "bloque-F22-run-all": 2400,                      # runs run_all.py --json + --quick internally (shared, ~2 full runs)
+    "bloque-F22-run-all": 60,                         # P2: uses module API, no full runs (was 2400)
     "bloque-F22-command-audit": 180,                 # TC11/TC12 run Python tools with 30s timeout each
-    "bloque-F22-runtime-truth": 300,                 # reads large capability events log (can grow over time)
-    "bloque-F22-secrets-check": 180,                 # runs multiple Python tool subprocesses
+    "bloque-F22-runtime-truth": 60,                  # P2: uses read_events(tail=1000), no full read (was 300)
+    "bloque-F22-secrets-check": 30,                  # P2: uses module API, no subprocess (was 180)
 }
 
 # ---------------------------------------------------------------------------
@@ -84,7 +101,9 @@ QA_DIR = PROJECT_ROOT / "_qa"
 
 
 def discover_suites() -> list[Path]:
-    """Return all bloque-F*.py suite files sorted by name."""
+    """Return suite files in registry order; fall back to glob if registry unavailable."""
+    if _REGISTRY and _REGISTRY.loaded:
+        return [s.path for s in _REGISTRY.suites_for_mode("full") if s.path.exists()]
     return sorted(QA_DIR.glob("bloque-F*.py"))
 
 
@@ -94,6 +113,18 @@ def suite_stem(path: Path) -> str:
 
 def should_run(stem: str, args: argparse.Namespace) -> bool:
     """Decide whether to run a suite given the current mode flags."""
+    # Check registry metadata first (authoritative)
+    if _REGISTRY and _REGISTRY.loaded:
+        suite = _REGISTRY.get_suite(stem)
+        if suite is not None:
+            mode = "quick" if not args.full and not getattr(args, "release", False) else (
+                "release" if getattr(args, "release", False) else "full"
+            )
+            if mode == "quick" and not suite.can_run_in_quick:
+                return False
+            if mode == "release" and not suite.can_run_in_release:
+                return False
+    # Fallback to legacy classification sets
     if stem in LIVE_BINARY_SUITES and not args.full:
         return False
     if stem in NETWORK_SUITES and args.no_network:
@@ -571,7 +602,13 @@ def main() -> int:
         stem = suite_stem(suite_path)
         if not args.json_output:
             print(f"  [....] {stem}", end="\r", flush=True)
-        suite_timeout = SUITE_TIMEOUTS.get(stem, args.timeout)
+        # Registry timeout takes precedence; fallback to SUITE_TIMEOUTS, then default
+        if _REGISTRY and _REGISTRY.loaded:
+            reg_suite = _REGISTRY.get_suite(stem)
+            reg_timeout = reg_suite.timeout if reg_suite else None
+        else:
+            reg_timeout = None
+        suite_timeout = reg_timeout or SUITE_TIMEOUTS.get(stem, args.timeout)
         r = run_suite(suite_path, timeout=suite_timeout)
         results.append(r)
         if not args.json_output:

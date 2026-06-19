@@ -1,0 +1,617 @@
+# ATLAS Test Registry — F24
+# Authoritative declaration of all test suites: what they are, what layer they belong to,
+# and when they run. The runner uses this instead of a raw glob.
+#
+# Layers:
+#   unit        — pure imports, no subprocess, no external services  (<30s expected)
+#   integration — subprocess to local tools/node, no live MCPs       (<120s expected)
+#   system      — full pipeline, manipulates filesystem/settings      (<600s expected)
+#   evidence    — requires live MCPs or external APIs                 (variable)
+#   release     — runs only in --release mode                        (variable)
+#   legacy      — not run automatically; archived coverage            (not executed)
+#
+# Status:
+#   active      — runs in normal CI
+#   skipped     — registered but excluded from all modes
+#   legacy      — orphaned; historical record only
+
+version: "1.0"
+updated: "2026-06-18"
+
+suites:
+
+  # ---------------------------------------------------------------------------
+  # Unit — pure module imports, no subprocess
+  # ---------------------------------------------------------------------------
+
+  - id: bloque-F5-settings-wiring-validation
+    path: _qa/bloque-F5-settings-wiring-validation.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Reads config files. No subprocess."
+
+  - id: bloque-F10-sot-drift
+    path: _qa/bloque-F10-sot-drift.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Compares SOT files. No subprocess."
+
+  - id: bloque-F11-1-envelope-contract
+    path: _qa/bloque-F11-1-envelope-contract.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests Pydantic envelope contracts."
+
+  - id: bloque-F11-5-backward-compat
+    path: _qa/bloque-F11-5-backward-compat.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests backward compatibility of return envelope."
+
+  - id: bloque-F14-mcp-registry
+    path: _qa/bloque-F14-mcp-registry.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests MCP registry YAML and loader API."
+
+  - id: bloque-F16-capability-router
+    path: _qa/bloque-F16-capability-router.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests capability router module."
+
+  - id: bloque-F17-agent-capability-migration
+    path: _qa/bloque-F17-agent-capability-migration.py
+    layer: unit
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests agent capability migration. Imports dispatcher — slow cold start on Python 3.14."
+
+  - id: bloque-F18-capability-metrics
+    path: _qa/bloque-F18-capability-metrics.py
+    layer: unit
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests capability metrics. Imports dispatcher."
+
+  - id: bloque-F19-capability-policy
+    path: _qa/bloque-F19-capability-policy.py
+    layer: unit
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests capability policy. Imports dispatcher."
+
+  - id: bloque-F20-capability-contracts
+    path: _qa/bloque-F20-capability-contracts.py
+    layer: unit
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests capability contracts. Imports dispatcher."
+
+  - id: bloque-F11-skills-registry-runtime
+    path: _qa/bloque-F11-skills-registry-runtime.py
+    layer: unit
+    status: active
+    timeout: 180
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests skills registry runtime. Imports dispatcher — slow cold start."
+
+  - id: bloque-F21-1-skills-registry
+    path: _qa/bloque-F21-1-skills-registry.py
+    layer: unit
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests skills registry YAML and API."
+
+  - id: bloque-F21-2-hard-rules
+    path: _qa/bloque-F21-2-hard-rules.py
+    layer: unit
+    status: active
+    timeout: 90
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests hard rules enforcement."
+
+  - id: bloque-F21b-1-usage-logging
+    path: _qa/bloque-F21b-1-usage-logging.py
+    layer: unit
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests skills registry usage logging."
+
+  # ---------------------------------------------------------------------------
+  # Integration — subprocess to local tools/node, no live MCPs
+  # ---------------------------------------------------------------------------
+
+  - id: bloque-F4-js-hooks-validation
+    path: _qa/bloque-F4-js-hooks-validation.py
+    layer: integration
+    status: active
+    timeout: 240
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Root cause: N × node process spawn (inherent). Cannot eliminate without replacing node."
+
+  - id: bloque-F6-runtime-hooks-validation
+    path: _qa/bloque-F6-runtime-hooks-validation.py
+    layer: integration
+    status: active
+    timeout: 240
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Root cause: N × node process spawn. delegation-tracker.js uses ESM, slow to start."
+
+  - id: bloque-F7-healthcheck-validation
+    path: _qa/bloque-F7-healthcheck-validation.py
+    layer: integration
+    status: active
+    timeout: 240
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Root cause: 8 subprocess calls to healthcheck, each spawns node for hook checks."
+
+  - id: bloque-F8-engram-audit
+    path: _qa/bloque-F8-engram-audit.py
+    layer: integration
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Audits engram-sync.js hook. May fail if engram-sync.js takes >5s internally."
+
+  - id: bloque-F9-projects-registry
+    path: _qa/bloque-F9-projects-registry.py
+    layer: integration
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Root cause of slowness: TC12 calls healthcheck subprocess. Fixed to call module directly."
+
+  - id: bloque-F20-security-hooks
+    path: _qa/bloque-F20-security-hooks.py
+    layer: integration
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests security hooks via node subprocess."
+
+  - id: bloque-F22-command-audit
+    path: _qa/bloque-F22-command-audit.py
+    layer: integration
+    status: active
+    timeout: 180
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Validates tools exist and have correct CLI API."
+
+  - id: bloque-F22-run-all
+    path: _qa/bloque-F22-run-all.py
+    layer: integration
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests run_all module API directly. P2: eliminated subprocess recursion."
+
+  - id: bloque-F22-runtime-truth
+    path: _qa/bloque-F22-runtime-truth.py
+    layer: integration
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Validates capability registry / policy consistency. TC14 uses tail=1000 to avoid reading full log."
+
+  - id: bloque-F22-secrets-check
+    path: _qa/bloque-F22-secrets-check.py
+    layer: integration
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests secrets_check module API directly. P2: eliminated 13 subprocess calls."
+
+  - id: bloque-F24-test-registry
+    path: _qa/bloque-F24-test-registry.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Validates config/test.registry.yaml and tools/test_registry.py API. 28 TCs, 0.7s."
+
+  # ---------------------------------------------------------------------------
+  # System — full pipeline, manipulates filesystem or runs multiple suites
+  # ---------------------------------------------------------------------------
+
+  - id: bloque-F23-runtime-settings-separation
+    path: _qa/bloque-F23-runtime-settings-separation.py
+    layer: system
+    status: active
+    timeout: 420
+    can_run_in_quick: false
+    can_run_in_release: true
+    notes: "Root cause of slowness: renames settings.json 4x, runs 3 suites via subprocess. Known pre-existing WARN: 8/14 TCs pass when Claude Desktop is running (settings.json race condition)."
+
+  # ---------------------------------------------------------------------------
+  # Evidence — live MCPs / external APIs
+  # ---------------------------------------------------------------------------
+
+  - id: bloque-F13-engram
+    path: _qa/bloque-F13-engram.py
+    layer: evidence
+    status: active
+    timeout: 90
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests Engram MCP. Requires engram binary accessible."
+
+  - id: bloque-F13-engram-active
+    path: _qa/bloque-F13-engram-active.py
+    layer: evidence
+    status: active
+    timeout: 120
+    can_run_in_quick: false
+    can_run_in_release: true
+    notes: "Tests live Engram binary + DB. Excluded from --quick."
+
+  - id: bloque-F15-context7
+    path: _qa/bloque-F15-context7.py
+    layer: evidence
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests Context7 MCP."
+
+  - id: bloque-F15-github
+    path: _qa/bloque-F15-github.py
+    layer: evidence
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests GitHub CLI availability."
+
+  - id: bloque-F15-notion
+    path: _qa/bloque-F15-notion.py
+    layer: evidence
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests Notion MCP."
+
+  - id: bloque-F15-playwright
+    path: _qa/bloque-F15-playwright.py
+    layer: evidence
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Tests Playwright MCP."
+
+  # ---------------------------------------------------------------------------
+  # Legacy — bloque-1* series; not executed by runner, kept as historical record
+  # ---------------------------------------------------------------------------
+
+  - id: bloque-1a10-validation
+    path: _qa/bloque-1a10-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1A10 — phase gates validation. Coverage now in bloque-F11-1."
+
+  - id: bloque-1a11-validation
+    path: _qa/bloque-1a11-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1A11."
+
+  - id: bloque-1a12-validation
+    path: _qa/bloque-1a12-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1A12."
+
+  - id: bloque-1a13-integration-test
+    path: _qa/bloque-1a13-integration-test.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Integration test — runs run_all recursively. Archived."
+
+  - id: bloque-1a14-validation
+    path: _qa/bloque-1a14-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Coverage now in bloque-F17."
+
+  - id: bloque-1a15-validation
+    path: _qa/bloque-1a15-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Coverage now in dispatcher integration tests."
+
+  - id: bloque-1a16-validation
+    path: _qa/bloque-1a16-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Coverage now in bloque-F17."
+
+  - id: bloque-1b1-validation
+    path: _qa/bloque-1b1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1B — Engram MCP. Coverage in bloque-F13."
+
+  - id: bloque-1b2-validation
+    path: _qa/bloque-1b2-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1B2."
+
+  - id: bloque-1b3-validation
+    path: _qa/bloque-1b3-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1B3."
+
+  - id: bloque-1b4-validation
+    path: _qa/bloque-1b4-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1B4."
+
+  - id: bloque-1b5-validation
+    path: _qa/bloque-1b5-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1B5."
+
+  - id: bloque-1c1-validation
+    path: _qa/bloque-1c1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1C — skill enforcement. Coverage in bloque-F11."
+
+  - id: bloque-1d1-validation
+    path: _qa/bloque-1d1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1D — delegation tracker. Coverage in bloque-F6."
+
+  - id: bloque-1e1-validation
+    path: _qa/bloque-1e1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1E — reality checker re-runs."
+
+  - id: bloque-1f1-validation
+    path: _qa/bloque-1f1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1F — file hash cache."
+
+  - id: bloque-1g1-validation
+    path: _qa/bloque-1g1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1G — runtime wiring."
+
+  - id: bloque-1g2-validation
+    path: _qa/bloque-1g2-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1G2 — invocation tracking."
+
+  - id: bloque-1h1-validation
+    path: _qa/bloque-1h1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1H — network inspector."
+
+  - id: bloque-1h2-validation
+    path: _qa/bloque-1h2-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1H2 — console log analyzer."
+
+  - id: bloque-1h3-validation
+    path: _qa/bloque-1h3-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1H3 — visual fidelity checker."
+
+  - id: bloque-1i1-validation
+    path: _qa/bloque-1i1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1I — inter-session anti-loop."
+
+  - id: bloque-1j1-validation
+    path: _qa/bloque-1j1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1J — screenshot hash verification."
+
+  - id: bloque-1j2-validation
+    path: _qa/bloque-1j2-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1J2."
+
+  - id: bloque-1k1-validation
+    path: _qa/bloque-1k1-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1K — QA auto-audit hook."
+
+  - id: bloque-1k3-validation
+    path: _qa/bloque-1k3-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1K3."
+
+  - id: bloque-1k4-validation
+    path: _qa/bloque-1k4-validation.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1K4."
+
+  - id: bloque-1L1-intent-classifier
+    path: _qa/bloque-1L1-intent-classifier.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1L — intent classifier. Coverage in bloque-F22."
+
+  - id: bloque-1L2-design-quality-blocking
+    path: _qa/bloque-1L2-design-quality-blocking.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1L2 — design quality enforcement."
+
+  - id: bloque-1L3-references
+    path: _qa/bloque-1L3-references.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1L3 — reference-driven design."
+
+  - id: bloque-1L4-editorial
+    path: _qa/bloque-1L4-editorial.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Series 1L4 — editorial compliance."
+
+  - id: qa-validation-bloque-1a8
+    path: _qa/qa-validation-bloque-1a8.py
+    layer: legacy
+    status: legacy
+    timeout: 60
+    can_run_in_quick: false
+    can_run_in_release: false
+    notes: "Legacy naming convention. Archived."

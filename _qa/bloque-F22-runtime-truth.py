@@ -235,12 +235,12 @@ try:
 except Exception as e:
     FAIL("TC13 evaluate_capability memory", str(e))
 
-# TC14 — capability_metrics can read_events
+# TC14 — capability_metrics can read_events (tail=1000 avoids loading 199k-line file)
 try:
     from core.capabilities.events import read_events
-    events = read_events()
+    events = read_events(tail=1000)
     if isinstance(events, list):
-        PASS("TC14 capability events read_events()", f"{len(events)} events in log")
+        PASS("TC14 capability events read_events(tail=1000)", f"{len(events)} events sampled")
     else:
         FAIL("TC14 capability events read_events()", f"unexpected type: {type(events)}")
 except Exception as e:

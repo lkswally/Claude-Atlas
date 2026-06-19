@@ -168,10 +168,12 @@ def emit_resolution(
 # Reader
 # ---------------------------------------------------------------------------
 
-def read_events(events_file: Path | None = None) -> list[CapabilityEvent]:
+def read_events(events_file: Path | None = None, tail: int | None = None) -> list[CapabilityEvent]:
     """
-    Read all events from JSONL file. Returns [] if file doesn't exist or is empty.
+    Read events from JSONL file. Returns [] if file doesn't exist or is empty.
     Skips malformed lines silently.
+
+    tail: if set, read only the last N lines (avoids loading the full file for tests).
     """
     target = events_file or _EVENTS_FILE
     if not target.exists():
@@ -179,7 +181,15 @@ def read_events(events_file: Path | None = None) -> list[CapabilityEvent]:
 
     events: list[CapabilityEvent] = []
     try:
-        for line in target.read_text(encoding="utf-8").splitlines():
+        if tail is not None:
+            # Read last N lines without loading the entire file into memory
+            from collections import deque
+            with open(target, encoding="utf-8", errors="replace") as fh:
+                lines_to_parse = list(deque(fh, maxlen=tail))
+        else:
+            with open(target, encoding="utf-8", errors="replace") as fh:
+                lines_to_parse = fh.readlines()
+        for line in lines_to_parse:
             line = line.strip()
             if not line:
                 continue
