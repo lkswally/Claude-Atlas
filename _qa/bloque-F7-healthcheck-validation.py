@@ -116,9 +116,11 @@ def test_2_json_output_structure():
 
 
 def test_3_detects_invalid_settings_json():
-    print("\n=== TEST 3: Detecta settings.json invalido -> exit 1 (--strict) ===")
-    # Non-strict mode: corrupt settings.json → WARN (Windows RUNTIME_MUTABLE design).
-    # Strict mode: corrupt settings.json → FAIL. Use --strict for release validation.
+    print("\n=== TEST 3: Detecta settings.json invalido -> exit 1 (--strict-runtime) ===")
+    # The runtime .claude/settings.json is RUNTIME_MUTABLE (F24 P5):
+    #   --strict (expected/release): corrupt runtime settings → WARN (not a release blocker).
+    #   --strict-runtime: corrupt runtime settings → FAIL (asserts the live file).
+    # Detection of a corrupt runtime file lives on the RUNTIME axis now.
     existed = SETTINGS_PATH.exists()
     backup = SETTINGS_PATH.with_suffix(".json.bak_f7c")
     try:
@@ -126,14 +128,14 @@ def test_3_detects_invalid_settings_json():
             SETTINGS_PATH.rename(backup)
         SETTINGS_PATH.write_text("{invalid json!!", encoding="utf-8")
 
-        code, out = run_healthcheck("--strict")
+        code, out = run_healthcheck("--strict-runtime")
         print(f"  exit={code}")
         fail_lines = [l for l in out.splitlines() if "[FAIL]" in l]
         for l in fail_lines[:3]:
             # Mask [FAIL] so run_all's secondary marker check doesn't false-positive
             # on nested tool output when this suite itself is passing.
             print(f"  hc:{l.strip().replace('[FAIL]', 'FAIL:')}")
-        assert code == 1, f"Esperado exit 1 (FAIL en --strict), got {code}\nOutput:\n{out[-600:]}"
+        assert code == 1, f"Esperado exit 1 (FAIL en --strict-runtime), got {code}\nOutput:\n{out[-600:]}"
         assert any("settings.json" in l for l in fail_lines), \
             f"Esperado FAIL sobre settings.json, lines={fail_lines}"
     finally:

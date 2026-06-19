@@ -107,7 +107,14 @@ A single `atlas` command that replaces the current manual incantations.
 **P4 ✅ — 32/33 PASS en --release (56.8s)**
 - `_qa/bloque-F13-engram-active.py`: T7 usa `warn()` para settings.json ausente (RUNTIME_MUTABLE)
 - `tools/run_all.py`: UTF-8 stdout fix (reconfigure encoding)
-- 1 FAIL residual documentado: healthcheck `--strict` con settings.json ausente — RUNTIME_MUTABLE, esperado, no bloquea rc1
+- 1 FAIL residual: healthcheck `--strict` con settings.json ausente — resuelto en P5
+
+**P5 ✅ — Release gate semantics — 33/33 PASS en --release (56.6s), 0 FAIL**
+- `tools/atlas_healthcheck.py`: `_STRICT_MODE` separado en dos ejes: `_STRICT_EXPECTED` (config estable commiteada, gate de release) y `_STRICT_RUNTIME` (archivo runtime mutable)
+- Nuevo `check_expected_config()`: valida expected YAML + template + hooks en disco — este es el gate real de release
+- `check_settings_json()`: runtime `.claude/settings.json` ahora siempre `WARN_RUNTIME_MUTABLE` (también bajo `--strict`); solo `--strict-runtime` lo escala a FAIL
+- F23 TC6/TC8/TC9 + F7 test_3 actualizados al modelo de dos ejes
+- **Gate verde sin falsos verdes ni FAILs "esperados"** → habilita v1.0.0-rc1
 
 **Herramientas previas (desde F24-rc0)**
 - `tools/run_all.py --release`: comando único de validación, git metadata, release-report.md, JSON output

@@ -4,6 +4,38 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [v0.24.2] — 2026-06-18 — F24 P5: Release Gate Semantics
+
+### Problem Solved
+P4 dejó el release gate con 1 FAIL "esperado y documentado" (`healthcheck --strict` con `.claude/settings.json` ausente). Un gate documentado como rojo-esperado es una contradicción: una rc1 no se publica con el gate en rojo. P5 corrige la semántica atacando la causa raíz: `--strict` mezclaba la validación de la config estable commiteada con la del archivo runtime mutable.
+
+### Changes
+
+**Separación de ejes strict en `tools/atlas_healthcheck.py`**
+- `_STRICT_MODE` → `_STRICT_EXPECTED` + `_STRICT_RUNTIME` (dos ejes independientes)
+- `_STRICT_EXPECTED` (`--strict` / `ATLAS_HEALTHCHECK_STRICT=1`): valida config estable commiteada (expected YAML + template + hooks en disco). Lo usa release.
+- `_STRICT_RUNTIME` (`--strict-runtime` / `ATLAS_HEALTHCHECK_STRICT_RUNTIME=1`): valida el archivo runtime mutable `.claude/settings.json`. NO lo usa release.
+- `check_expected_config()` (NEW): valida `config/atlas.runtime.expected.yaml` + `templates/settings.json` + cada hook esperado resuelto a `.claude/hooks/*.js`. Bajo `--strict` → FAIL si falta. Es el gate real.
+- `check_settings_json()` (RECLASSIFIED): runtime `.claude/settings.json` ausente/corrupto → `WARN_RUNTIME_MUTABLE` siempre (también bajo `--strict`); solo `--strict-runtime` escala a FAIL.
+
+**Tests**
+- `_qa/bloque-F23-runtime-settings-separation.py`: TC6 (dual-axis wiring), TC8 (release gate semantics: `--strict` exit 0 + `--strict-runtime` exit 1 con settings ausente), TC9 (separación WARN runtime / gate expected) — 14/14 PASS
+- `_qa/bloque-F7-healthcheck-validation.py`: test_3 usa `--strict-runtime` (eje correcto para detectar corrupción del runtime)
+
+**`tools/run_all.py`**
+- Comentarios actualizados; release sigue invocando `run_healthcheck(strict=True)` (= expected-strict)
+
+### Results
+- `run_all --quick`: 30/30 PASS, 41s
+- `run_all --release`: **33/33 PASS, 0 FAIL, 56.6s** (antes 32/33)
+- `healthcheck --strict` con settings.json ausente: exit 0 (antes exit 1)
+- `healthcheck --strict-runtime` con settings.json ausente: exit 1 (eje preservado, sin falsos verdes)
+
+### Recommendation
+**v1.0.0-rc1 LISTO sin condiciones** — release gate verde, sin FAILs "esperados".
+
+---
+
 ## [v0.24.1] — 2026-06-18 — F24 Complexity Reduction (P1–P4)
 
 ### Problem Solved

@@ -12,10 +12,11 @@ TC2:  expected YAML válido con secciones required (expected_hooks, ownership)
 TC3:  expected_hooks cubre PreToolUse, PostToolUse, Stop
 TC4:  templates/settings.json con __CLAUDE_HOME__ resuelto tiene hooks existentes
 TC5:  healthcheck (no-strict) exits 0 con settings.json presente
-TC6:  healthcheck --strict exits 0 con settings.json presente
+TC6:  healthcheck source: dos ejes strict (_STRICT_EXPECTED / _STRICT_RUNTIME)
 TC7:  healthcheck (no-strict) exits 0 cuando settings.json temporalmente ausente
-TC8:  healthcheck --strict exits 1 cuando settings.json temporalmente ausente
-TC9:  healthcheck (no-strict) emite WARN (no FAIL) cuando settings ausente
+TC8:  release gate semantics — --strict (expected) exits 0 con settings runtime
+      ausente; --strict-runtime sigue exits 1 (eje runtime explícito)
+TC9:  healthcheck source: settings runtime = WARN_RUNTIME_MUTABLE + check_expected_config
 TC10: bloque-F5 pasa cuando settings.json ausente (fallback a template)
 TC11: bloque-F10 pasa cuando settings.json ausente (TC03 skip, no FAIL)
 TC12: run_all.py no clasifica F5/F7/F9/F10/F11 como suites dependientes-de-healthcheck
@@ -157,24 +158,26 @@ except Exception as e:
     FAIL("TC5 healthcheck non-strict", str(e))
 
 # ---------------------------------------------------------------------------
-# TC6 — healthcheck --strict correctly wires _STRICT_MODE from --strict flag
-# Behavioral test is inherently racy (Claude Desktop race). Verify via source.
-# TC7+TC8 already cover behavioral exit codes for strict vs non-strict.
+# TC6 — healthcheck wires TWO independent strict axes (F24 P5):
+#   _STRICT_EXPECTED (release gate, --strict) and _STRICT_RUNTIME (--strict-runtime).
+# Behavioral exit codes covered in TC7/TC8. Here we verify the source wiring.
 # ---------------------------------------------------------------------------
 try:
     hc_source = HEALTHCHECK.read_text(encoding="utf-8")
-    # _STRICT_MODE must be set from sys.argv in run_all()
-    has_global_strict = '_STRICT_MODE: bool = False' in hc_source
-    has_argv_check = '"--strict" in sys.argv' in hc_source
+    has_expected = '_STRICT_EXPECTED: bool = False' in hc_source
+    has_runtime = '_STRICT_RUNTIME: bool = False' in hc_source
+    has_argv_strict = '"--strict" in sys.argv' in hc_source
+    has_argv_runtime = '"--strict-runtime" in sys.argv' in hc_source
     has_env_check = 'ATLAS_HEALTHCHECK_STRICT' in hc_source
-    if has_global_strict and has_argv_check and has_env_check:
-        PASS("TC6 healthcheck --strict wiring in source",
-             "_STRICT_MODE global + argv + env-var escape hatch present")
+    if all((has_expected, has_runtime, has_argv_strict, has_argv_runtime, has_env_check)):
+        PASS("TC6 healthcheck dual strict-axis wiring in source",
+             "_STRICT_EXPECTED + _STRICT_RUNTIME + argv (--strict / --strict-runtime) + env")
     else:
-        FAIL("TC6 healthcheck --strict wiring",
-             f"global={has_global_strict} argv={has_argv_check} env={has_env_check}")
+        FAIL("TC6 healthcheck dual strict-axis wiring",
+             f"expected={has_expected} runtime={has_runtime} "
+             f"argv_strict={has_argv_strict} argv_runtime={has_argv_runtime} env={has_env_check}")
 except Exception as e:
-    FAIL("TC6 healthcheck --strict wiring", str(e))
+    FAIL("TC6 healthcheck dual strict-axis wiring", str(e))
 
 # ---------------------------------------------------------------------------
 # TC7 — healthcheck (no-strict) exits 0 when settings.json temporarily absent
@@ -198,45 +201,59 @@ finally:
         os.replace(str(backup), str(SETTINGS_PATH))
 
 # ---------------------------------------------------------------------------
-# TC8 — healthcheck --strict exits 1 when settings.json temporarily absent
+# TC8 — Release gate semantics (F24 P5):
+#   --strict (expected) must NOT FAIL on absent runtime settings.json (it's
+#   RUNTIME_MUTABLE; expected config is present) → exit 0.
+#   --strict-runtime still enforces the live file → exit 1.
 # ---------------------------------------------------------------------------
 backup = SETTINGS_PATH.with_suffix(".json.bak_f23b")
 _settings_was_present = SETTINGS_PATH.exists()
 try:
     if _settings_was_present:
         os.replace(str(SETTINGS_PATH), str(backup))
-    code, out = run_py(str(HEALTHCHECK), "--strict", timeout=45)
-    if code == 1:
-        PASS("TC8 healthcheck --strict exits 1 when settings absent")
+    code_exp, out_exp = run_py(str(HEALTHCHECK), "--strict", timeout=45)
+    code_rt, out_rt = run_py(str(HEALTHCHECK), "--strict-runtime", timeout=45)
+    expected_ok = code_exp == 0
+    runtime_ok = code_rt == 1
+    if expected_ok and runtime_ok:
+        PASS("TC8 release gate: --strict exit 0, --strict-runtime exit 1 (settings absent)")
     else:
-        FAIL("TC8 healthcheck --strict exits 1", f"got code={code}")
+        exp_fails = [l.strip() for l in out_exp.splitlines() if "[FAIL]" in l][:3]
+        FAIL("TC8 release gate semantics",
+             f"--strict code={code_exp} (esperado 0, fails={exp_fails}) | "
+             f"--strict-runtime code={code_rt} (esperado 1)")
 except Exception as e:
-    FAIL("TC8 healthcheck --strict absent", str(e))
+    FAIL("TC8 release gate semantics", str(e))
 finally:
     if backup.exists():
         SETTINGS_PATH.unlink(missing_ok=True)
         os.replace(str(backup), str(SETTINGS_PATH))
 
 # ---------------------------------------------------------------------------
-# TC9 — healthcheck source implements WARN (not FAIL) in non-strict branch
-# Behavioral test is inherently racy on Windows (Claude Desktop recreates the
-# file faster than the subprocess can detect its absence). Verify via source.
+# TC9 — healthcheck source: runtime settings = WARN_RUNTIME_MUTABLE, gated on the
+# RUNTIME axis (not the expected/release axis), plus a separate check_expected_config
+# that IS the release gate. Verified via source (behavioral exit codes in TC8).
 # ---------------------------------------------------------------------------
 try:
     hc_source = HEALTHCHECK.read_text(encoding="utf-8")
     has_warn_path = 'WARN(".claude/settings.json"' in hc_source
-    has_runtime_mutable = "RUNTIME_MUTABLE" in hc_source
-    has_strict_guard = "_STRICT_MODE" in hc_source
-    has_strict_fail = 'FAIL(".claude/settings.json"' in hc_source
-    if has_warn_path and has_runtime_mutable and has_strict_guard and has_strict_fail:
-        PASS("TC9 healthcheck implements WARN/FAIL split by _STRICT_MODE",
-             "WARN path, RUNTIME_MUTABLE message, _STRICT_MODE guard all present")
+    has_runtime_mutable = "WARN_RUNTIME_MUTABLE" in hc_source
+    has_expected_check = "def check_expected_config" in hc_source
+    has_runtime_axis = "_STRICT_RUNTIME" in hc_source
+    has_expected_axis = "_STRICT_EXPECTED" in hc_source
+    # The runtime settings.json FAIL must be gated on the RUNTIME axis only.
+    runtime_fail_gated = "FAIL(\".claude/settings.json\"" in hc_source and "_STRICT_RUNTIME" in hc_source
+    if all((has_warn_path, has_runtime_mutable, has_expected_check,
+            has_runtime_axis, has_expected_axis, runtime_fail_gated)):
+        PASS("TC9 healthcheck separates runtime-mutable WARN from expected-config gate",
+             "WARN_RUNTIME_MUTABLE + check_expected_config + dual axis present")
     else:
-        FAIL("TC9 healthcheck WARN implementation",
+        FAIL("TC9 healthcheck settings/expected separation",
              f"warn={has_warn_path} runtime_mutable={has_runtime_mutable} "
-             f"strict_guard={has_strict_guard} strict_fail={has_strict_fail}")
+             f"expected_check={has_expected_check} runtime_axis={has_runtime_axis} "
+             f"expected_axis={has_expected_axis}")
 except Exception as e:
-    FAIL("TC9 healthcheck WARN implementation", str(e))
+    FAIL("TC9 healthcheck settings/expected separation", str(e))
 
 # ---------------------------------------------------------------------------
 # TC10 — bloque-F5 passes when settings.json absent (template fallback)

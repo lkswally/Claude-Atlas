@@ -49,10 +49,22 @@ SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
 
 _results: list[dict] = []
 
-# Set to True via --strict / ATLAS_HEALTHCHECK_STRICT=1
-# Non-strict (default): missing/corrupt settings.json → WARN (Windows race condition)
-# Strict: missing/corrupt settings.json → FAIL  (required before release tags)
-_STRICT_MODE: bool = False
+# Two INDEPENDENT strictness axes (F24 P5 — release gate semantics).
+#
+# _STRICT_EXPECTED — enforces the STABLE, committed source of truth:
+#   config/atlas.runtime.expected.yaml + templates/settings.json + every
+#   expected hook resolving to a real .claude/hooks/*.js. This is what the
+#   release gate uses. Set by --strict / ATLAS_HEALTHCHECK_STRICT=1.
+#   Missing/invalid expected config → FAIL.
+#
+# _STRICT_RUNTIME — enforces the LIVE, mutable .claude/settings.json. This file
+#   is RUNTIME_MUTABLE: Claude Desktop on Windows creates/removes it between tool
+#   calls, so its absence is EXPECTED and must NOT fail a release. It stays WARN
+#   unless this axis is explicitly enabled (e.g. asserting the live file inside an
+#   active Claude Desktop session). Set by --strict-runtime /
+#   ATLAS_HEALTHCHECK_STRICT_RUNTIME=1. Release does NOT enable this axis.
+_STRICT_EXPECTED: bool = False
+_STRICT_RUNTIME: bool = False
 
 
 def _record(status: str, check: str, detail: str) -> None:
@@ -114,24 +126,92 @@ def check_npm() -> None:
         WARN("npm", f"encontrado pero no se pudo verificar version: {e}")
 
 
+def check_expected_config() -> None:
+    """
+    Config ESTABLE y commiteada — la fuente de verdad del release (F24 P5).
+
+    A diferencia del runtime .claude/settings.json (RUNTIME_MUTABLE), valida los
+    archivos que SÍ están commiteados y deben estar siempre presentes/correctos:
+      - config/atlas.runtime.expected.yaml (con secciones requeridas)
+      - templates/settings.json (referencia estable de hooks)
+      - cada hook de expected_hooks resuelve a un .claude/hooks/*.js real en disco
+
+    Bajo _STRICT_EXPECTED (release / --strict): faltante/inválido → FAIL.
+    En no-strict → WARN. Este es el check sobre el que descansa el gate de
+    release, reemplazando el viejo comportamiento de FAIL por un settings.json
+    runtime ausente (que era RUNTIME_MUTABLE esperado).
+    """
+    def _missing(detail: str) -> None:
+        if _STRICT_EXPECTED:
+            FAIL("Expected config", detail)
+        else:
+            WARN("Expected config", detail)
+
+    expected_yaml = PROJECT_ROOT / "config" / "atlas.runtime.expected.yaml"
+    template = PROJECT_ROOT / "templates" / "settings.json"
+
+    if not expected_yaml.exists():
+        _missing("config/atlas.runtime.expected.yaml no encontrado (fuente de verdad)")
+        return
+    try:
+        import yaml
+        expected = yaml.safe_load(expected_yaml.read_text(encoding="utf-8")) or {}
+    except ImportError:
+        WARN("Expected config", "PyYAML no instalado — no se puede validar expected YAML")
+        return
+    except Exception as e:
+        _missing(f"expected YAML inválido: {e}")
+        return
+
+    required_sections = {"expected_hooks", "ownership", "version"}
+    missing_sections = required_sections - expected.keys()
+    if missing_sections:
+        _missing(f"secciones faltantes en expected YAML: {sorted(missing_sections)}")
+        return
+
+    if not template.exists():
+        _missing("templates/settings.json no encontrado (referencia estable de hooks)")
+        return
+
+    # Cada hook esperado debe resolver a un .js real en disco.
+    hooks_dir = PROJECT_ROOT / ".claude" / "hooks"
+    missing_hooks = []
+    for event, names in (expected.get("expected_hooks") or {}).items():
+        for name in names or []:
+            if not (hooks_dir / name).exists():
+                missing_hooks.append(f"{event}:{name}")
+    if missing_hooks:
+        _missing(f"hooks esperados faltantes en disco: {', '.join(missing_hooks)}")
+        return
+
+    n_hooks = sum(len(v or []) for v in (expected.get("expected_hooks") or {}).values())
+    PASS("Expected config",
+         f"expected YAML v{expected.get('version')} válido | "
+         f"{n_hooks} hooks esperados resueltos en disco | templates/settings.json OK")
+
+
 def check_settings_json() -> list[dict] | None:
     """
-    settings.json existe, es JSON válido y tiene sección hooks.
+    Runtime .claude/settings.json — RUNTIME_MUTABLE (no es el gate de release).
 
-    Non-strict (default): archivo ausente/corrupto → WARN.
-    El archivo runtime puede desaparecer temporalmente en Windows/Claude Desktop.
+    Este es el archivo LIVE gestionado por Claude Desktop en Windows; puede
+    aparecer/desaparecer entre tool calls. Su ausencia/corrupción es WARN por
+    defecto Y bajo release/--strict — NUNCA bloquea un release, porque la config
+    estable se valida aparte en check_expected_config() (ese sí es el gate).
 
-    Strict (--strict / ATLAS_HEALTHCHECK_STRICT=1): ausente/corrupto → FAIL.
-    Usar en modo release antes de taggear.
+    Solo _STRICT_RUNTIME (--strict-runtime / ATLAS_HEALTHCHECK_STRICT_RUNTIME=1)
+    escala a FAIL — para cuando se quiere afirmar explícitamente que el archivo
+    runtime existe (p. ej. dentro de una sesión activa de Claude Desktop).
     """
     _runtime_mutable_msg = (
-        "RUNTIME_MUTABLE — archivo gestionado por Claude Desktop en Windows | "
-        "usar --strict o ATLAS_HEALTHCHECK_STRICT=1 para validación de release"
+        "WARN_RUNTIME_MUTABLE — archivo gestionado por Claude Desktop en Windows | "
+        "config estable validada en 'Expected config' | "
+        "usar --strict-runtime para exigir el archivo runtime"
     )
 
     if not SETTINGS_PATH.exists():
-        if _STRICT_MODE:
-            FAIL(".claude/settings.json", f"no encontrado en {SETTINGS_PATH}")
+        if _STRICT_RUNTIME:
+            FAIL(".claude/settings.json", f"no encontrado en {SETTINGS_PATH} (--strict-runtime)")
         else:
             WARN(".claude/settings.json", _runtime_mutable_msg)
         return None
@@ -139,18 +219,18 @@ def check_settings_json() -> list[dict] | None:
     try:
         data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        if _STRICT_MODE:
-            FAIL(".claude/settings.json", f"JSON inválido: {e}")
+        if _STRICT_RUNTIME:
+            FAIL(".claude/settings.json", f"JSON inválido: {e} (--strict-runtime)")
         else:
-            WARN(".claude/settings.json", f"RUNTIME_CORRUPT — JSON inválido: {e} | {_runtime_mutable_msg}")
+            WARN(".claude/settings.json", f"WARN_RUNTIME_MUTABLE — JSON inválido: {e} | {_runtime_mutable_msg}")
         return None
 
     hooks = data.get("hooks", {})
     if not hooks:
-        if _STRICT_MODE:
-            FAIL(".claude/settings.json", "sección 'hooks' ausente o vacía")
+        if _STRICT_RUNTIME:
+            FAIL(".claude/settings.json", "sección 'hooks' ausente o vacía (--strict-runtime)")
         else:
-            WARN(".claude/settings.json", f"sección 'hooks' ausente o vacía | {_runtime_mutable_msg}")
+            WARN(".claude/settings.json", f"WARN_RUNTIME_MUTABLE — sección 'hooks' ausente o vacía | {_runtime_mutable_msg}")
         return None
 
     # Contar todas las entradas de hook
@@ -843,14 +923,17 @@ def check_dispatcher() -> None:
 # ---------------------------------------------------------------------------
 
 def run_all() -> int:
-    global _STRICT_MODE
+    global _STRICT_EXPECTED, _STRICT_RUNTIME
     # Forzar UTF-8 en stdout/stderr para que tildes y símbolos funcionen en Windows
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-    _STRICT_MODE = "--strict" in sys.argv or os.environ.get("ATLAS_HEALTHCHECK_STRICT") == "1"
+    # --strict  → expected-strict (release gate: stable committed config)
+    # --strict-runtime → runtime-strict (asserts the live .claude/settings.json)
+    _STRICT_EXPECTED = "--strict" in sys.argv or os.environ.get("ATLAS_HEALTHCHECK_STRICT") == "1"
+    _STRICT_RUNTIME = "--strict-runtime" in sys.argv or os.environ.get("ATLAS_HEALTHCHECK_STRICT_RUNTIME") == "1"
     quiet  = "--quiet" in sys.argv
     as_json = "--json" in sys.argv
 
@@ -867,7 +950,10 @@ def run_all() -> int:
     check_python()
     check_npm()
 
-    # --- Settings y hooks ---
+    # --- Config estable (gate de release) ---
+    check_expected_config()
+
+    # --- Settings runtime y hooks ---
     entries = check_settings_json()
     if entries is not None:
         check_hook_files_exist(entries)

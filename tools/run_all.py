@@ -69,9 +69,11 @@ LIVE_BINARY_SUITES = {
 # Suites that need network/external APIs — skip with --no-network
 NETWORK_SUITES: set[str] = set()  # currently none hit real network in test mode
 
-# F23: .claude/settings.json race condition resolved.
-# Healthcheck now WARNs (not FAILs) when settings.json is absent in non-strict mode.
-# All suites tolerate the Windows/Claude Desktop race condition.
+# F23/F24-P5: .claude/settings.json race condition resolved.
+# The runtime .claude/settings.json is RUNTIME_MUTABLE (Claude Desktop owns it on
+# Windows) → always WARN, never a release blocker. The release gate (--strict =
+# expected-strict) instead enforces the STABLE committed config: expected YAML +
+# templates/settings.json + expected hooks on disk (healthcheck "Expected config").
 
 # Per-suite timeout overrides (seconds).
 # Use when a suite legitimately takes longer than the default.
@@ -600,7 +602,9 @@ def main() -> int:
         print(f"\n{_c(BOLD, 'ATLAS QA Runner')} — mode: {mode}")
         print(f"Running {len(selected)} suites ({len(skipped)} skipped)\n")
 
-    # Healthcheck always runs in --release mode (strict: settings.json FAIL not WARN)
+    # Healthcheck always runs in --release mode with expected-strict (--strict):
+    # enforces the STABLE committed config; runtime settings.json stays WARN
+    # (RUNTIME_MUTABLE). Use --strict-runtime separately to assert the live file.
     if args.release:
         if not args.json_output:
             print("  [....] healthcheck", end="\r", flush=True)

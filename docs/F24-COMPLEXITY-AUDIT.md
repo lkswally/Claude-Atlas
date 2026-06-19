@@ -321,3 +321,69 @@ WARNs activos (no bloquean):
 - Registry declarativo: 65 suites (33 activas + 32 legacy), 0 huérfanas ✓
 
 **Condición:** el FAIL restante en `--release` es por diseño y requiere Claude Desktop activo. No bloquea rc1; sí debe estar en las release notes y en `docs/RELEASE.md`.
+
+---
+
+## P5 Result — Release Gate Semantics — 2026-06-18
+
+> **Estado:** `run_all --release` → **33/33 PASS, 0 FAIL — 56.6s**
+> **Gate oficial v1.0-rc1:** VERDE sin falsos verdes
+
+### El problema semántico de P4
+
+P4 dejó 1 FAIL "esperado y documentado" en `--release`: `healthcheck --strict` fallaba cuando `.claude/settings.json` estaba ausente. Pero un release gate documentado como *rojo-esperado* es una contradicción: una v1.0.0-rc1 no se publica con el gate en rojo, y un FAIL clasificado como "esperado" entrena al equipo a ignorar el gate.
+
+**Causa raíz:** `--strict` mezclaba dos verificaciones ortogonales en un solo flag:
+1. ¿La **config estable commiteada** (expected YAML + template + hooks en disco) está presente y es válida? → esto SÍ debe bloquear el release.
+2. ¿El **archivo runtime mutable** `.claude/settings.json` existe ahora mismo? → esto NO debe bloquear el release: Claude Desktop lo gestiona en Windows y puede no existir desde CLI (RUNTIME_MUTABLE).
+
+### El cambio semántico (P5)
+
+Se separó `_STRICT_MODE` en **dos ejes independientes** en `tools/atlas_healthcheck.py`:
+
+| Eje | Flag / env | Qué valida | Lo usa release |
+|-----|-----------|------------|----------------|
+| `_STRICT_EXPECTED` | `--strict` / `ATLAS_HEALTHCHECK_STRICT=1` | Config estable: `config/atlas.runtime.expected.yaml` + `templates/settings.json` + cada hook esperado resuelve a `.claude/hooks/*.js` real | **Sí** |
+| `_STRICT_RUNTIME` | `--strict-runtime` / `ATLAS_HEALTHCHECK_STRICT_RUNTIME=1` | Archivo runtime mutable `.claude/settings.json` (existe / JSON válido / tiene hooks) | **No** |
+
+- **Nuevo check `check_expected_config()`**: valida la fuente de verdad commiteada. Bajo `--strict` (release), faltante/inválido → **FAIL**. Es el gate real.
+- **`check_settings_json()` reclasificado**: el runtime `.claude/settings.json` ausente/corrupto es ahora **`WARN_RUNTIME_MUTABLE` siempre** — también bajo `--strict`/release. Solo `--strict-runtime` lo escala a FAIL.
+- **Solo se reclasificó el caso documentado.** Los demás strict failures siguen siendo FAIL. El eje runtime sigue disponible para afirmar el archivo live dentro de una sesión activa de Claude Desktop.
+
+### Resultados (settings.json ausente — el repro exacto de P4)
+
+| Comando | Antes (P4) | Después (P5) |
+|---------|-----------|--------------|
+| `healthcheck` (normal) | exit 0 (FAIL=0) | exit 0, PASS=22 WARN=2 FAIL=0 |
+| `healthcheck --strict` | **exit 1 (FAIL=1)** ❌ | **exit 0, FAIL=0** ✅ |
+| `healthcheck --strict-runtime` | (no existía) | exit 1, FAIL=1 (eje runtime correcto) |
+| `run_all --quick` | 30/30 PASS | **30/30 PASS, 41s** |
+| `run_all --release` | 32/33 PASS, 1 FAIL | **33/33 PASS, 0 FAIL, 56.6s** ✅ |
+
+### WARNs documentados (permitidos, no bloquean)
+
+1. `.claude/settings.json`: `WARN_RUNTIME_MUTABLE` — gestionado por Claude Desktop; config estable validada aparte en "Expected config"
+2. `capability-events.jsonl`: líneas JSONL inválidas históricas (acumulación)
+
+### No hay falsos verdes — pruebas
+
+- `--strict-runtime` sigue dando FAIL si el runtime settings.json falta/corrupto (F23 TC8, F7 test_3).
+- `check_expected_config` daría FAIL bajo `--strict` si faltara el expected YAML, el template, o cualquiera de los 13 hooks esperados en disco.
+- F7 sigue detectando settings.json corrupto, hook faltante y path heredado (vía el eje correcto).
+
+### Cambios de código (P5)
+
+| Archivo | Cambio |
+|---------|--------|
+| `tools/atlas_healthcheck.py` | `_STRICT_MODE` → `_STRICT_EXPECTED` + `_STRICT_RUNTIME`; nuevo `check_expected_config()`; `check_settings_json()` runtime-mutable siempre WARN salvo `_STRICT_RUNTIME` |
+| `tools/run_all.py` | comentarios actualizados; release sigue usando `--strict` (= expected-strict) |
+| `_qa/bloque-F23-runtime-settings-separation.py` | TC6/TC8/TC9 reescritos para los dos ejes; TC8 ahora prueba la semántica del gate (--strict exit 0, --strict-runtime exit 1) |
+| `_qa/bloque-F7-healthcheck-validation.py` | test_3 usa `--strict-runtime` (eje correcto para corrupción runtime) |
+
+### Recomendación: v1.0.0-rc1 — LISTO (sin condiciones)
+
+- `run_all --quick`: 30/30 PASS, 41s ✓
+- `run_all --release`: 33/33 PASS, 0 FAIL, 56.6s ✓ — **gate verde, sin FAIL "esperado"**
+- `healthcheck --strict` (release): exit 0 con expected config completa ✓
+- `healthcheck --strict-runtime`: exit 1 con runtime ausente ✓ (eje preservado)
+- Sin falsos verdes ✓
