@@ -47,6 +47,12 @@ def fail(name: str, detail: str = "") -> None:
     print(f"  [FAIL] {name}{suffix}")
 
 
+def skip(name: str, detail: str = "") -> None:
+    """Non-blocking: env dependency absent (e.g. CI). Does not affect exit code."""
+    suffix = f" -- {detail}" if detail else ""
+    print(f"  [SKIP] {name}{suffix}")
+
+
 # ---------------------------------------------------------------------------
 # T1: Registry file existe
 # ---------------------------------------------------------------------------
@@ -268,6 +274,7 @@ def test_engram_config_status_live():
 # ---------------------------------------------------------------------------
 def test_engram_runtime_probe():
     import subprocess
+    import shutil
     try:
         from mcp_registry import get_mcp
         m = get_mcp("engram")
@@ -279,12 +286,25 @@ def test_engram_runtime_probe():
             fail("T14 Engram runtime_status (CLI probe)", "validation_command no definido")
             return
         parts = cmd.split()
+        # The Engram CLI is an external Go binary; the registry's validation_command
+        # may carry a machine-specific path. When the binary is unavailable (clean
+        # CI runner), SKIP the live probe instead of FAILing — it still runs when
+        # Engram is installed.
+        bin_path = Path(parts[0])
+        bin_available = bool(shutil.which(parts[0])) or bin_path.exists()
+        if not bin_available:
+            skip("T14 Engram runtime_status (CLI probe)",
+                 f"binario Engram ausente (CI/entorno limpio): {parts[0]}")
+            return
         r = subprocess.run(parts, capture_output=True, text=True, timeout=8)
         if r.returncode == 0:
             ok("T14 Engram runtime_status (CLI probe)", f"exit 0 — runtime OK")
         else:
             fail("T14 Engram runtime_status (CLI probe)",
                  f"exit {r.returncode}: {(r.stdout + r.stderr).strip()[:80]}")
+    except FileNotFoundError as e:
+        skip("T14 Engram runtime_status (CLI probe)",
+             f"binario Engram ausente (CI/entorno limpio): {e}")
     except subprocess.TimeoutExpired:
         fail("T14 Engram runtime_status (CLI probe)", "timeout >8s")
     except Exception as e:

@@ -1,0 +1,10 @@
+# ATLAS — Python dependencies for tools + QA suites
+# Installed in CI (.github/workflows/ci.yml) and by bootstrap installers.
+
+# Declarative config + test registry (tools/test_registry.py, config/*.yaml)
+pyyaml>=6.0
+
+# Formal Envelope.v1 contracts (tools/contracts/) — exercised by
+# bloque-F11-1-envelope-contract and bloque-F11-5-backward-compat.
+# The runtime is fail-open without it, but CI must test the pydantic path.
+pydantic>=2.0

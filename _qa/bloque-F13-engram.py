@@ -42,6 +42,15 @@ def fail(name: str, detail: str = "") -> None:
     suffix = f" — {detail}" if detail else ""
     print(f"  [FAIL] {name}{suffix}")
 
+def skip(name: str, detail: str = "") -> None:
+    """Non-blocking: env dependency absent (e.g. CI). Does not affect exit code."""
+    suffix = f" — {detail}" if detail else ""
+    print(f"  [SKIP] {name}{suffix}")
+
+# Engram is an external Go binary; absent in clean CI runners. When unavailable,
+# its live probes SKIP (not FAIL) — but still run/validate when present.
+ENGRAM_AVAILABLE = bool(shutil.which("engram")) or Path(ENGRAM_BIN).exists()
+
 def run_hook(hook_name: str, stdin_data: dict | None = None, env_extra: dict | None = None) -> subprocess.CompletedProcess:
     hook_path = HOOKS_DIR / hook_name
     env = {**os.environ}
@@ -120,8 +129,8 @@ def test_session_start_no_cli():
 # Test 5: Engram binary existe y responde
 # ---------------------------------------------------------------------------
 def test_engram_binary_exists():
-    if not ENGRAM_BIN or not Path(ENGRAM_BIN).exists():
-        fail("T5 Engram binary", f"no encontrado en {ENGRAM_BIN}")
+    if not ENGRAM_AVAILABLE:
+        skip("T5 Engram binary", f"binario Engram ausente (CI/entorno limpio): {ENGRAM_BIN}")
         return
     try:
         r = subprocess.run([ENGRAM_BIN, "--version"], capture_output=True, timeout=5)
@@ -142,6 +151,8 @@ def test_engram_db_exists():
     if db.exists():
         size_kb = db.stat().st_size // 1024
         ok("T6 Engram DB", f"{db} ({size_kb} KB)")
+    elif not ENGRAM_AVAILABLE:
+        skip("T6 Engram DB", f"binario Engram ausente (CI/entorno limpio): sin DB en {db}")
     else:
         fail("T6 Engram DB", f"no encontrada en {db}")
 
@@ -150,12 +161,12 @@ def test_engram_db_exists():
 # Test 7: Engram search funciona (ACTIVE state)
 # ---------------------------------------------------------------------------
 def test_engram_search():
-    if not ENGRAM_BIN or not Path(ENGRAM_BIN).exists():
-        fail("T7 Engram search", "binary no disponible")
+    if not ENGRAM_AVAILABLE:
+        skip("T7 Engram search", "binario Engram ausente (CI/entorno limpio)")
         return
     db = HOME / ".engram" / "engram.db"
     if not db.exists():
-        fail("T7 Engram search", "DB no disponible")
+        skip("T7 Engram search", "DB Engram ausente (CI/entorno limpio)")
         return
     try:
         r = subprocess.run(

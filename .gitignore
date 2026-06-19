@@ -79,5 +79,10 @@ _test_runs/
 qa/
 _qa/conexo-2026-05-21/
 
-# User-specific settings (keep settings.json out if it has API keys)
-# .claude/settings.json is commented out — include it in version control for team alignment
+# User-specific runtime settings — RUNTIME_MUTABLE (F23/F24).
+# .claude/settings.json is managed by Claude Desktop on Windows and may be
+# absent/recreated between tool calls. The STABLE source of truth is
+# templates/settings.json + config/atlas.runtime.expected.yaml, validated by the
+# release gate (healthcheck "Expected config"). Tracking the live file caused a
+# corrupt test fixture to leak into the repo and break CI — keep it untracked.
+.claude/settings.json
