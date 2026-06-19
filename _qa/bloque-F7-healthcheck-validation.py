@@ -14,6 +14,7 @@ Tests para tools/atlas_healthcheck.py:
   8. Exit 0 cuando no hay FAIL aunque haya WARN
 """
 
+import contextlib
 import json
 import os
 import shutil
@@ -25,6 +26,43 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 HEALTHCHECK  = PROJECT_ROOT / "tools" / "atlas_healthcheck.py"
 SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
+
+# Minimal valid settings.json for tests that need to manipulate the file.
+# Used when Claude Desktop hasn't created the file yet (RUNTIME_MUTABLE state).
+_MINIMAL_SETTINGS = {
+    "hooks": {
+        "Stop": [],
+        "PreToolUse": [],
+        "PostToolUse": [],
+    }
+}
+
+
+@contextlib.contextmanager
+def _synthetic_settings(content: dict | None = None):
+    """
+    Context manager: ensures settings.json exists for the duration of the block.
+
+    If settings.json already exists, backs it up and restores after.
+    If it doesn't exist (RUNTIME_MUTABLE / Claude Desktop not running),
+    creates a synthetic one from _MINIMAL_SETTINGS and removes it after.
+    """
+    existed = SETTINGS_PATH.exists()
+    backup = SETTINGS_PATH.with_suffix(".json.bak_f7_ctx")
+    created = False
+    try:
+        if existed:
+            SETTINGS_PATH.rename(backup)
+        base = content if content is not None else _MINIMAL_SETTINGS
+        SETTINGS_PATH.write_text(json.dumps(base, ensure_ascii=False, indent=2), encoding="utf-8")
+        created = True
+        yield
+    finally:
+        SETTINGS_PATH.unlink(missing_ok=True)
+        if existed and backup.exists():
+            backup.rename(SETTINGS_PATH)
+        elif not existed:
+            pass  # leave it absent, as before
 
 
 def run_healthcheck(*extra_args, cwd=None, env=None) -> tuple[int, str]:
@@ -78,32 +116,37 @@ def test_2_json_output_structure():
 
 
 def test_3_detects_invalid_settings_json():
-    print("\n=== TEST 3: Detecta settings.json invalido -> exit 1 ===")
-    # El healthcheck resuelve rutas desde __file__, no desde cwd.
-    # Parchear temporalmente el settings.json real.
+    print("\n=== TEST 3: Detecta settings.json invalido -> exit 1 (--strict) ===")
+    # Non-strict mode: corrupt settings.json → WARN (Windows RUNTIME_MUTABLE design).
+    # Strict mode: corrupt settings.json → FAIL. Use --strict for release validation.
+    existed = SETTINGS_PATH.exists()
     backup = SETTINGS_PATH.with_suffix(".json.bak_f7c")
     try:
-        SETTINGS_PATH.rename(backup)
+        if existed:
+            SETTINGS_PATH.rename(backup)
         SETTINGS_PATH.write_text("{invalid json!!", encoding="utf-8")
 
-        code, out = run_healthcheck()
+        code, out = run_healthcheck("--strict")
         print(f"  exit={code}")
         fail_lines = [l for l in out.splitlines() if "[FAIL]" in l]
         for l in fail_lines[:3]:
-            print(f"  {l.strip()}")
-        assert code == 1, f"Esperado exit 1 (FAIL), got {code}\nOutput:\n{out[-600:]}"
+            # Mask [FAIL] so run_all's secondary marker check doesn't false-positive
+            # on nested tool output when this suite itself is passing.
+            print(f"  hc:{l.strip().replace('[FAIL]', 'FAIL:')}")
+        assert code == 1, f"Esperado exit 1 (FAIL en --strict), got {code}\nOutput:\n{out[-600:]}"
         assert any("settings.json" in l for l in fail_lines), \
             f"Esperado FAIL sobre settings.json, lines={fail_lines}"
     finally:
         SETTINGS_PATH.unlink(missing_ok=True)
-        backup.rename(SETTINGS_PATH)
+        if existed and backup.exists():
+            backup.rename(SETTINGS_PATH)
     print("[OK]")
 
 
 def test_4_detects_missing_hook_file():
     print("\n=== TEST 4: Detecta hook faltante en disco -> exit 1 ===")
-    original = SETTINGS_PATH.read_text(encoding="utf-8")
-    settings = json.loads(original)
+    original = SETTINGS_PATH.read_text(encoding="utf-8") if SETTINGS_PATH.exists() else None
+    settings = json.loads(original) if original else dict(_MINIMAL_SETTINGS)
 
     # Inyectar referencia a hook inexistente
     settings["hooks"]["Stop"].append({
@@ -117,23 +160,28 @@ def test_4_detects_missing_hook_file():
         temp_path = Path(tf.name)
         json.dump(settings, tf, ensure_ascii=False, indent=2)
 
-    # Parchear temporalmente: renombrar settings.json original y poner el modificado
+    # Parchear temporalmente: renombrar settings.json original (if exists) y poner el modificado
+    existed = SETTINGS_PATH.exists()
     backup = SETTINGS_PATH.with_suffix(".json.bak_f7")
     try:
-        SETTINGS_PATH.rename(backup)
+        if existed:
+            SETTINGS_PATH.rename(backup)
         temp_path.rename(SETTINGS_PATH)
 
         code, out = run_healthcheck()
         print(f"  exit={code}")
         fail_lines = [l for l in out.splitlines() if "[FAIL]" in l]
         for l in fail_lines[:3]:
-            print(f"  {l.strip()}")
+            # Mask [FAIL] so run_all's secondary marker check doesn't false-positive
+            # on nested tool output when this suite itself is passing.
+            print(f"  hc:{l.strip().replace('[FAIL]', 'FAIL:')}")
         assert code == 1, f"Esperado exit 1, got {code}"
         assert any("nonexistent" in l or "Hooks" in l for l in fail_lines), \
             f"Esperado FAIL sobre hook faltante, lines={fail_lines}"
     finally:
         SETTINGS_PATH.unlink(missing_ok=True)
-        backup.rename(SETTINGS_PATH)
+        if existed and backup.exists():
+            backup.rename(SETTINGS_PATH)
         temp_path.unlink(missing_ok=True)
 
     print("[OK]")
@@ -141,8 +189,8 @@ def test_4_detects_missing_hook_file():
 
 def test_5_detects_legacy_absolute_path():
     print("\n=== TEST 5: Detecta path heredado /c/Users/Lucas/ -> exit 1 ===")
-    original = SETTINGS_PATH.read_text(encoding="utf-8")
-    settings = json.loads(original)
+    original = SETTINGS_PATH.read_text(encoding="utf-8") if SETTINGS_PATH.exists() else None
+    settings = json.loads(original) if original else dict(_MINIMAL_SETTINGS)
 
     # Inyectar path absoluto heredado
     settings["hooks"]["Stop"].append({
@@ -153,22 +201,27 @@ def test_5_detects_legacy_absolute_path():
         }]
     })
 
+    existed = SETTINGS_PATH.exists()
     backup = SETTINGS_PATH.with_suffix(".json.bak_f7b")
     try:
-        SETTINGS_PATH.rename(backup)
+        if existed:
+            SETTINGS_PATH.rename(backup)
         SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
 
         code, out = run_healthcheck()
         print(f"  exit={code}")
         fail_lines = [l for l in out.splitlines() if "[FAIL]" in l]
         for l in fail_lines[:3]:
-            print(f"  {l.strip()}")
+            # Mask [FAIL] so run_all's secondary marker check doesn't false-positive
+            # on nested tool output when this suite itself is passing.
+            print(f"  hc:{l.strip().replace('[FAIL]', 'FAIL:')}")
         assert code == 1, f"Esperado exit 1, got {code}"
         assert any("Paths" in l or "path" in l.lower() or "Lucas" in l for l in fail_lines), \
             f"Esperado FAIL sobre paths heredados, lines={fail_lines}"
     finally:
         SETTINGS_PATH.unlink(missing_ok=True)
-        backup.rename(SETTINGS_PATH)
+        if existed and backup.exists():
+            backup.rename(SETTINGS_PATH)
 
     print("[OK]")
 

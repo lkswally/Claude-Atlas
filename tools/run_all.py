@@ -157,12 +157,16 @@ def run_suite(path: Path, timeout: int = 60) -> dict:
         passed = result.returncode == 0
 
         # Secondary check: if returncode=0 but suite output contains actual failure markers,
-        # mark as failed. Be specific to avoid false positives on "FAIL: 0" or "FAIL=0".
+        # mark as failed. Markers must be at the START of a line (optionally indented)
+        # to avoid false positives from test descriptions that reference "[FAIL]" literally
+        # (e.g. "muestra sólo [FAIL]") or nested tool output within a passing test.
         if passed:
             combined = result.stdout + result.stderr
-            has_failure_marker = (
-                "[FAIL]" in combined          # ATLAS suite marker
-                or "RESULTADO: FAIL" in combined  # ATLAS summary
+            has_failure_marker = any(
+                line.lstrip().startswith("[FAIL]")
+                for line in combined.splitlines()
+            ) or (
+                "RESULTADO: FAIL" in combined       # ATLAS summary (exact)
                 or "FAILED (failures=" in combined  # unittest
                 or "FAILED (errors=" in combined    # unittest
             )
