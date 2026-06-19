@@ -1,0 +1,116 @@
+# ATLAS Architecture Decision Policy — F35
+# Formal policy the Architecture Decision Governor (tools/architecture_decision.py)
+# uses to classify any proposed change. The point: ATLAS evaluates proposals on
+# evidence and risk — it does NOT execute just because something was requested.
+#
+# This file is DESCRIPTIVE config for a read-only analyzer. It changes no runtime.
+
+version: "1.0"
+updated: "2026-06-19"
+
+# Decision states (what the governor can return)
+states:
+  ACCEPT: "Low risk, clear benefit, testable, reversible. Proceed."
+  ACCEPT_WITH_LIMITS: "Beneficial but bounded — docs/tests/refs only, no runtime. Proceed within limits."
+  DEFER: "Useful but not now (cost, sequencing, or low marginal value). Revisit later."
+  REJECT: "No net benefit, or over-engineering, or unacceptable risk. Do not do."
+  NEEDS_EVIDENCE: "Plausible but unproven — requires audit/measurement before deciding."
+  NEEDS_HUMAN_APPROVAL: "Crosses a boundary (new dependency, external service, security, irreversibility). Human must approve."
+
+# --- Signal detection (keywords → signal) ---------------------------------
+# The governor scans the proposal text for these signals.
+signals:
+  new_dependency: [dependency, install, pip install, npm install, package, library, sdk, requirements]
+  external_service: [cloud, external service, remote, saas, api key, token, network call, third-party, upstream, opencode]
+  security_sensitive: [secret, credential, auth, permission, hook bypass, disable security, token]
+  touches_runtime: [dispatcher, runtime logic, atlas_dispatcher, agent logic, agent semantics, hook code, mcp server]
+  increases_boot: [always_on, always-on, boot token, inflate context, load at boot, into claude.md, system prompt]
+  over_engineering: [plugin architecture, event bus, framework, generic abstraction, provider abstraction, new layer, microservice]
+  docs_only: [doc, documentation, readme, reference, comment, report, clarify wording, rename doc]
+  knowledge_move: [move to ref, lazy ref, decompose, slim, extract section, knowledge registry, resolve_knowledge]
+  tests_only: [test, coverage, suite, qa check, healthcheck check, assertion]
+  reversible: [reversible, revert, rollback, behind flag, disabled by default]
+
+# --- Decision rules (ordered; first match wins) ---------------------------
+# Each rule: required signals (any/all) → state. Evaluated top-down.
+rules:
+  - id: external-or-dependency
+    when_any: [new_dependency, external_service]
+    state: NEEDS_HUMAN_APPROVAL
+    reason: "Adds a dependency or external/cloud surface — boundary crossing, needs human sign-off."
+
+  - id: security
+    when_any: [security_sensitive]
+    state: NEEDS_HUMAN_APPROVAL
+    reason: "Security-sensitive — never auto-accept; human approval required."
+
+  - id: touches-runtime
+    when_any: [touches_runtime]
+    state: NEEDS_EVIDENCE
+    reason: "Touches dispatcher/runtime/agent semantics — requires audit + tests before deciding."
+
+  - id: increases-boot
+    when_any: [increases_boot]
+    state: DEFER
+    reason: "Increases always-on/boot cost — defer unless measured net benefit (boot_profiler)."
+
+  - id: over-engineering
+    when_any: [over_engineering]
+    state: REJECT
+    reason: "Over-engineering signal without a concrete current need — prefer not adding the layer."
+
+  - id: docs-or-tests-only
+    when_any: [docs_only, knowledge_move, tests_only]
+    when_not: [new_dependency, external_service, touches_runtime, increases_boot]
+    state: ACCEPT_WITH_LIMITS
+    reason: "Docs/tests/knowledge-move only, no runtime/dependency — safe within limits."
+
+  - id: default-cautious
+    when_any: []
+    state: NEEDS_EVIDENCE
+    reason: "No strong signal either way — gather evidence (audit/measurement) before acting."
+
+# --- Scoring (impact 0-5, risk 0-5) ---------------------------------------
+scoring:
+  impact_weights:
+    reduces_complexity: 1
+    reduces_tokens: 1
+    improves_security: 1
+    improves_stability: 1
+    improves_output_quality: 1
+  risk_weights:
+    breaks_compatibility: 2
+    adds_dependency: 2
+    increases_input_load: 1
+    no_test_possible: 1
+    no_clear_rollback: 1
+  thresholds:
+    accept_max_risk: 1        # ACCEPT only if risk <= this
+    human_approval_min_risk: 4  # risk >= this forces human approval regardless
+    reject_min_risk_low_impact: 4  # high risk + low impact (<=1) => REJECT
+
+# --- Gates: when extra process is mandatory -------------------------------
+gates:
+  requires_prior_audit:
+    - touches_runtime
+    - increases_boot
+  requires_external_comparison:
+    - "claims parity or superiority over another system"
+    - "adopts an upstream pattern"
+  requires_human_approval:
+    - new_dependency
+    - external_service
+    - security_sensitive
+    - irreversible
+  prefer_no_change_when:
+    - "risk > impact"
+    - "benefit is cosmetic and area is stable"
+    - "proposal restates an already-implemented capability"
+
+# --- Anti-patterns the governor must flag ---------------------------------
+anti_patterns:
+  obedient_execution: "Executing a proposal solely because it was requested, without evidence."
+  unverified_claims: "Accepting 'parity/superiority/complete migration' claims without a check."
+  scope_creep: "Bundling unrelated changes into one proposal."
+  over_engineering: "Adding frameworks/abstractions/layers ahead of a concrete need."
+  silent_dependency: "Introducing a dependency or external call without surfacing it."
