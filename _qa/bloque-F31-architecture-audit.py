@@ -116,12 +116,14 @@ def main():
     else:
         fail("T6 always_on", str(det.get("always_on")))
 
-    # T7 god-files are decompose candidates
+    # T7 (post-F32): the two original god-files are NO LONGER decompose candidates
+    # (slimmed to facades). The auditor must reflect the decomposition.
     dc_paths = {f["path"] for f in det.get("decompose_candidates", [])}
-    if ".claude/agents/orquestador.md" in dc_paths and ".claude/agents/agent-protocol.md" in dc_paths:
-        ok("T7 orquestador + agent-protocol are decompose candidates")
+    if (".claude/agents/orquestador.md" not in dc_paths
+            and ".claude/agents/agent-protocol.md" not in dc_paths):
+        ok("T7 god-file facades no longer decompose candidates (F32)")
     else:
-        fail("T7 decompose", str(dc_paths))
+        fail("T7 decompose (facades should be slim)", str(dc_paths))
 
     # T8 recommendations
     recs = result.get("recommendations", [])
@@ -159,13 +161,16 @@ def main():
     else:
         fail("T11 --score", repr(r.stdout))
 
-    # T12 responsibilities: orquestador spans >= 6 domains
-    orq = next((f for f in det.get("decompose_candidates", [])
-                if f["path"].endswith("orquestador.md")), {})
-    if len(orq.get("responsibilities", [])) >= 6:
-        ok("T12 orquestador spans >= 6 domains", str(len(orq["responsibilities"])))
+    # T12 (post-F32): orquestador.md facade is now slim (small token footprint),
+    # validating the decomposition reduced the per-load cost.
+    orq_files = aa.analyze()  # fresh
+    import boot_profiler as _bp
+    orq_scan = next((f for f in _bp.scan_files(PROJECT_ROOT)
+                     if f["path"] == ".claude/agents/orquestador.md"), {})
+    if 0 < orq_scan.get("estimated_tokens", 99999) < 5000:
+        ok("T12 orquestador facade slimmed (<5K tokens)", str(orq_scan.get("estimated_tokens")))
     else:
-        fail("T12 responsibilities", str(orq.get("responsibilities")))
+        fail("T12 orquestador facade size", str(orq_scan.get("estimated_tokens")))
 
     # T13 read-only: input mtime unchanged after analyze
     target = PROJECT_ROOT / "CLAUDE.md"

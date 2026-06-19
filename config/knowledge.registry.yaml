@@ -52,12 +52,14 @@ knowledge:
     owner: orchestrator
     required_at_boot: false
     trigger: orchestrator_mode
-    estimated_tokens: 28700
-    replacement_candidate: true
-    duplication_risk: high
+    estimated_tokens: 1207
+    replacement_candidate: false
+    duplication_risk: low
     notes: >
-      Loaded only in orchestrator mode. ~70% premature: all 5 phases load even
-      when only phase 1 is active. F30 candidate to split core + per-phase refs.
+      F32: slimmed from ~28700 to ~1207 tokens (-96%). Now a facade: identity,
+      golden rule, minimal routing, ref map, non-negotiable rules, escape hatch.
+      Phase/boot/memory/delegation/ops detail moved verbatim to
+      .claude/agents/refs/orchestrator-*.md (lazy).
 
   - id: agent-protocol
     path: .claude/agents/agent-protocol.md
@@ -66,12 +68,14 @@ knowledge:
     owner: subagents
     required_at_boot: false
     trigger: subagent_spawn
-    estimated_tokens: 27100
-    replacement_candidate: true
-    duplication_risk: high
+    estimated_tokens: 890
+    replacement_candidate: false
+    duplication_risk: low
     notes: >
-      Loaded per subagent. ~75% is class-specific contracts (QA/design/dev) that
-      a given agent doesn't need. Duplicates Engram protocol with CLAUDE.md.
+      F32: slimmed from ~27100 to ~890 tokens (-97%). Now a facade: base contract
+      (Engram 2-step, Return Envelope, universal limits) + contract map by agent
+      class. Detail moved verbatim to .claude/agents/refs/protocol-*.md (lazy).
+      Engram duplication with CLAUDE.md reduced to essence + pointer.
 
   # --- Principal agent references (LAZY) ------------------------------------
   - id: pipeline-reference
@@ -256,3 +260,137 @@ knowledge:
     replacement_candidate: false
     duplication_risk: low
     notes: "F30: stack, Nothing DS, Better Auth, creative agents, best practices, Windows overrides (moved from CLAUDE.md)."
+
+  # --- F32 orchestrator refs (moved verbatim from orquestador.md) -----------
+  - id: orchestrator-routing
+    path: .claude/agents/refs/orchestrator-routing.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: orchestrator_boot
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: Boot Sequence & routing (from orquestador.md)."
+
+  - id: orchestrator-memory-engram
+    path: .claude/agents/refs/orchestrator-memory-engram.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: orchestrator_memory
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: session lifecycle + Engram cajones (from orquestador.md)."
+
+  - id: orchestrator-modification
+    path: .claude/agents/refs/orchestrator-modification.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: modification_mode
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: modification mode (from orquestador.md)."
+
+  - id: orchestrator-delegation
+    path: .claude/agents/refs/orchestrator-delegation.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: delegation
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: runtime helpers wiring + handoff (from orquestador.md)."
+
+  - id: orchestrator-pipeline
+    path: .claude/agents/refs/orchestrator-pipeline.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: pipeline_phase
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: full 5-phase pipeline + 2B (from orquestador.md). Largest ref."
+
+  - id: orchestrator-operations
+    path: .claude/agents/refs/orchestrator-operations.md
+    category: agent-ref
+    load_policy: lazy
+    owner: orchestrator
+    required_at_boot: false
+    trigger: orchestrator_ops
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: recovery, validation, format, troubleshooting, enrollment, degradation (from orquestador.md)."
+
+  # --- F32 protocol refs (moved verbatim from agent-protocol.md) ------------
+  - id: protocol-memory-engram
+    path: .claude/agents/refs/protocol-memory-engram.md
+    category: agent-ref
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: engram
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: Engram read/strategy/MCP/write (from agent-protocol.md)."
+
+  - id: protocol-envelope-audit
+    path: .claude/agents/refs/protocol-envelope-audit.md
+    category: agent-ref
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: return_envelope
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: Return Envelope + pre-return audit + delegation stop rules (from agent-protocol.md)."
+
+  - id: protocol-agent-contracts
+    path: .claude/agents/refs/protocol-agent-contracts.md
+    category: agent-ref
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: agent_contract
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: per-agent contracts (QA cache, design, hardening, evidence, network/console) (from agent-protocol.md)."
+
+  - id: protocol-core-universal
+    path: .claude/agents/refs/protocol-core-universal.md
+    category: agent-ref
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: universal_rules
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: universal rules, design intelligence, anti-generic, limits, anti-loop (from agent-protocol.md)."
+
+  - id: protocol-capability
+    path: .claude/agents/refs/protocol-capability.md
+    category: agent-ref
+    load_policy: lazy
+    owner: subagents
+    required_at_boot: false
+    trigger: capability_resolve
+    estimated_tokens: 0
+    replacement_candidate: false
+    duplication_risk: low
+    notes: "F32: capability router/metrics/policy F16/F18/F19 (from agent-protocol.md)."

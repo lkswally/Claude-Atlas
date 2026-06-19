@@ -387,7 +387,9 @@ _SCAN_GLOBS = [
     ".claude/agents/orquestador.md",
     ".claude/agents/agent-protocol.md",
     ".claude/agents/*.md",
+    ".claude/agents/refs/*.md",   # F32: decomposed knowledge refs
     "agents/*.md",
+    "agents/refs/*.md",           # F32: dist mirror of refs
     "docs/*.md",
     "config/*.yaml",
     ".claude/skills.registry.yaml",
