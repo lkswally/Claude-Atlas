@@ -563,6 +563,38 @@ def check_knowledge_registry() -> None:
              f"{len(entries)} entradas, invariantes de politica OK, paths criticos en disco")
 
 
+def check_claim_linter() -> None:
+    """
+    Claim Linter (F36): escanea docs por claims riesgosos. WARN-only por disenio —
+    nunca FAIL. WARN si hay claims CRITICAL sin evidence mapping; informa HIGH count.
+    """
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+        import claim_linter as cl
+    except Exception as e:
+        WARN("Claim linter", f"no se pudo importar claim_linter: {e}")
+        return
+    try:
+        result = cl.scan()
+    except Exception as e:
+        WARN("Claim linter", f"scan fallo: {e}")
+        return
+
+    by_sev = result.get("by_severity", {})
+    crit_no_ev = result.get("critical_without_evidence", 0)
+    high = by_sev.get("HIGH", 0)
+    crit = by_sev.get("CRITICAL", 0)
+
+    if crit_no_ev > 0:
+        WARN("Claim linter",
+             f"{crit_no_ev} claim(s) CRITICAL sin evidence mapping — revisar docs "
+             f"(WARN-only F36). HIGH={high} CRITICAL={crit}")
+    else:
+        PASS("Claim linter",
+             f"sin CRITICAL sin-evidencia | {result.get('total_findings',0)} findings "
+             f"(HIGH={high} CRITICAL={crit}, {result.get('files_scanned',0)} files)")
+
+
 def check_projects_registry() -> None:
     """Projects registry: existe, es YAML valido y proyectos activos tienen paths en disco."""
     registry_path = PROJECT_ROOT / "config" / "projects.registry.yaml"
@@ -1050,6 +1082,7 @@ def run_all() -> int:
     check_hard_rules()
     check_skills_registry()
     check_knowledge_registry()
+    check_claim_linter()
     check_projects_registry()
     check_engram()
     check_mcp_registry()

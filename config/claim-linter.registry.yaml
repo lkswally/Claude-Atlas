@@ -1,0 +1,140 @@
+# ATLAS Claim Linter Registry — F36
+# Patterns of risky documentation claims (absolute / technical / status / security /
+# performance), their severity, and a suggested verifier. The linter is READ-ONLY and
+# WARN-only — it flags claims that promise unverified invariants, it does not judge style.
+#
+# severity: LOW | MEDIUM | HIGH | CRITICAL
+# Each pattern is matched case-insensitively as a substring (regex: false) or regex.
+
+version: "1.0"
+updated: "2026-06-19"
+
+# Files scanned by default (--scan). Historical F-reports are excluded unless --all.
+scan_default:
+  - README.md
+  - CONTRIBUTING.md
+  - GLOSSARY.md
+  - CLAUDE.md
+  - docs/atlas-boot-reference.md
+  - docs/atlas-release-reference.md
+  - docs/atlas-engram-reference.md
+  - docs/atlas-build-reference.md
+  - docs/atlas-operational-capabilities.md
+  - docs/atlas-knowledge-resolver.md
+
+# Glob added only with --all (includes historical reports — noisy by design).
+scan_all_glob: "docs/*.md"
+
+# Verifiers the linter can suggest (and, for a few, auto-probe).
+verifiers:
+  mcp_grep:        "grep -r 'mcp__' .claude/agents/   (capability router is progressive, not total)"
+  secrets_check:   "python tools/secrets_check.py"
+  healthcheck:     "python tools/atlas_healthcheck.py"
+  boot_profiler:   "python tools/boot_profiler.py --scan"
+  run_all_release: "python tools/run_all.py --release"
+  run_all_quick:   "python tools/run_all.py --quick"
+  architecture:    "python tools/architecture_audit.py --report"
+
+# Claim patterns. `evidence` names a verifier when one applies.
+claims:
+
+  # --- Technical invariants (highest doc-risk: easy to falsify) ------------
+  - id: no-raw-mcp
+    patterns: ["no raw mcp", "without raw mcp", "no agent references raw mcp", "not a raw mcp"]
+    category: technical
+    severity: HIGH
+    evidence: mcp_grep
+    risk_reason: "Claims agents avoid raw MCP prefixes — falsifiable by grepping mcp__ (router is progressive)."
+
+  - id: fully-migrated
+    patterns: ["fully migrated", "completely migrated", "migration complete", "total migration"]
+    category: technical
+    severity: HIGH
+    evidence: architecture
+    risk_reason: "Claims a migration is total/complete — usually progressive in ATLAS."
+
+  - id: all-tests
+    patterns: ["all tests pass", "all suites pass", "every test", "100% green", "all green"]
+    category: technical
+    severity: HIGH
+    evidence: run_all_release
+    risk_reason: "Claims all tests pass without referencing a concrete run."
+
+  - id: all-hooks-agents
+    patterns: ["all hooks", "all agents", "every agent", "every hook", "no agent", "todos los agentes", "ningún agente", "ningun agente"]
+    category: technical
+    severity: HIGH
+    evidence: healthcheck
+    risk_reason: "Universal quantifier over agents/hooks — verify against current inventory."
+
+  - id: zero-drift
+    patterns: ["zero drift", "no drift", "completely verified", "fully verified"]
+    category: technical
+    severity: MEDIUM
+    evidence: healthcheck
+    risk_reason: "Claims verification/drift state that can change over time."
+
+  - id: no-secrets
+    patterns: ["no secrets", "zero secrets", "cannot leak", "no leaked"]
+    category: security
+    severity: CRITICAL
+    evidence: secrets_check
+    risk_reason: "Security claim about secrets — must be backed by secrets_check."
+
+  - id: no-runtime-changes
+    patterns: ["no runtime changes", "zero runtime", "runtime untouched"]
+    category: technical
+    severity: MEDIUM
+    evidence: run_all_quick
+    risk_reason: "Claims runtime unchanged — verify with diff/tests in the same change."
+
+  # --- Absolutes ----------------------------------------------------------
+  - id: absolute-words
+    patterns: ["always", "never", "fully", "completely", "100%", "guaranteed", "sin excepción", "sin excepcion", "nunca", "siempre", "guarantee"]
+    category: absolute
+    severity: MEDIUM
+    evidence: null
+    risk_reason: "Absolute wording promises an invariant; prefer scoped phrasing."
+
+  # --- Security ------------------------------------------------------------
+  - id: security-strong
+    patterns: ["is secure", "fully secure", "completely safe", "protected against all", "blocks all", "cannot be"]
+    category: security
+    severity: CRITICAL
+    evidence: healthcheck
+    risk_reason: "Strong security claim — almost never absolutely true; back with evidence."
+
+  # --- Status --------------------------------------------------------------
+  - id: status-strong
+    patterns: ["production-ready", "production ready", "release-ready", "release ready", "battle-tested", "enterprise-grade"]
+    category: status
+    severity: MEDIUM
+    evidence: run_all_release
+    risk_reason: "Maturity claim — back with release validation; ATLAS is at RC, not GA."
+
+  # --- Performance ---------------------------------------------------------
+  - id: perf-strong
+    patterns: ["low-token", "highly optimized", "fully optimized", "minimal overhead", "lightning fast", "zero overhead"]
+    category: performance
+    severity: LOW
+    evidence: boot_profiler
+    risk_reason: "Performance claim — back with a measurement (boot_profiler/benchmark)."
+
+# Whitelist: contexts where a pattern is acceptable (substring on the line).
+# Lines containing any whitelist token for the matched id are downgraded to LOW.
+whitelist_context:
+  # Talking ABOUT the claim linter / honest hedging is fine.
+  - "not a completed"
+  - "progressive"
+  - "not total"
+  - "warn-only"
+  - "is not"
+  - "claim linter"
+  - "no longer"
+  # Descriptive (doc-map table rows, scoping, evidence-backed invariants) — not claims.
+  - "roles, tools"
+  - "writing guide"
+  - "referencia para"     # "referencia para todos los agentes" (descriptive)
+  - "funciona sin"        # pipeline rule, true by design
+  - "no están en ningún"  # scoping statement
+  - "exits 0 on empty"    # evidence-backed (healthcheck hooks smoke test)
