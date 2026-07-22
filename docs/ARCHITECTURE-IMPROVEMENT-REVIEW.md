@@ -159,10 +159,13 @@ healthcheck"*. Cumplido.
 
 ## 12. Memorias actualizadas
 
-- Engram: se guarda el aprendizaje confirmado (source=este review, confidence=high,
-  lifecycle=CURRENT, scope=atlas-governance).
-- Auto-memory `atlas-vibecoding-unification`: se actualiza de "awaiting approval" a
-  **"reviewed twice (F35 + este) → NO_CHANGE; no converger"**.
+- Engram (proyecto `proyectosclaude`, obs id 27): aprendizaje confirmado guardado
+  (source=este review, confidence=high, lifecycle=active). Conflict candidate no
+  relacionado resuelto como `not_conflict`.
+- Auto-memory: **nueva** entrada `architecture-review-vibecoding-nochange` (registro de
+  esta decisión). **No** se modificó `atlas-vibecoding-unification` — al leerla completa
+  resultó ser un deliverable distinto (paquete instalable "Atlas OS v2/v3" en
+  `D:\ProyectosIA\atlas`, pendiente de install a `~/.claude`), ajeno a esta comparación.
 
 ## 13. Pendientes que requieren aprobación humana
 
