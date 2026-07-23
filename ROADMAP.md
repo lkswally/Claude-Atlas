@@ -1,51 +1,44 @@
 # ATLAS Roadmap
 
-## Current State — v0.24.0-rc1
+## Current State — v1.0.0-rc2
 
-**Architecture maturity: ~91%**  
-**Open Source DX readiness: ~95%**  
-**System reliability: ~88%**  
-**v1.0 readiness: ~82%**
+ATLAS reached **v1.0.0-rc2**: CI green, release gate green (39/39), healthcheck 0 FAIL,
+Architecture Score 86/100. The RC2 line (F25–F37) added no new pipeline features — it
+hardened boot cost, governance, and documentation honesty. Detail in `CHANGELOG.md`.
 
-### What's Solid (production-ready)
-- 5-phase pipeline with phase gates and retry logic
-- 25-agent catalog with defined tools and responsibilities
-- Capability abstraction layer (F16–F19): router, registry, events, policy
-- Security enforcement: 13 reactive hooks, 22/22 security contract tests
-- 218+ QA tests across all feature blocs — 100% green
-- ADR system with self-auditor drift detection
-- Python tools layer: healthcheck (25 checks), dispatcher, metrics, dependency graph
-- Engram MCP: persistent memory, dual-write, cross-session continuity
-- **Runtime settings separation (F23)**: healthcheck tolerates Windows/Claude Desktop race condition; WARN not FAIL when settings.json absent; `--strict` mode for release validation
-- **Release pipeline (F24)**: `python tools/run_all.py --release` validates everything, auto-generates `release-report.md`, structured JSON output, GitHub Actions CI, bootstrap installer, doctor diagnostic
+### Completed
+- **Core** — 5-phase pipeline, 24-subagent catalog, phase gates + retry, Engram MCP
+  (persistent memory, dual-write, cross-session continuity).
+- **Governance** — Architecture Decision Governor (F35, `tools/architecture_decision.py`)
+  + policy YAML; Architecture Intelligence audit (F31, score 62→86).
+- **Evidence / QA** — declarative test registry (F24); `run_all.py --quick` 36/36,
+  `--release` 39/39; 12-layer evidence QA.
+- **Healthcheck** — 26 checks, dual-axis strict (expected vs runtime), 0 FAIL.
+- **Knowledge resolver** — F33/F34, `resolve_knowledge()` metadata-only + wiring.
+- **Boot optimization** — F30 slimming (CLAUDE.md −81%) + F32 decomposition (god-files
+  −96%/−97%); always-on ~1841 tok within budget.
+- **Claim linter** — F36, documentation truthfulness gate (0 HIGH / 0 CRITICAL).
+- **Release readiness** — F37 audit + this closure (CHANGELOG, ROADMAP, hygiene).
 
-### What's Incomplete
-- Context7 and GitHub MCP require manual token configuration
-- Python tools are invoked manually (no auto-trigger on agent completion)
-- F25 (Agent Output Contracts) and F26 (Token Budget) deferred to post-v1.0
+### Current
+- **Documentation closure** — CHANGELOG/ROADMAP synced to real state (this pass).
+- **Clean-install validation** — verify a new user can install + healthcheck from the README.
+- **Pilot in real projects** — exercise ATLAS on registered projects; let friction drive next work.
 
----
+### Deferred (no adoption without evidence of real friction)
+- **Codegraph / structured code retrieval** — optional provider; external dependency,
+  needs measured tool-call reduction first (governor: NEEDS_HUMAN_APPROVAL).
+- **No-JS Render Audit** — QA gate idea from the external review (ADAPT); touches
+  evidence-collector — measure first.
+- **Anti-repetition visual memory** — only if projects show repeated structure.
+- **Dispatcher decomposition (v1.1)** — `atlas_dispatcher.py` (~3,366 LOC) split behind
+  the same public API, one extraction at a time; maintainability debt, not a defect.
+- Any feature not backed by a real, observed need.
 
-## What Would Block v1.0.0 Stable
-
-### P0 — Must Have
-1. **Install automation** — `install/linux.sh` and `install/windows.md` are outdated (reference wrong clone URL). A working one-command install script for both platforms.
-2. **Secrets management** — currently tokens go in `.env.local` with no validation. Should have a `setup-tokens` command that validates each token before accepting it.
-3. **Full QA suite runner** — `python tools/run_all.py` runs all bloque-F* suites and reports overall pass/fail with timing. ✅ Created in F22.
-4. **First-run experience** — after installation, `python tools/atlas_healthcheck.py` should guide the user through fixing any WARN/FAIL items.
-
-### P1 — Should Have
-5. **Capability auto-discovery** — instead of hardcoding 14 capabilities in `registry.py`, detect which MCPs are registered in `.mcp.json` and build the registry dynamically.
-6. **Policy hot-reload** — currently policy changes require restarting Claude. Should watch `config/capability.policy.yaml` for changes.
-7. **Agent output contracts** — formal schema per agent for what they're allowed to write/save. Currently only the envelope format is enforced.
-8. **Token budget per agent** — set hard limits on how many tokens each sub-agent can use per task, with automatic escalation if exceeded.
-
-### P2 — Nice to Have
-9. **Web dashboard** — render the dependency graph and capability status in a browser UI (could use `tools/dependency_graph.py --json` as the backend).
-10. **Replay mode** — given a `.pipeline/capability-events.jsonl`, replay the session and show what decisions were made and why.
-11. **MCP auto-install** — if a capability is PENDING_TOKEN or CONFIG_ONLY, generate the exact setup command for the user.
-
----
+### Maintenance policy (post-v1.0)
+After v1.0, work is limited to: **bugs · security · compatibility · improvements that
+originate from real project usage**. No more automatic self-improvement phases — the next
+change must come from an observed error or friction, not from an audit for its own sake.
 
 ---
 
@@ -123,15 +116,14 @@ A single `atlas` command that replaces the current manual incantations.
 - `.github/workflows/ci.yml` + `release.yml`: CI/CD via GitHub Actions
 - `docs/GETTING_STARTED.md`, `docs/TESTING.md`, `docs/RELEASE.md`, `docs/CONFIGURATION.md`: nuevos
 
-### F25 — Agent Output Contracts
-- Per-agent schema: what drawers they write, what files they touch
-- Dispatcher validates agent output against contract
-- Violations logged to `.pipeline/contract-violations.jsonl`
-
-### F26 — Token Budget Enforcement
-- Per-agent token limits in `config/agent-budgets.yaml`
-- Dispatcher tracks tokens per delegation
-- Auto-escalate to orchestrator when budget exceeded
+### F25–F37 — Shipped in v1.0.0-rc2
+The phases originally sketched here as "F25 Agent Output Contracts" and "F26 Token
+Budget" were **not** implemented under those labels. The actual F25–F37 work went into
+system validation, boot/context optimization, architecture governance, documentation
+truthfulness, and the external review — all consolidated in `CHANGELOG.md` under
+`v1.0.0-rc2`. The two original ideas remain **deferred concepts** (no evidence of need):
+- *Agent Output Contracts* — per-agent write/save schema beyond the envelope. Deferred.
+- *Token Budget Enforcement* — per-agent token limits with auto-escalation. Deferred.
 
 ### v1.1 — Dispatcher Decomposition
 - **Known debt:** `tools/atlas_dispatcher.py` is monolithic (~3,366 LOC, the largest tool in the repo). It mixes envelope validation, phase gates, E2E flow checks, design-quality enforcement, and ~24 public helpers.
@@ -145,6 +137,7 @@ A single `atlas` command that replaces the current manual incantations.
 
 | Version | Tag | Focus |
 |---------|-----|-------|
+| v1.0.0-rc2 | _(untagged — pending release policy)_ | RC2 — F25–F37: validation, boot/context optimization, architecture governance, claim linter, external review (NO_CHANGE), release readiness |
 | v0.24.0-rc1 | `v0.24.0-atlas-rc1` | Release Candidate Engineering — run_all --release, release report, doctor, bootstrap, CI |
 | v0.23.0 | `v0.23.0-atlas-runtime-settings-separated` | Runtime settings separation, F23 — healthcheck WARN/FAIL split, template fallback |
 | v0.22.0 | `v0.22.0-atlas-integrity-audit` | System Integrity Audit — tools/run_all.py, secrets_check, 56 new QA tests |

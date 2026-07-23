@@ -4,6 +4,86 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [v1.0.0-rc2] — 2026-07-21 — Release Candidate 2
+
+Consolidates F25–F37 (eleven phases): system validation, boot/context
+optimization, architecture-governance tooling, documentation-truthfulness, and an
+external architecture review. **No new pipeline features, no agent-prompt changes,
+no dispatcher changes** — runtime behavior is identical to v0.24.2. This RC is about
+hardening, observability, and honesty, not new capability. Summarized by capability,
+not phase-by-phase (per-phase detail lives in `docs/F25`…`docs/F37`).
+
+### Evidence and QA
+- **F25 Integral Validation** — full-system validation sweep across all suites.
+- Test registry (F24) grew; release suite now **39 suites** (was 33), all green.
+- `run_all.py --quick` 36/36 · `run_all.py --release` 39/39.
+
+### Release Governance
+- **Release gate semantics (F24 P5)** — healthcheck `--strict` split into two axes:
+  expected-strict (committed config gate, used by release) vs runtime-strict (mutable
+  `.claude/settings.json`, not used by release). Removes the "expected-red" gate
+  contradiction; the gate is now green with no false-greens.
+- CI green via GitHub Actions.
+
+### Context and Boot Optimization
+- **F28 Boot Architecture Audit + F29 Boot Profiler** — measured always-on cost with
+  `tools/boot_profiler.py`.
+- **F30 Boot Slimming** — `CLAUDE.md` reduced from ~8700 to ~1700 tokens (−81%); now a
+  thin boot loader + reference map (currently ~1841 tok, within the 2500 budget).
+- **F32 Knowledge Decomposition** — `orquestador.md` and `agent-protocol.md` decomposed
+  from god-files (~28.7K + ~27.1K tok) into lazy refs (−96% / −97%).
+- **F33 Knowledge Resolver + F34 Wiring** — `resolve_knowledge()` returns metadata-only
+  (path/tokens/policy), wired into the orchestrator flow; `config/knowledge.registry.yaml`
+  is the declarative catalog (trigger, load_policy, tokens, owner).
+
+### Architecture Governance
+- **F31 Architecture Intelligence** — `tools/architecture_audit.py` emits an Architecture
+  Score (improved 62 → 86), hotspots and decompose candidates. Analysis only; changes
+  nothing at runtime.
+- **F35 Architecture Decision Governor** — `tools/architecture_decision.py` classifies
+  proposals (ACCEPT_WITH_LIMITS / NEEDS_EVIDENCE / NEEDS_HUMAN_APPROVAL / DEFER / REJECT)
+  against `config/architecture.decision-policy.yaml`. Read-only decision aid.
+- **F27 Capability Router Claim Audit** — verified router claims against implementation.
+
+### Documentation Truthfulness
+- **F36 Claim Linter** — `tools/claim_linter.py` flags unverified HIGH/CRITICAL doc
+  claims. Current: **0 HIGH, 0 CRITICAL**.
+
+### External Architecture Review
+- **F26 + F35 vibecoding audit/comparison** and a second-pass governed review compared
+  ATLAS against `Emaleo0522/claude-vibecoding` (same lineage; PolyForm-Noncommercial →
+  ideas only, no code copied). **Verdict: NO_CHANGE** — candidates already covered in
+  ATLAS or requiring human approval. See `docs/ARCHITECTURE-IMPROVEMENT-REVIEW.md` and
+  `docs/F35-VIBECODING-COMPARISON-REVIEW.md`.
+
+### Release Readiness
+- **F37 Release Readiness** — release-readiness audit; this closure finalizes CHANGELOG,
+  ROADMAP, and repository hygiene (`.gitignore` for regenerable run outputs).
+
+### Risks resolved
+- Boot cost from god-files → decomposed (F30/F32).
+- Documentation drift → Claim Linter (F36) + this closure.
+- Release-gate contradiction → dual-axis strict (F24 P5).
+
+### Breaking changes
+- **None.** Dispatcher, agent prompts, hooks and public tool APIs are unchanged since
+  v0.24.2. Every feature keeps its `ATLAS_*_DISABLED=1` fail-open flag.
+
+### CI status
+- GitHub Actions: green.
+
+### Known limitations
+- Dispatcher decomposition (~3,366 LOC) deferred to v1.1 — maintainability debt, not a defect.
+- `conexo_web` project paused due to a project-side Engram issue (not an ATLAS defect).
+- Linux install path not verified in this run (Windows-only environment).
+
+### Verified metrics (2026-07-21)
+`compileall` exit 0 · Quick 36/36 · Release 39/39 (69.7s) · Healthcheck 24 PASS / 2 WARN /
+0 FAIL / 26 · Architecture Score 86/100 · Boot always-on 1841 tok · Secrets 0 leaked ·
+Claim Linter 0 HIGH / 0 CRITICAL.
+
+---
+
 ## [v0.24.2] — 2026-06-18 — F24 P5: Release Gate Semantics
 
 ### Problem Solved

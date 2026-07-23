@@ -78,6 +78,14 @@ _test_runs/
 # QA evidence directories (binarios y evidencia histórica — conservados en disco, no en git)
 qa/
 _qa/conexo-2026-05-21/
+_qa/pilotos-1L/
+
+# ATLAS generated run outputs (regenerables por run_all.py — no se versionan)
+run_all.json
+run_all_quick.json
+run_all_release.json
+run_all_result.json
+release-report.md
 
 # User-specific runtime settings — RUNTIME_MUTABLE (F23/F24).
 # .claude/settings.json is managed by Claude Desktop on Windows and may be
