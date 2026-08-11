@@ -312,6 +312,49 @@ def test_engram_runtime_probe():
 
 
 # ---------------------------------------------------------------------------
+# T15: Playwright config_status matches core.capabilities.router status
+# Regression test for the 2026-08-11 browser-QA diagnostic: this registry
+# (config/mcp.registry.yaml) said CONFIG_ONLY for playwright while
+# core/capabilities/registry.py (the source resolve_capability() actually
+# reads) said LIVE, and a real E2E smoke test proved the browser genuinely
+# works. Two independent status sources for the same fact drifted apart.
+# This test fails if they disagree again.
+# ---------------------------------------------------------------------------
+def test_playwright_matches_capability_router():
+    try:
+        from mcp_registry import get_mcp
+        m = get_mcp("playwright")
+        if not m:
+            fail("T15 Playwright matches capability router", "playwright no en registry")
+            return
+        registry_status = m.get("status", "UNKNOWN")
+
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from core.capabilities.router import resolve_capability
+            router_status = resolve_capability("browser").status
+        except Exception as e:
+            skip("T15 Playwright matches capability router",
+                 f"capability router no disponible: {e}")
+            return
+
+        if registry_status == router_status == "LIVE":
+            ok("T15 Playwright matches capability router",
+               f"ambos LIVE (registry={registry_status}, router={router_status})")
+        elif registry_status != router_status:
+            fail("T15 Playwright matches capability router",
+                 f"drift: mcp.registry.yaml={registry_status} vs "
+                 f"resolve_capability('browser')={router_status} — actualizar "
+                 f"config/mcp.registry.yaml tras confirmar el estado real")
+        else:
+            # Both agree but neither is LIVE (e.g. both CONFIG_ONLY pre-restart) — OK.
+            ok("T15 Playwright matches capability router",
+               f"consistentes: {registry_status}")
+    except Exception as e:
+        fail("T15 Playwright matches capability router", str(e))
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -336,12 +379,14 @@ def main():
     test_missing_required_no_live()
     test_engram_config_status_live()
     test_engram_runtime_probe()
+    test_playwright_matches_capability_router()
 
     total = PASS_COUNT + FAIL_COUNT
     print()
     print(f"Total: {total} | PASS: {PASS_COUNT} | FAIL: {FAIL_COUNT}")
     print()
     # T13/T14 distinguen: config_status (declarativo en YAML) vs runtime_status (CLI probe live)
+    # T15 detecta drift entre mcp.registry.yaml y core/capabilities/registry.py
 
     if FAIL_COUNT > 0:
         print("RESULTADO: FAIL")

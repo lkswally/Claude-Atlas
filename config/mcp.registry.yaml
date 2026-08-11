@@ -1,6 +1,12 @@
 # ATLAS MCP Registry
 # Inventario declarativo de todos los MCP relevantes para el sistema.
-# Actualizado: 2026-06-17
+# Actualizado: 2026-08-11
+#
+# NOTA (2026-08-11): esta YAML es una fuente declarativa independiente de
+# core/capabilities/registry.py (el router real que consultan los agentes vía
+# resolve_capability()). Ambas pueden desincronizarse — ya ocurrió una vez con
+# playwright (esta YAML decía CONFIG_ONLY mientras el router ya reportaba LIVE
+# y el browser funcionaba). Ver docs/BROWSER-VISUAL-QA-DIAGNOSTIC.md.
 #
 # Status values:
 #   LIVE             — herramientas mcp__*__ detectadas en sesión activa
@@ -17,8 +23,8 @@
 #   repository | deployment | visualization | scheduling | design
 #   database | filesystem | storage | messaging
 
-version: "1.1"
-updated: "2026-06-17"
+version: "1.2"
+updated: "2026-08-11"
 
 mcps:
 
@@ -143,13 +149,13 @@ mcps:
   - id: playwright
     name: "Playwright MCP"
     provider: "Microsoft"
-    status: CONFIG_ONLY
+    status: LIVE
     atlas_capability: browser
     config_scope: project
     live_tool_prefix: "mcp__playwright__"
     config_file: ".mcp.json"
     config_file_path: "D:\\ProyectosIA\\.mcp.json"
-    last_confirmed_live: "2026-06-17"
+    last_confirmed_live: "2026-08-11"
     capabilities:
       - browser_navigate
       - browser_screenshot
@@ -170,9 +176,16 @@ mcps:
       Configurado 2026-06-17: agregado a D:\ProyectosIA\.mcp.json
       Chromium instalado: npx playwright install chromium (113.6 MB)
       Browser: chromium_headless_shell v1228 en AppData/Local/ms-playwright/
-      LIVE en próxima sesión. Comando: npx -y @playwright/mcp@latest
+      LIVE confirmado 2026-08-11: real E2E smoke test — navigate, DOM, click,
+      screenshots (3 viewports), console, network, y evidence-collector
+      integration end-to-end, todo con Chromium real. Ver
+      docs/BROWSER-VISUAL-QA-DIAGNOSTIC.md.
     risks:
       - "Headless shell — algunas páginas requieren headed mode (--headed flag)"
+      - "Este registry (config/mcp.registry.yaml) es una fuente DECLARATIVA
+         independiente de core/capabilities/registry.py (el router real que
+         consultan los agentes vía resolve_capability()). Pueden desincronizarse
+         — ver T15 de bloque-F14-mcp-registry.py para el regression test."
 
   # ─── COMPUTER CONTROL ───────────────────────────────────────────────────────
 
