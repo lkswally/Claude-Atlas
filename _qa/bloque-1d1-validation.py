@@ -20,6 +20,7 @@ from delegation_tracker import (
     THRESHOLD_CONSECUTIVE_READS,
     THRESHOLD_TOOL_CALLS_WITHOUT_SPAWN,
     THRESHOLD_NON_TRIVIAL_FILES_MODIFIED,
+    derive_next_transition,
 )
 
 
@@ -269,6 +270,71 @@ def test_10_active_warnings_output():
     print("[OK] TEST 10: active_warnings produce output legible")
 
 
+def test_11_deterministic_next_transition():
+    print("\n" + "="*70)
+    print("TEST 11: Deterministic Next Transition (external_safe_adoption_design_v1)")
+    print("="*70)
+
+    # 1. Sin flags activos -> CONTINUE
+    assert derive_next_transition(
+        {"escalation_needed": False, "pause_recommended": False, "fresh_review_recommended": False}
+    ) == "CONTINUE"
+
+    # 2. Solo fresh_review_recommended -> RETRY_WITH_NEW_EVIDENCE
+    assert derive_next_transition({"fresh_review_recommended": True}) == "RETRY_WITH_NEW_EVIDENCE"
+
+    # 3. Solo escalation_needed -> RETRY_WITH_NEW_EVIDENCE
+    assert derive_next_transition({"escalation_needed": True}) == "RETRY_WITH_NEW_EVIDENCE"
+
+    # 4. Solo pause_recommended -> BLOCK
+    assert derive_next_transition({"pause_recommended": True}) == "BLOCK"
+
+    # 5. escalation_needed + fresh_review_recommended (sin pause) -> un solo valor
+    result = derive_next_transition({"escalation_needed": True, "fresh_review_recommended": True})
+    assert result == "RETRY_WITH_NEW_EVIDENCE"
+    assert isinstance(result, str)  # nunca lista/tupla — un solo next-step
+
+    # 6. pause_recommended + escalation_needed -> BLOCK (precedencia correcta)
+    assert derive_next_transition({"pause_recommended": True, "escalation_needed": True}) == "BLOCK"
+
+    # 7. Los 3 activos -> BLOCK (máxima severidad gana)
+    assert derive_next_transition({
+        "pause_recommended": True, "escalation_needed": True, "fresh_review_recommended": True,
+    }) == "BLOCK"
+
+    # 8. dict vacío / None -> CONTINUE (fail-open)
+    assert derive_next_transition({}) == "CONTINUE"
+    assert derive_next_transition(None) == "CONTINUE"
+
+    # Output siempre dentro del set permitido
+    from delegation_tracker import NEXT_TRANSITIONS
+    for flags in (
+        {}, {"pause_recommended": True}, {"escalation_needed": True},
+        {"fresh_review_recommended": True}, {"pause_recommended": True, "escalation_needed": True},
+    ):
+        assert derive_next_transition(flags) in NEXT_TRANSITIONS
+
+    print("[OK] Funcion pura: 8 combinaciones de flags -> next_transition correcto")
+
+    # 9. Integración real: state persistido en disco refleja next_transition
+    with tempfile.TemporaryDirectory() as tmpdir:
+        t = make_tracker(tmpdir)
+        for _ in range(THRESHOLD_TOOL_CALLS_WITHOUT_SPAWN):
+            t.record_tool_call("Bash", {"command": "echo hi"})
+        state = t.get_state()
+        print(f"State tras {THRESHOLD_TOOL_CALLS_WITHOUT_SPAWN} tool calls: "
+              f"pause_recommended={state['flags']['pause_recommended']}, "
+              f"next_transition={state.get('next_transition')}")
+        assert state["flags"]["pause_recommended"] is True
+        assert state["next_transition"] == "BLOCK"
+
+        # 10. `flags` original sigue presente e intacto (no regresión de compat)
+        assert set(state["flags"].keys()) >= {
+            "escalation_needed", "pause_recommended", "fresh_review_recommended",
+        }
+    print("[OK] TEST 11: next_transition persistido correctamente, flags sin regresion")
+
+
 # ============================================================
 #  RUNNER
 # ============================================================
@@ -289,6 +355,7 @@ def main():
         test_8_cli_record_command,
         test_9_corrupted_state_recovers_fail_open,
         test_10_active_warnings_output,
+        test_11_deterministic_next_transition,
     ]
 
     passed = 0
@@ -322,6 +389,7 @@ def main():
         print("[OK] CLI 'record' funciona para hook PostToolUse")
         print("[OK] State corrupto se recupera con fail-open (no rompe)")
         print("[OK] active_warnings produce output legible")
+        print("[OK] next_transition determinístico deriva de flags (external_safe_adoption_design_v1)")
         print("\nLO QUE 1D.1 NO HACE:")
         print("- NO bloquea tool calls (es advisory)")
         print("- NO conecta automaticamente con el orquestador agente (capability disponible)")

@@ -118,20 +118,30 @@ if verdict["verdict"] == "DISCREPANCY":
     ...
 ```
 
-#### 6. Delegation Stop Rules check tras cada paso (Bloque 1D.1)
+#### 6. Delegation Stop Rules check tras cada paso (Bloque 1D.1 + Deterministic Next Transition)
+
+`delegation-state.json` incluye un campo `next_transition` (derivado de `flags` en cada
+escritura, ver `tools/delegation_tracker.py::derive_next_transition`) que reemplaza la
+interpretación ambigua de flags sueltos por una única acción determinística:
 
 ```python
 import json
 state_path = project_root / ".pipeline" / "delegation-state.json"
 if state_path.exists():
     state = json.loads(state_path.read_text())
+    next_transition = state.get("next_transition", "CONTINUE")
+
+    if next_transition == "BLOCK":
+        # pause_recommended activo -> pausar y delegar a subagente especializado
+        ...
+    elif next_transition == "RETRY_WITH_NEW_EVIDENCE":
+        # escalation_needed y/o fresh_review_recommended -> considerar Explore
+        # agent, cambio de enfoque, o una revisión fresca antes de seguir
+        ...
+    # next_transition == "CONTINUE" -> nada que hacer, seguir el flujo normal
+
+    # `flags` sigue disponible para detalle/logging (no se eliminó, es compat):
     flags = state.get("flags", {})
-    if flags.get("escalation_needed"):
-        # Considerar Explore agent o cambio de enfoque
-        ...
-    if flags.get("pause_recommended"):
-        # Pausar y delegar a subagente especializado
-        ...
 ```
 
 ### Regla general

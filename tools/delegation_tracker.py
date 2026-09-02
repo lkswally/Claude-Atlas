@@ -49,6 +49,53 @@ THRESHOLD_CONSECUTIVE_READS = 5
 THRESHOLD_TOOL_CALLS_WITHOUT_SPAWN = 20
 THRESHOLD_NON_TRIVIAL_FILES_MODIFIED = 2
 
+
+# ============================================================
+#  DETERMINISTIC NEXT TRANSITION (external_safe_adoption_design_v1)
+# ============================================================
+#
+# Adaptado de un patrón observado en Gentle AI v2.5.0 (Receipt-Driven
+# Development): el consumidor de un estado no debe reconstruir la acción
+# a partir de flags/prosa ambiguos — debe recibir un único next-step
+# determinístico. Ver docs/external_safe_adoption_design_v1.md.
+#
+# Antes: orchestrator-delegation.md §6 dejaba la decisión en manos de
+# interpretar 3 booleans independientes ("if escalation_needed: # ...").
+# Ahora: esta función deriva UN string determinístico de esos mismos
+# flags. Advisory only — no cambia el enforcement del dispatcher, y
+# `flags` se preserva sin cambios para compatibilidad y detalle.
+
+NEXT_TRANSITIONS = ("CONTINUE", "RETRY_WITH_NEW_EVIDENCE", "BLOCK")
+
+
+def derive_next_transition(flags: Optional[Dict[str, Any]]) -> str:
+    """
+    Deriva un único next-step determinístico a partir de delegation-state flags.
+
+    Precedencia (más a menos severo):
+      pause_recommended
+        -> "BLOCK"
+      escalation_needed o fresh_review_recommended
+        -> "RETRY_WITH_NEW_EVIDENCE"
+      ninguno activo
+        -> "CONTINUE"
+
+    Pura función de flags -> string. Sin side effects, sin I/O, sin excepciones
+    (flags ausente/None/corrupto cae a CONTINUE via .get() con default False).
+
+    Subconjunto deliberado de los 6 estados que describe la referencia externa
+    (CONTINUE | RETRY_WITH_NEW_EVIDENCE | BLOCK | HUMAN_APPROVAL | ROLLBACK |
+    COMPLETE): HUMAN_APPROVAL ya está cubierto por la confirmación git/deployer
+    existente; ROLLBACK y COMPLETE son conceptos de fase/dispatcher, no de
+    delegation-state — no se fuerza una correspondencia falsa aquí.
+    """
+    flags = flags or {}
+    if flags.get("pause_recommended"):
+        return "BLOCK"
+    if flags.get("escalation_needed") or flags.get("fresh_review_recommended"):
+        return "RETRY_WITH_NEW_EVIDENCE"
+    return "CONTINUE"
+
 # Tools que se consideran "lecturas" para el contador de reads consecutivas
 READ_TOOLS = {"Read", "Glob", "Grep"}
 
@@ -174,6 +221,9 @@ class DelegationTracker:
         """Guarda state atomicamente (tmpfile + rename)."""
         self.state_dir.mkdir(parents=True, exist_ok=True)
         state["last_updated"] = _now_iso()
+        # Deterministic Next Transition (external_safe_adoption_design_v1):
+        # se recalcula en cada escritura para que siempre refleje `flags`.
+        state["next_transition"] = derive_next_transition(state.get("flags"))
         # Atomic write: escribir a tmpfile en mismo directorio, despues rename
         tmp = tempfile.NamedTemporaryFile(
             mode="w",
