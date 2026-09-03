@@ -65,9 +65,23 @@ def check_phase_playbook():
         return {"phase_playbook_boot_config": f"[FAIL] {str(e)}"}
 
 def check_orquestador_documentation():
-    """Verify orquestador.md has Boot Sequence Paso 4a-4d"""
+    """
+    Verify Boot Sequence Paso 4a-4d documentation is present.
+
+    Bloque F32 (commit aec6752, 2026-06-19) slimmed agents/orquestador.md from
+    ~28.7K to ~1.2K tokens (-96%) as a thin facade, moving all operational detail
+    -- including this boot-mode-decision procedure -- VERBATIM to lazy refs under
+    agents/refs/ (registered in config/knowledge.registry.yaml as
+    "orchestrator-routing"). This check target was never updated to follow that
+    move, so it kept failing against the (correctly) slimmed facade for 2+ months
+    without anyone noticing -- atlas_verify.py is a standalone script, not wired
+    into run_all.py/CI (see commit fixing this: root-caused via
+    `git log -S "Paso 4a"`, confirmed with `git stash` that the failure predates
+    this fix and is unrelated to any other pending change).
+    """
+    target = "agents/refs/orchestrator-routing.md"
     try:
-        with open("agents/orquestador.md", encoding="utf-8") as f:
+        with open(target, encoding="utf-8") as f:
             content = f.read()
 
         required_steps = ["Paso 4a", "Paso 4b", "Paso 4c", "Paso 4d"]
@@ -81,7 +95,7 @@ def check_orquestador_documentation():
             return {"orquestador_boot_sequence": "[PASS]"}
         else:
             missing = [s for s in required_steps if s not in content]
-            return {"orquestador_boot_sequence": f"[FAIL] Missing {missing}"}
+            return {"orquestador_boot_sequence": f"[FAIL] Missing {missing} in {target}"}
     except Exception as e:
         return {"orquestador_boot_sequence": f"[FAIL] {str(e)}"}
 
@@ -102,7 +116,7 @@ def main():
     print("[3/4] Checking phase_playbook.json...")
     all_results.update(check_phase_playbook())
 
-    print("[4/4] Checking orquestador.md documentation...")
+    print("[4/4] Checking boot sequence documentation (orchestrator-routing.md)...")
     all_results.update(check_orquestador_documentation())
 
     # Print results

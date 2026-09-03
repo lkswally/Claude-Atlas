@@ -69,6 +69,15 @@ suites:
     can_run_in_release: true
     notes: "Tests MCP registry YAML and loader API."
 
+  - id: bloque-atlas-verify-boot-sequence
+    path: _qa/bloque-atlas-verify-boot-sequence.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Regression guard for the 2026-08-24 STALE_TEST fix in atlas_verify.py::check_orquestador_documentation (Paso 4a-4d target path)."
+
   - id: bloque-F16-capability-router
     path: _qa/bloque-F16-capability-router.py
     layer: unit
