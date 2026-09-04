@@ -387,6 +387,15 @@ suites:
     can_run_in_release: true
     notes: "Tests Playwright MCP."
 
+  - id: bloque-F15-ci-determinism
+    path: _qa/bloque-F15-ci-determinism.py
+    layer: evidence
+    status: active
+    timeout: 120
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Regression guard for the 2026-09-03 CI-determinism fix (bloque-F15-context7/playwright T4 offline split). Spawns both F15 suites as subprocesses with controlled env."
+
   # ---------------------------------------------------------------------------
   # Legacy — bloque-1* series; not executed by runner, kept as historical record
   # ---------------------------------------------------------------------------

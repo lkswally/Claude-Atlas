@@ -3,18 +3,32 @@
 Bloque F15 — Context7 MCP Validation
 =======================================
 
-Valida Context7 (documentación de librerías):
-  1. context7 en registry con status CONFIG_ONLY o LIVE
-  2. atlas_capability = documentation
-  3. cli_available = true, versión >= 3.0.0
-  4. npx @upstash/context7-mcp --version responde sin error
-  5. .mcp.json contiene entrada context7
-  6. capabilities incluyen resolve_library_id y get_library_docs
-  7. required_for incluye agentes dev
-  8. capability layer: "documentation" disponible
-  9. validate_registry() limpio
+Valida el CONTRATO/CONFIGURACION del provider Context7, no su reachability
+en vivo. Misma doctrina que bloque-F15-playwright.py — ver
+docs/F15-CI-DETERMINISM-FIX.md. Cada test se etiqueta con el concepto que
+prueba (nunca equivalentes entre si):
 
-Total: 9 tests
+  REGISTERED       — declarado en config/mcp.registry.yaml
+  CONFIGURED       — .mcp.json (runtime) lo referencia
+  PACKAGE_AVAILABLE — el paquete npm existe en el cache LOCAL (offline, sin red)
+  LIVE_REACHABLE   — el MCP server responde AHORA (requiere red — diagnostico
+                      opcional, nunca bloqueante en quick/release/CI)
+
+  1. [REGISTERED]        context7 en registry con status CONFIG_ONLY o LIVE
+  2. [REGISTERED]        atlas_capability = documentation
+  3. [REGISTERED]        cli_available = true, versión >= 3.0.0
+  4. [PACKAGE_AVAILABLE] npx --offline @upstash/context7-mcp --version —
+                         deterministico, sin red. PASS si esta cacheado
+                         localmente, SKIP (no FAIL) si el runner esta limpio.
+  5. [CONFIGURED]        .mcp.json contiene entrada context7 (SKIP si ausente)
+  6. [REGISTERED]        capabilities incluyen resolve_library_id y get_library_docs
+  7. [REGISTERED]        required_for incluye agentes dev
+  8. [REGISTERED/CONFIGURED] capability layer: "documentation" disponible via resolve_capability()
+  9. [REGISTERED]        validate_registry() limpio
+
+Total: 9 tests (bloqueantes) + 1 diagnostico opcional LIVE_REACHABLE
+(--network-diagnostic o ATLAS_RUN_NETWORK_DIAGNOSTIC=1 — nunca cuenta para
+PASS/FAIL, es puramente informativo; requiere red y puede tardar hasta 30s).
 """
 
 import json
@@ -84,8 +98,44 @@ def test_cli_available():
         fail("T3 cli_available", f"cli_available={m.get('cli_available')}")
 
 
-def test_npx_responds():
+def test_package_available_offline():
+    """
+    PACKAGE_AVAILABLE, not LIVE_REACHABLE: `--offline` forces npx to resolve
+    purely from the local npm cache -- zero network I/O. Deterministic and
+    fast (no CI cold-fetch latency to time out on). A clean runner without
+    this package cached is an EXPECTED state (SKIP), not a broken one (FAIL).
+    Same root cause and fix as bloque-F15-playwright.py -- see
+    docs/F15-CI-DETERMINISM-FIX.md.
+    """
     import shutil
+    npx = shutil.which("npx") or shutil.which("npx.cmd") or "npx"
+    try:
+        r = subprocess.run(
+            [npx, "--offline", "-y", "@upstash/context7-mcp", "--version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        out = (r.stdout + r.stderr).strip()
+        if r.returncode == 0 or any(c.isdigit() for c in out[:10]):
+            ok("T4 package available (offline)", out.split("\n")[0][:60])
+        else:
+            skip("T4 package available (offline)",
+                 f"no preinstalado localmente (CI/entorno limpio, no bloqueante): {out[:80]}")
+    except subprocess.TimeoutExpired:
+        skip("T4 package available (offline)", "timeout >10s en modo offline (no bloqueante)")
+    except Exception as e:
+        skip("T4 package available (offline)", str(e))
+
+
+def test_live_reachable_diagnostic():
+    """
+    LIVE_REACHABLE (optional, opt-in, NEVER blocking): a real network fetch
+    of the package, informational only. Never calls ok()/fail() -- cannot
+    affect PASS_COUNT/FAIL_COUNT or the process exit code, by construction.
+    """
+    import os
+    import shutil
+    if os.environ.get("ATLAS_RUN_NETWORK_DIAGNOSTIC") != "1" and "--network-diagnostic" not in sys.argv:
+        return
     npx = shutil.which("npx") or shutil.which("npx.cmd") or "npx"
     try:
         r = subprocess.run(
@@ -94,13 +144,13 @@ def test_npx_responds():
         )
         out = (r.stdout + r.stderr).strip()
         if r.returncode == 0 or any(c.isdigit() for c in out[:10]):
-            ok("T4 npx context7-mcp --version", out.split("\n")[0][:60])
+            print(f"  [INFO] LIVE_REACHABLE (network) -- OK: {out.splitlines()[0][:60]}")
         else:
-            fail("T4 npx context7-mcp --version", f"exit {r.returncode}: {out[:80]}")
+            print(f"  [INFO] LIVE_REACHABLE (network) -- unreachable: {out[:80]} (informational only)")
     except subprocess.TimeoutExpired:
-        fail("T4 npx context7-mcp --version", "timeout >30s")
+        print("  [INFO] LIVE_REACHABLE (network) -- timeout >30s (informational only)")
     except Exception as e:
-        fail("T4 npx context7-mcp --version", str(e))
+        print(f"  [INFO] LIVE_REACHABLE (network) -- {e} (informational only)")
 
 
 def test_mcp_json_configured():
@@ -178,7 +228,7 @@ def main():
     test_registry_status()
     test_atlas_capability()
     test_cli_available()
-    test_npx_responds()
+    test_package_available_offline()
     test_mcp_json_configured()
     test_capabilities_coverage()
     test_required_for()
@@ -188,6 +238,11 @@ def main():
     total = PASS_COUNT + FAIL_COUNT
     print()
     print(f"Total: {total} | PASS: {PASS_COUNT} | FAIL: {FAIL_COUNT}")
+
+    # Opt-in only (ATLAS_RUN_NETWORK_DIAGNOSTIC=1 or --network-diagnostic).
+    # Never affects PASS_COUNT/FAIL_COUNT/exit code -- see docstring above.
+    test_live_reachable_diagnostic()
+
     print()
     print("RESULTADO: PASS" if FAIL_COUNT == 0 else "RESULTADO: FAIL")
     sys.exit(0 if FAIL_COUNT == 0 else 1)
