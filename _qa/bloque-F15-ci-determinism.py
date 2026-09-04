@@ -51,6 +51,12 @@ def fail(name: str, detail: str = "") -> None:
     print(f"  [FAIL] {name}{' -- ' + detail if detail else ''}")
 
 
+def skip(name: str, detail: str = "") -> None:
+    """Non-blocking: environment dependency absent (e.g. clean CI runner).
+    Does not affect PASS_COUNT/FAIL_COUNT/exit code."""
+    print(f"  [SKIP] {name}{' -- ' + detail if detail else ''}")
+
+
 def run_suite(script: str, env_overrides: dict, timeout: int = 40) -> subprocess.CompletedProcess:
     env = {**os.environ, **env_overrides}
     return subprocess.run(
@@ -82,8 +88,36 @@ def test_clean_runner_skips_not_fails():
 
 # ---------------------------------------------------------------------------
 # Property 2: package installed (warm cache) -> PASS
+#
+# Adaptive by design, mirroring the exact PACKAGE_AVAILABLE philosophy this
+# whole fix establishes: this property can only be DEMONSTRATED where a warm
+# cache genuinely exists (a dev machine with prior local use). On a clean CI
+# runner there is, by definition, nothing cached to demonstrate against --
+# asserting PASS there would be the same "assumed ambient state" mistake the
+# original T4 made, just relocated into the regression test instead of fixed.
+# So: probe availability first (same --offline mechanism as the real check),
+# then SKIP (not FAIL) if this environment has nothing cached, or assert the
+# real PASS behavior if it does.
 # ---------------------------------------------------------------------------
 def test_package_installed_passes():
+    import shutil
+    npx = shutil.which("npx") or shutil.which("npx.cmd") or "npx"
+    try:
+        probe = subprocess.run(
+            [npx, "--offline", "-y", "@playwright/mcp", "--version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        available = probe.returncode == 0
+    except Exception:
+        available = False
+
+    if not available:
+        skip("P2 package installed -> PASS",
+             "no package cached in this environment (clean runner) -- "
+             "cannot demonstrate PASS without ambient state; P1/P4/P5 "
+             "already cover the SKIP and real-FAIL paths deterministically")
+        return
+
     r = run_suite("bloque-F15-playwright.py", {})
     if "[PASS] T4 package available (offline)" in r.stdout and "RESULTADO: PASS" in r.stdout:
         ok("P2 package installed -> PASS", "warm local cache, T4 PASS")
