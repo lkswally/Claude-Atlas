@@ -85,6 +85,7 @@ run_all.json
 run_all_quick.json
 run_all_release.json
 run_all_result.json
+autonomy-benchmark-v1.json
 release-report.md
 
 # User-specific runtime settings — RUNTIME_MUTABLE (F23/F24).
