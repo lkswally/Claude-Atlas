@@ -78,6 +78,15 @@ suites:
     can_run_in_release: true
     notes: "Regression guard for the 2026-08-24 STALE_TEST fix in atlas_verify.py::check_orquestador_documentation (Paso 4a-4d target path)."
 
+  - id: bloque-security-backstop
+    path: _qa/bloque-security-backstop.py
+    layer: unit
+    status: active
+    timeout: 30
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Autonomy Improvement V2 Improvement A: deterministic security backstop in quality-gate.js (7 new rules). True/false-positive coverage + JSONL log schema."
+
   - id: bloque-F16-capability-router
     path: _qa/bloque-F16-capability-router.py
     layer: unit
