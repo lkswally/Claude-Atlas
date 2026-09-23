@@ -184,7 +184,7 @@ Si no recibo puerto explícito, probar en orden: 3000, 3001, 5173, 4321.
 - **Si no hay web target**: ejecutar solo validación de código (imports, tipos, build) — NO intentar navegar a localhost con la capability browser
 - Reportar en NOTAS: "QA visual limitada — proyecto mobile sin web target. Solo validación de build."
 
-**Self-guard de reintentos**: Si el intento es > 3, RECHAZAR con STATUS: FAIL y NOTAS: "Máximo 3 reintentos alcanzado. Escalar al usuario." Si no recibo número de intento, verificar en Engram cuántos intentos hay registrados en `{proyecto}/qa-{N}` antes de proceder.
+**Self-guard de reintentos (Architecture Repair 03 — 2026-09-23)**: el conteo real y el límite de 3 los lleva el orquestador via `dispatcher.check_qa_retry_limit(task_id="{proyecto}/tarea-{N}")` (`tools/qa_retry_state.py`, persistido en disco, no dependo de que el orquestador me pase el número correcto de memoria). Si el intento que me pasa el orquestador (o mi propia consulta de respaldo) indica `retry_limit_reached: true`, RECHAZAR con STATUS: FAIL y NOTAS: "Máximo 3 reintentos alcanzado. Escalar al usuario." Si no recibo número de intento explícito, verificar en Engram cuántos intentos hay registrados en `{proyecto}/qa-{N}` como respaldo antes de proceder — el orquestador es quien mantiene la fuente de verdad real.
 Leo los criterios de aceptación directamente de Engram:
 ```
 Paso 1: mem_search("{proyecto}/tarea-{N}") → obtener observation_id

@@ -1301,6 +1301,77 @@ class ATLASDispatcher:
             }
 
     # ============================================================
+    #  Architecture Repair 03: Dev<->QA Retry Ceiling Enforcement
+    # ============================================================
+    #
+    # Distinct from should_skip_qa/cache_qa_result above (Bloque 1F.1,
+    # PASS-result caching) and from phase_gate_retries elsewhere in this
+    # class (Fase-gate cajon waits, cap 2) -- see qa_retry_state.py's
+    # module docstring for the full disambiguation. This is the
+    # counter for .claude/agents/refs/orchestrator-pipeline-phase-3.md's
+    # tareas[N].qa_intento_actual (max 3 total attempts, dev<->QA loop
+    # in Fase 3), previously CONTRACT_ONLY per Architecture Reality Audit
+    # V1 P1-3 -- no code anywhere counted or capped it.
+
+    def record_qa_attempt(
+        self,
+        task_id: str,
+        status: str,
+        reason: str = "",
+        agent: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Record one dev<->QA cycle outcome for task_id and get back whether
+        the 3-attempt ceiling has now been reached.
+
+        status: "fail" (functional QA failure -- increments), "pass"
+        (clears the counter, loop done), or "infra_error" (does not
+        increment, per canonical semantics -- Engram/infra issues are not
+        counted against the ceiling).
+
+        Fail-closed: a state I/O error returns retry_limit_reached=True
+        rather than silently permitting unlimited retries.
+        """
+        self._record_invocation("record_qa_attempt", context={"task_id": task_id, "status": status})
+        try:
+            from qa_retry_state import QARetryState
+        except ImportError as e:
+            return {
+                "task_id": task_id, "attempt_count": 3, "max_attempts": 3,
+                "retry_limit_reached": True,
+                "state_error": f"qa_retry_state no importable: {e}",
+            }
+        return QARetryState(self.project_root).record_qa_attempt(task_id, status, reason, agent)
+
+    def check_qa_retry_limit(self, task_id: str) -> Dict[str, Any]:
+        """Read-only check of task_id's current attempt count vs the
+        3-attempt ceiling, without recording a new attempt. Same
+        fail-closed contract as record_qa_attempt."""
+        self._record_invocation("check_qa_retry_limit", context={"task_id": task_id})
+        try:
+            from qa_retry_state import QARetryState
+        except ImportError as e:
+            return {
+                "task_id": task_id, "attempt_count": 3, "max_attempts": 3,
+                "retry_limit_reached": True,
+                "state_error": f"qa_retry_state no importable: {e}",
+            }
+        return QARetryState(self.project_root).check_qa_retry_limit(task_id)
+
+    def reset_qa_retry_state(self, task_id: str) -> bool:
+        """Explicit reset of task_id's attempt counter. Not called
+        automatically anywhere except internally on a recorded PASS.
+        Exists as the deliberate, explicit override path for a human
+        (via the orchestrator, after explicit user direction) to let a
+        task past the ceiling -- never automatic."""
+        self._record_invocation("reset_qa_retry_state", context={"task_id": task_id})
+        try:
+            from qa_retry_state import QARetryState
+        except ImportError:
+            return False
+        return QARetryState(self.project_root).reset(task_id)
+
+    # ============================================================
     #  Bloque 1H.1: Network Inspection
     # ============================================================
 

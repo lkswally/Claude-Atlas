@@ -105,6 +105,15 @@ suites:
     can_run_in_release: true
     notes: "Architecture Repair 02: core.capabilities.events.emit() gets a stdlib-only cross-process file lock (msvcrt/fcntl) around its single append write, fixing a confirmed-by-reproduction interleaved-JSONL corruption under concurrent process writers. Regression per Architecture Reality Audit V1 P1-2. Spawns real OS subprocess writers (up to 50) against disposable files; ~30-60s."
 
+  - id: bloque-qa-retry-ceiling
+    path: _qa/bloque-qa-retry-ceiling.py
+    layer: unit
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Architecture Repair 03: new tools/qa_retry_state.py + ATLASDispatcher.record_qa_attempt/check_qa_retry_limit/reset_qa_retry_state make the documented dev<->QA 3-attempt ceiling (Fase 3, orchestrator-pipeline-phase-3.md tareas[N].qa_intento_actual) mechanically enforceable and disk-persisted, previously CONTRACT_ONLY per Architecture Reality Audit V1 P1-3. Fail-closed on state I/O error. Separate from phase_gate_retries and the boot-sequence intento_actual counter. Spawns real OS subprocesses for the concurrency test."
+
   - id: bloque-F16-capability-router
     path: _qa/bloque-F16-capability-router.py
     layer: unit
