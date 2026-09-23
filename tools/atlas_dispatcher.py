@@ -850,6 +850,39 @@ class ATLASDispatcher:
                     f"{type(response).__name__} (esperado dict; contracts disabled)"
                 ]
 
+        # Architecture Repair 01: normalizar casing del envelope entrante.
+        # Cada contrato de agente (.claude/agents/*.md, agent-protocol.md)
+        # documenta el Return Envelope con claves UPPERCASE (STATUS, TAREA,
+        # ARCHIVOS, ENGRAM, VERIFICACION, BLOQUEADORES, NOTAS) -- es el
+        # contrato canonico agent-facing (27 archivos lo usan; ningun
+        # archivo de agente documenta el envelope en lowercase). El resto
+        # de este metodo, y todo el dispatcher, asume internamente claves
+        # lowercase (response.get("status"), etc.). Sin este paso, un
+        # envelope real tal como lo documenta cualquier agente es
+        # rechazado por "campos requeridos faltantes" aunque este bien
+        # formado. Alias in-place: agrega la clave lowercase sin eliminar
+        # la original, preservando la referencia del caller (mismo
+        # principio que el bloque F1.1 de arriba). Duplicados con valores
+        # en conflicto (ej. STATUS="PASS" y status="FAIL" simultaneos) NO
+        # se resuelven en silencio -- se rechazan explicitamente.
+        _ambiguous = []
+        for _k in list(response.keys()):
+            if not isinstance(_k, str):
+                continue
+            _lk = _k.lower()
+            if _lk == _k:
+                continue
+            if _lk in response:
+                if response[_lk] != response[_k]:
+                    _ambiguous.append(
+                        f"AMBIGUOUS_ENVELOPE_KEY: '{_k}'={response[_k]!r} "
+                        f"conflicts with '{_lk}'={response[_lk]!r}"
+                    )
+            else:
+                response[_lk] = response[_k]
+        if _ambiguous:
+            return False, _ambiguous
+
         # Bloque 1G.2: registrar invocacion
         self._record_invocation(
             "validate_return_envelope",
