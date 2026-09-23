@@ -96,6 +96,15 @@ suites:
     can_run_in_release: true
     notes: "Architecture Repair 01: ATLASDispatcher.validate_return_envelope() normalizes UPPERCASE agent-contract keys (STATUS/TAREA/ARCHIVOS/ENGRAM) to the internal lowercase schema in place, rejecting conflicting-value duplicates as AMBIGUOUS_ENVELOPE_KEY. Regression per Architecture Reality Audit V1 P1-1."
 
+  - id: bloque-capability-events-integrity
+    path: _qa/bloque-capability-events-integrity.py
+    layer: unit
+    status: active
+    timeout: 60
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Architecture Repair 02: core.capabilities.events.emit() gets a stdlib-only cross-process file lock (msvcrt/fcntl) around its single append write, fixing a confirmed-by-reproduction interleaved-JSONL corruption under concurrent process writers. Regression per Architecture Reality Audit V1 P1-2. Spawns real OS subprocess writers (up to 50) against disposable files; ~30-60s."
+
   - id: bloque-F16-capability-router
     path: _qa/bloque-F16-capability-router.py
     layer: unit

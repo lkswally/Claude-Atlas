@@ -12,10 +12,12 @@ Disable: ATLAS_CAPABILITY_EVENTS_DISABLED=1
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,8 +30,97 @@ from typing import Any
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _EVENTS_FILE = _PROJECT_ROOT / ".pipeline" / "capability-events.jsonl"
 
-# Thread-safe write lock
+# Thread-safe write lock — protects concurrent writers *within one process*.
+# Does NOT protect across separate OS processes (each process gets its own
+# instance of this lock). See _locked_append() below for the cross-process
+# guard, which is the actual gap Architecture Repair 02 fixes.
 _write_lock = threading.Lock()
+
+# Architecture Repair 02: cross-process append lock.
+#
+# Root cause (CONFIRMED by reproduction, not assumed): emit() already built
+# each record as a single string (json + "\n") and issued a single
+# f.write() call — correct in isolation, but that alone does not guarantee
+# the OS treats it as one atomic append when multiple separate *processes*
+# (not threads — ATLAS spawns a fresh short-lived Python/Node process per
+# tool/hook invocation) append to the same file at nearly the same instant.
+# POSIX O_APPEND gives that atomicity guarantee under certain conditions;
+# Windows — the platform this ships on — does not. Reproduced directly:
+# spawning >=5 real concurrent OS processes against the real production
+# emit() writer, targeting a disposable file, produced the exact same
+# corruption signature already present in .pipeline/capability-events.jsonl
+# (a line starting mid-object, missing its opening "{", because another
+# process's write landed in between two writes of the same record).
+#
+# Fix: wrap the single write in a short-lived, stdlib-only, cross-platform
+# advisory file lock (msvcrt on Windows, fcntl on POSIX/Linux — covers both
+# this dev machine and the Linux CI runner, zero new dependencies). Bounded
+# by a timeout so a stalled/crashed holder can't hang other writers
+# forever; on timeout the write is skipped and emit() returns False,
+# preserving the existing fail-open, non-blocking telemetry contract.
+_LOCK_TIMEOUT_SECONDS = 5.0
+_LOCK_POLL_INTERVAL = 0.02
+
+if sys.platform == "win32":
+    import msvcrt
+
+    @contextlib.contextmanager
+    def _cross_process_lock(fh, timeout: float = _LOCK_TIMEOUT_SECONDS):
+        """Advisory, whole-file lock via msvcrt (Windows). Blocks other
+        processes/threads that also go through this same context manager
+        on the same file; released automatically on close (including on
+        crash — the OS releases file locks when the handle is closed)."""
+        deadline = time.monotonic() + timeout
+        locked = False
+        try:
+            while True:
+                try:
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                    locked = True
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            "capability-events.jsonl: could not acquire "
+                            "cross-process write lock in time"
+                        )
+                    time.sleep(_LOCK_POLL_INTERVAL)
+            yield
+        finally:
+            if locked:
+                try:
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+else:
+    import fcntl
+
+    @contextlib.contextmanager
+    def _cross_process_lock(fh, timeout: float = _LOCK_TIMEOUT_SECONDS):
+        """Advisory, whole-file lock via fcntl.flock (POSIX/Linux)."""
+        deadline = time.monotonic() + timeout
+        locked = False
+        try:
+            while True:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    locked = True
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            "capability-events.jsonl: could not acquire "
+                            "cross-process write lock in time"
+                        )
+                    time.sleep(_LOCK_POLL_INTERVAL)
+            yield
+        finally:
+            if locked:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +211,10 @@ def _is_disabled() -> bool:
 
 def emit(event: CapabilityEvent, events_file: Path | None = None) -> bool:
     """
-    Append event to JSONL log. Returns True on success, False on any error.
-    Never raises — fail-open by design.
+    Append event to JSONL log. Returns True on success, False on any error
+    (including a lock-acquisition timeout under heavy concurrent write
+    load). Never raises — fail-open by design; a skipped telemetry write
+    never blocks or breaks the caller's actual capability resolution.
     """
     if _is_disabled():
         return False
@@ -131,9 +224,18 @@ def emit(event: CapabilityEvent, events_file: Path | None = None) -> bool:
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         line = event.to_jsonl() + "\n"
-        with _write_lock:
+        with _write_lock:  # in-process: cheap, avoids the OS lock when possible
             with target.open("a", encoding="utf-8") as f:
-                f.write(line)
+                # Nominal byte-0 lock region: every writer (this process and
+                # every other) locks/unlocks the same 1-byte region as a
+                # pure mutex over the file, independent of where the actual
+                # append lands. Position is managed explicitly rather than
+                # relying on "a" mode's default seek behavior.
+                f.seek(0)
+                with _cross_process_lock(f):
+                    f.seek(0, os.SEEK_END)
+                    f.write(line)
+                    f.flush()
         return True
     except Exception:
         return False
