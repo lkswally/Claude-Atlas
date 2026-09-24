@@ -127,6 +127,168 @@ const SECURITY_PATTERNS = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Comment masking for the Security Backstop only (Stability Repair 05).
+// Root cause of SH-P1-2: the 7 SECURITY_PATTERNS regexes ran directly
+// against raw file content, so a `// TODO: never call eval(userInput)`
+// comment fired SEC-EVAL-001 exactly like the real call would. A naive
+// `content.replace(/\/\/.*/g, '')`-style strip was rejected: it would
+// corrupt string literals containing `//` (e.g. "https://example.com") and,
+// worse, several of these rules (SEC-CMDI-001, SEC-SQLI-001,
+// SEC-UPLOAD-001) are DESIGNED to match a dangerous payload embedded inside
+// a string/template argument to exec()/query()/writeFileSync() — blanking
+// string content would silently create new false negatives there.
+//
+// maskComments() is a single-pass lexical scanner (JS/TS/JSX/TSX only —
+// the only extensions this hook ever scans, per JS_TS_EXTENSIONS) that
+// replaces `//...` and `/* ... */` comment interiors with spaces, leaving
+// every other character — including string, template and regex literals —
+// byte-for-byte in place. Because length and newlines are preserved
+// exactly, character offsets computed against the masked string still
+// point at the correct location in the original content, so
+// lineNumberOf() needs no changes.
+//
+// Only the SECURITY_PATTERNS loop below scans the masked content. The
+// general PATTERNS loop (TODO/FIXME/@ts-ignore/etc.) still scans raw
+// `content`, since those patterns exist specifically to find comment
+// markers and would break if comments were blanked first.
+// ---------------------------------------------------------------------------
+const REGEX_CONTEXT_TOKENS = new Set([
+  '', '(', ',', '=', ':', ';', '!', '&', '|', '?', '{', '[', '+', '-', '*',
+  '%', '^', '~', '<', '>',
+  'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+  'throw', 'case', 'yield', 'do', 'else',
+]);
+
+/** Scans a regex literal starting at content[start] === '/'. Returns chars
+ * consumed (body + flags), or 0 if this doesn't look like a valid regex
+ * literal (caller falls back to treating '/' as an ordinary character). */
+function scanRegexLiteral(content, start) {
+  const n = content.length;
+  let i = start + 1;
+  if (i < n && (content[i] === '/' || content[i] === '*')) return 0; // // or /* — not a regex
+  let inClass = false;
+  while (i < n) {
+    const c = content[i];
+    if (c === '\\') { i += 2; continue; }
+    if (c === '\n') return 0; // regex literals can't span lines
+    if (c === '[') { inClass = true; i++; continue; }
+    if (c === ']') { inClass = false; i++; continue; }
+    if (c === '/' && !inClass) {
+      i++;
+      while (i < n && /[a-z]/i.test(content[i])) i++; // flags
+      return i - start;
+    }
+    i++;
+  }
+  return 0; // never closed — not a regex literal
+}
+
+/** Replaces // and /* *‌/ comment interiors with spaces; strings, template
+ * literals and regex literals pass through untouched. Same length as the
+ * input, newlines preserved, so downstream offsets stay valid. */
+function maskComments(content) {
+  const n = content.length;
+  const out = new Array(n);
+  let i = 0;
+  let state = 'code'; // code | line-comment | block-comment | sq | dq | tpl
+  let lastToken = '';
+  const tplBraceStack = [];
+  let braceDepth = 0;
+
+  const isWordChar = (c) => /[A-Za-z0-9_$]/.test(c);
+
+  while (i < n) {
+    const c = content[i];
+    const c2 = i + 1 < n ? content[i + 1] : '';
+
+    if (state === 'code') {
+      if (c === '/' && c2 === '/') {
+        out[i] = ' '; out[i + 1] = ' ';
+        i += 2; state = 'line-comment'; continue;
+      }
+      if (c === '/' && c2 === '*') {
+        out[i] = ' '; out[i + 1] = ' ';
+        i += 2; state = 'block-comment'; continue;
+      }
+      if (c === '"') { out[i] = c; i++; state = 'dq'; lastToken = '"'; continue; }
+      if (c === "'") { out[i] = c; i++; state = 'sq'; lastToken = "'"; continue; }
+      if (c === '`') { out[i] = c; i++; state = 'tpl'; lastToken = '`'; continue; }
+      if (c === '/' && REGEX_CONTEXT_TOKENS.has(lastToken)) {
+        const consumed = scanRegexLiteral(content, i);
+        if (consumed > 0) {
+          for (let k = 0; k < consumed; k++) out[i + k] = content[i + k];
+          i += consumed; lastToken = '/'; continue;
+        }
+      }
+      if (c === '{' && tplBraceStack.length > 0) braceDepth++;
+      if (c === '}' && tplBraceStack.length > 0) {
+        if (braceDepth === 0) {
+          out[i] = c; i++;
+          braceDepth = tplBraceStack.pop();
+          state = 'tpl'; lastToken = '}'; continue;
+        }
+        braceDepth--;
+      }
+      out[i] = c;
+      if (isWordChar(c)) {
+        let j = i;
+        while (j < n && isWordChar(content[j])) { out[j] = content[j]; j++; }
+        lastToken = content.slice(i, j);
+        i = j; continue;
+      }
+      if (!/\s/.test(c)) lastToken = c;
+      i++; continue;
+    }
+
+    if (state === 'line-comment') {
+      if (c === '\n') { out[i] = '\n'; state = 'code'; }
+      else out[i] = ' ';
+      i++; continue;
+    }
+
+    if (state === 'block-comment') {
+      if (c === '*' && c2 === '/') {
+        out[i] = ' '; out[i + 1] = ' ';
+        i += 2; state = 'code'; continue;
+      }
+      out[i] = c === '\n' ? '\n' : ' ';
+      i++; continue;
+    }
+
+    if (state === 'dq' || state === 'sq') {
+      if (c === '\\' && i + 1 < n) {
+        out[i] = c; out[i + 1] = content[i + 1];
+        i += 2; continue;
+      }
+      out[i] = c;
+      i++;
+      if ((state === 'dq' && c === '"') || (state === 'sq' && c === "'")) state = 'code';
+      continue;
+    }
+
+    if (state === 'tpl') {
+      if (c === '\\' && i + 1 < n) {
+        out[i] = c; out[i + 1] = content[i + 1];
+        i += 2; continue;
+      }
+      if (c === '`') { out[i] = c; i++; state = 'code'; lastToken = '`'; continue; }
+      if (c === '$' && c2 === '{') {
+        out[i] = '$'; out[i + 1] = '{';
+        i += 2;
+        tplBraceStack.push(braceDepth);
+        braceDepth = 0;
+        state = 'code'; lastToken = '{';
+        continue;
+      }
+      out[i] = c;
+      i++; continue;
+    }
+  }
+
+  return out.join('');
+}
+
 const SECURITY_LOG_FILE = path.join('.claude', 'logs', 'security-signals.jsonl');
 
 // Patterns that indicate the match is an env var reference (not a hardcoded secret)
@@ -201,13 +363,19 @@ process.stdin.on('end', () => {
     // Security Backstop scan (Improvement A). Separate loop: findings need
     // line numbers for the structured signal log, and use their own `id`
     // so a future Verification Router can reference them stably.
+    // Scans `contentForSecurity` (comments masked — see maskComments above),
+    // not raw `content`, so a comment merely mentioning a dangerous pattern
+    // no longer fires (Stability Repair 05 / SH-P1-2). Masking preserves
+    // length and newlines exactly, so `m.index` still maps to the correct
+    // line in the real file.
+    const contentForSecurity = maskComments(content);
     const securityFindings = [];
     for (const rule of SECURITY_PATTERNS) {
       // Fresh regex per content scan — patterns are /g, and .exec() with a
       // /g regex is stateful (lastIndex), so reset before each file.
       rule.regex.lastIndex = 0;
       let m;
-      while ((m = rule.regex.exec(content)) !== null) {
+      while ((m = rule.regex.exec(contentForSecurity)) !== null) {
         securityFindings.push({
           id: rule.id,
           category: rule.category,

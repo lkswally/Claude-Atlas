@@ -100,6 +100,25 @@ Inspects written/edited files for problematic patterns:
 - Hardcoded secrets (API keys, passwords)
 - `TODO/FIXME` comments in non-development files
 
+**Security Backstop** (Autonomy Improvement V2) — 7 additional deterministic
+regex rules scanning `.js/.jsx/.ts/.tsx/.mjs/.cjs` Write/Edit content only:
+`eval`/`new Function`, `child_process.exec` command injection, SQL-injection
+string concatenation, unsafe `innerHTML`/`dangerouslySetInnerHTML`/`v-html`,
+insecure CORS (wildcard origin + credentials), disabled TLS verification, and
+unsafe file-upload filenames. This is a **regex pre-screen, not a SAST tool
+or semantic security engine** — it finds textual signals, never fixes,
+decides architecture, or evaluates authorization/IDOR (those stay
+`security-engineer`'s job, invoked separately in pipeline Phase 2).
+Before matching, `//` and `/* */` comment interiors are masked to
+whitespace (a small lexical scanner, not a full parser) so a comment merely
+*mentioning* a dangerous pattern doesn't fire — string, template, and regex
+literals are left untouched, since several rules (command/SQL injection,
+unsafe upload) are designed to match a dangerous payload embedded *inside* a
+string argument. Known limit: a string literal that quotes real vulnerable
+syntax as documentation (not a comment) can still fire — deliberately not
+suppressed, since blanket-ignoring string content would create false
+negatives for exactly the payloads these rules exist to catch.
+
 ---
 
 ### console-log-warning.js

@@ -27,10 +27,25 @@ Este suite valida las 7 reglas nuevas agregadas a quality-gate.js:
     bloquea) y que el log estructurado security-signals.jsonl se escribe
     con el schema documentado.
 
-Total: 17 tests (7 true-positive rule checks + 8 false-positive-avoidance
-checks + 1 JSONL log schema check + 1 pre-existing-behavior regression
-check; each true-positive case also asserts exit code 0, silently, as
-part of the same check rather than a separate visible line).
+Total (base): 17 tests (7 true-positive rule checks + 8 false-positive-
+avoidance checks + 1 JSONL log schema check + 1 pre-existing-behavior
+regression check; each true-positive case also asserts exit code 0,
+silently, as part of the same check rather than a separate visible line).
+
+Stability Repair 05 (SH-P1-2) additions — comment-induced false positives:
+root cause was that the 7 SECURITY_PATTERNS regexes ran against raw file
+content with no comment-awareness, so a `// TODO: never call eval(x)`
+comment fired identically to a real eval() call. Fixed via maskComments()
+in quality-gate.js, a single-pass lexical scanner that blanks // and /* */
+comment interiors while leaving strings/template literals/regex literals
+untouched (several rules — CMDI, SQLI, UPLOAD — are designed to match a
+payload embedded *inside* a string argument, so blanking strings would
+create new false negatives; see the function's own comment for detail).
+Adds 15 comment-lookalike checks (// and /* */ forms, all 7 rules, plus one
+JSX {/* */} case) and 6 structural edge-case checks (escaped quotes,
+template literals with nested braces, regex literals, URL strings, a
+multiline comment with line-number-preservation assertion, and same-line
+comment+real-vulnerability disambiguation). New total: 38 tests.
 """
 
 import json
@@ -174,6 +189,122 @@ def test_existing_secret_detection_unaffected():
         fail("Existing secret detection unaffected", combined[:150])
 
 
+# ---------------------------------------------------------------------------
+# Stability Repair 05 (SH-P1-2) — comment-induced false positives.
+# Adversarial corpus: for every one of the 7 rules, both // and /* */
+# comment forms mentioning the exact dangerous pattern must be silent.
+# ---------------------------------------------------------------------------
+COMMENT_LOOKALIKES = [
+    ("SEC-EVAL-001", "src/cl_eval_line.js", "// TODO: never call eval(userInput) directly, it is dangerous"),
+    ("SEC-EVAL-001", "src/cl_eval_block.js", "/* never call eval(userInput) directly, it is dangerous */"),
+    ("SEC-CMDI-001", "src/cl_cmdi_line.js", '// avoid: child_process.exec("cat " + userFile) -- injection risk'),
+    ("SEC-CMDI-001", "src/cl_cmdi_block.js", '/* avoid: child_process.exec("cat " + userFile) -- injection risk */'),
+    ("SEC-SQLI-001", "src/cl_sqli_line.js", '// bad practice: db.query("SELECT * FROM users WHERE id = " + id)'),
+    ("SEC-SQLI-001", "src/cl_sqli_block.js", '/* bad practice: db.query("SELECT * FROM users WHERE id = " + id) */'),
+    ("SEC-XSS-001", "src/cl_xss_line.js", "// don't do: el.innerHTML = userInput; -- XSS risk, sanitize first"),
+    ("SEC-XSS-001", "src/cl_xss_block.js", "/* don't do: el.innerHTML = userInput; -- XSS risk, sanitize first */"),
+    ("SEC-XSS-001", "src/cl_xss_jsx.jsx", "function C() {\n  return <div>{/* never use dangerouslySetInnerHTML here */}</div>;\n}"),
+    ("SEC-CORS-001", "src/cl_cors_line.js", '// insecure: cors({ origin: "*", credentials: true }) must never ship'),
+    ("SEC-CORS-001", "src/cl_cors_block.js", '/* insecure: cors({ origin: "*", credentials: true }) must never ship */'),
+    ("SEC-TLS-001", "src/cl_tls_line.js", "// never set rejectUnauthorized: false in production code"),
+    ("SEC-TLS-001", "src/cl_tls_block.js", "/* never set rejectUnauthorized: false in production code */"),
+    ("SEC-UPLOAD-001", "src/cl_upload_line.js", '// insecure pattern: fs.writeFileSync(dest, req.file.originalname)'),
+    ("SEC-UPLOAD-001", "src/cl_upload_block.js", '/* insecure pattern: fs.writeFileSync(dest, req.file.originalname) */'),
+]
+
+
+def test_comment_lookalikes():
+    for rule_id, path, content in COMMENT_LOOKALIKES:
+        r = run_hook(path, content)
+        combined = r.stdout + r.stderr
+        if f"security:{rule_id}" not in combined:
+            ok(f"Comment lookalike silent: {rule_id}", path)
+        else:
+            fail(f"Comment lookalike silent: {rule_id}", f"FIRED from comment-only text: {combined[:150]}")
+
+
+# ---------------------------------------------------------------------------
+# Structural edge cases for the comment-masking lexer itself (Stability
+# Repair 05, mission section 4/10/11): escaped quotes, template literals
+# with nested braces, regex literals, multiline block comments, and
+# trailing inline comments must not desync the masker and must not create
+# new false negatives on real vulnerable code sharing the same file.
+# ---------------------------------------------------------------------------
+def test_edge_escaped_quotes_do_not_desync():
+    content = 'const s = "she said \\"hello\\""; eval(userInput);'
+    r = run_hook("src/edge_escaped_quotes.js", content)
+    combined = r.stdout + r.stderr
+    if "security:SEC-EVAL-001" in combined:
+        ok("Edge: escaped quotes don't desync parser", "real eval() after escaped-quote string still detected")
+    else:
+        fail("Edge: escaped quotes don't desync parser", f"real eval() NOT detected: {combined[:150]}")
+
+
+def test_edge_template_literal_nested_braces():
+    content = 'const msg = `value: ${ {a: 1} }`;\neval(userInput);'
+    r = run_hook("src/edge_template_nested.js", content)
+    combined = r.stdout + r.stderr
+    if "security:SEC-EVAL-001" in combined:
+        ok("Edge: template literal nested braces don't desync parser", "real eval() after ${...} still detected")
+    else:
+        fail("Edge: template literal nested braces don't desync parser", f"real eval() NOT detected: {combined[:150]}")
+
+
+def test_edge_regex_literal_does_not_swallow_code():
+    content = 'const re = /eval\\(/;\nfunction run(x) { return eval(x); }'
+    r = run_hook("src/edge_regex_literal.js", content)
+    combined = r.stdout + r.stderr
+    if "security:SEC-EVAL-001" in combined:
+        ok("Edge: regex literal doesn't swallow following code", "real eval() after /eval\\(/ regex still detected")
+    else:
+        fail("Edge: regex literal doesn't swallow following code", f"real eval() NOT detected: {combined[:150]}")
+
+
+def test_edge_url_in_string_not_treated_as_comment():
+    content = 'const docs = "see https://example.com//path for details";\nfunction run(x) { return eval(x); }'
+    r = run_hook("src/edge_url_string.js", content)
+    combined = r.stdout + r.stderr
+    if "security:SEC-EVAL-001" in combined:
+        ok("Edge: URL // inside string not treated as comment start", "real eval() after URL string still detected")
+    else:
+        fail("Edge: URL // inside string not treated as comment start", f"real eval() NOT detected: {combined[:150]}")
+
+
+def test_edge_multiline_block_comment_line_number_preserved():
+    content = (
+        "/*\n"
+        " * TODO: remove this before shipping\n"
+        " * never call eval(userInput) in production\n"
+        " */\n"
+        "function real() { return eval(x); }\n"
+    )
+    r = run_hook("src/edge_multiline_comment.js", content)
+    combined = r.stdout + r.stderr
+    if "security:SEC-EVAL-001" not in combined or "(1x)" not in combined:
+        fail("Edge: multiline block comment silent + real vuln still detected",
+             f"expected exactly 1 finding (the real call, not the comment text): {combined[:200]}")
+        return
+    lines = [l for l in LOG_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
+    last = json.loads(lines[-1])
+    if last["id"] == "SEC-EVAL-001" and last["line"] == 5:
+        ok("Edge: multiline block comment silent + real vuln still detected", "exactly 1 finding, reported line 5")
+    else:
+        fail("Edge: multiline block comment silent + real vuln still detected",
+             f"expected line 5, got {last.get('line')}")
+
+
+def test_edge_comment_and_real_vuln_same_line():
+    content = "/* eval(bad) in comment */ function run(x) { return eval(x); }"
+    r = run_hook("src/edge_same_line.js", content)
+    combined = r.stdout + r.stderr
+    count = combined.count("security:SEC-EVAL-001")
+    # dedup terminal summary is one line per rule with a count suffix "(Nx)"
+    if "security:SEC-EVAL-001" in combined and "(1x)" in combined:
+        ok("Edge: comment + real vuln same line -- fires exactly once", "for the real call only")
+    else:
+        fail("Edge: comment + real vuln same line -- fires exactly once", combined[:200])
+
+
 def main():
     print("=" * 60)
     print("Bloque Security Backstop -- Deterministic Security Backstop")
@@ -188,6 +319,13 @@ def main():
     test_false_positives()
     test_jsonl_log_schema()
     test_existing_secret_detection_unaffected()
+    test_comment_lookalikes()
+    test_edge_escaped_quotes_do_not_desync()
+    test_edge_template_literal_nested_braces()
+    test_edge_regex_literal_does_not_swallow_code()
+    test_edge_url_in_string_not_treated_as_comment()
+    test_edge_multiline_block_comment_line_number_preserved()
+    test_edge_comment_and_real_vuln_same_line()
 
     total = PASS_COUNT + FAIL_COUNT
     print()

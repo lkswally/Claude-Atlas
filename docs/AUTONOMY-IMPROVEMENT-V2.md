@@ -130,6 +130,19 @@ spaces`).
 
 `_qa/bloque-security-backstop.py`: **17/17 PASS**.
 
+> **Update (Stability Repair 05, later session):** Stability Hardening
+> Audit V1 found a systemic false positive not covered by this original
+> 17-test corpus — a `//` or `/* */` comment merely *mentioning* a
+> dangerous pattern (e.g. `// TODO: never call eval(userInput)`) fired the
+> matching rule identically to real code, for all 7 rules. Fixed via a
+> comment-masking lexical scanner in `quality-gate.js` (`maskComments()`);
+> string/template/regex literals are deliberately left unmasked since
+> SEC-CMDI-001/SEC-SQLI-001/SEC-UPLOAD-001 match payloads embedded inside
+> string arguments. The suite grew to 38 tests (adds 15 comment-lookalike
+> checks + 6 structural edge cases). Left the numbers above as originally
+> recorded rather than rewritten — see `docs/STABILITY-HARDENING-AUDIT-V1.md`
+> (SH-P1-2) for the full root-cause/fix record.
+
 ## Benchmark delta (Security dimension únicamente — benchmark V1 sin modificar)
 
 | Caso | Antes | Después |
