@@ -83,7 +83,7 @@ Para **cada tarea** de la lista, en orden:
    
    Evidence-collector DEBE devolver Return Envelope QA válido. El orquestador RECHAZA envelopes malformados.
    
-   1. **Validar Return Envelope con dispatcher.validate_return_envelope(qa_response, mode="qa_strict")**
+   1. **Validar Return Envelope con `dispatcher.validate_return_envelope(qa_response, mode="qa_strict", task_id="{proyecto}/tarea-{N}")`** — el `task_id` es OBLIGATORIO en esta llamada específica (Stability Repair 06): registra el intento de QA automáticamente como efecto secundario de esta MISMA validación (envelope inválido → `infra_error`; STATUS=PASS → `pass`; STATUS=FAIL → `fail`), disponible en `qa_response["_dispatcher_qa_retry"]` tras la llamada. **No volver a llamar `record_qa_attempt` manualmente para este resultado** — ver Bloque de enforcement abajo (evita doble conteo).
       - Si VÁLIDO: continuar a Paso 6 o 7 según STATUS
       - Si INVÁLIDO: NO avanzar. Redel a evidence-collector con error específico
    
@@ -99,7 +99,7 @@ Para **cada tarea** de la lista, en orden:
    
    3. **Si Return Envelope inválido**:
       - Redel a evidence-collector con mensaje de error exacto
-      - NO marcar como QA FAIL de negocio: llamar `dispatcher.record_qa_attempt(task_id="{proyecto}/tarea-{N}", status="infra_error", reason="envelope invalido")` (no incrementa qa_intento_actual — ver Bloque de enforcement abajo)
+      - El Paso 1 ya registró esto como `infra_error` automáticamente (no incrementa `qa_intento_actual` — ver Bloque de enforcement abajo). No hay nada manual que llamar aquí.
       - Reintenta 1x (mismo intento de QA). Si falla validación 2x → escalar al usuario
    
    4. **Si Engram write falla con timeout/error (Engram error, NO formato error)**:
@@ -111,18 +111,29 @@ Para **cada tarea** de la lista, en orden:
 
    **Mobile**: si evidence-collector reporta "QA visual limitada", informar al usuario una vez: "QA de tareas mobile se limita a validación de build — no hay simulador visual disponible."
 
-   **Enforcement mecánico del contador (Architecture Repair 03 — 2026-09-23)**:
+   **Enforcement mecánico del contador (Architecture Repair 03 — 2026-09-23; automatizado en Stability Repair 06 — 2026-09-24)**:
    El contador de intentos YA NO es un campo de DAG State llevado solo por
    el razonamiento del orquestador — es `dispatcher.record_qa_attempt()` /
    `dispatcher.check_qa_retry_limit()` (`tools/qa_retry_state.py`,
    persistido en `.pipeline/qa-retry-state.json`, por `task_id`,
    sobrevive reinicio de sesión). `task_id` = `"{proyecto}/tarea-{N}"`
    (string estable, consistente con las claves de Engram ya usadas en este
-   documento). El orquestador SIEMPRE llama a `record_qa_attempt` con el
-   resultado real de cada intento (ver pasos 6/7/8) en vez de incrementar
-   `qa_intento_actual` mentalmente — la cuenta y el límite de 3 ya no
-   dependen de que el orquestador no pierda la cuenta en una conversación
-   larga. `check_qa_retry_limit(task_id)` es de solo lectura y puede
+   documento).
+   **Desde Stability Repair 06, el registro del intento YA NO es una
+   llamada manual separada** (P1 Closure Audit V1 demostró que ese
+   segundo llamado era salteable en el camino normal de ejecución —
+   hallazgo P2). Ahora es un efecto secundario automático del Paso 1
+   —`validate_return_envelope(..., mode="qa_strict", task_id=...)`—, la
+   misma llamada que el orquestador ya tiene que hacer para saber si el
+   envelope es válido. El resultado queda en
+   `qa_response["_dispatcher_qa_retry"]` (`attempt_count`,
+   `retry_limit_reached`, etc. — mismo shape que `record_qa_attempt`
+   devolvía antes). **No llamar `record_qa_attempt` de nuevo para el
+   mismo resultado de QA** — duplicaría el conteo. `record_qa_attempt`
+   sigue existiendo y sigue siendo la llamada correcta para el caso
+   distinto del Paso 4 (fallo de Engram, detectado después de la
+   validación del envelope, fuera del alcance de esta automatización).
+   `check_qa_retry_limit(task_id)` sigue siendo de solo lectura y puede
    consultarse antes de re-delegar sin registrar un intento nuevo.
 
 **Umbral PASS/FAIL:**
@@ -134,18 +145,18 @@ Para **cada tarea** de la lista, en orden:
 6. **Si QA PASS**:
    - evidence-collector retorna: `STATUS: PASS + ENGRAM: {proyecto}/qa-{N}`
    - Orquestador verifica que `{proyecto}/qa-{N}` existe en Engram (mem_search → mem_get_observation)
-   - Llama `dispatcher.record_qa_attempt(task_id="{proyecto}/tarea-{N}", status="pass")` — limpia el contador (loop cerrado para esta tarea)
+   - El Paso 1 ya limpió el contador automáticamente (`_dispatcher_qa_retry` con el resultado del `pass`) — nada manual que llamar aquí.
    - **Actualiza DAG State: `tareas[N].status = "completada"`**
    - Continúa con tarea N+1
 
 7. **Si QA FAIL**:
    - evidence-collector retorna: `STATUS: FAIL + issues`
-   - Orquestador llama: `r = dispatcher.record_qa_attempt(task_id="{proyecto}/tarea-{N}", status="fail", reason="{resumen de issues}", agent="{dev agent}")`
+   - Leer `r = qa_response["_dispatcher_qa_retry"]` — ya poblado por el Paso 1, no llamar `record_qa_attempt` de nuevo (doble conteo)
    - **Si `r["retry_limit_reached"] == False`** (esto reemplaza el chequeo manual "intento < 3"): pasa feedback específico al dev agent: "QA falló: {lista de issues}. Intento {r['attempt_count']}/3. Arregla y reintenta." Vuelve al paso 3 (re-delega mismo dev agent)
    - **Si `r["retry_limit_reached"] == True`** (esto reemplaza el chequeo manual "intento = 3"): ir al paso 8 — ESCALACIÓN
 
 8. **ESCALACIÓN (tarea NO avanza)**:
-   - `dispatcher.record_qa_attempt` devolvió `retry_limit_reached=True` (3er intento fallido, o un state_error — ver Bloque de enforcement: ambos casos bloquean por diseño, fail-closed)
+   - `qa_response["_dispatcher_qa_retry"]["retry_limit_reached"] == True` (3er intento fallido, o un state_error — ver Bloque de enforcement: ambos casos bloquean por diseño, fail-closed)
    - Tarea queda bloqueada con estado `{proyecto}/tareas[N].status = "bloqueada"`
    - Opciones presentadas al usuario:
    a) Reasignar: delegar a otro agente dev

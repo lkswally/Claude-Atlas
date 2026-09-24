@@ -732,6 +732,7 @@ class ATLASDispatcher:
         enforce_design_quality: Optional[bool] = None,
         enforce_references: Optional[bool] = None,
         enforce_editorial_compliance: Optional[bool] = None,
+        task_id: Optional[str] = None,
     ) -> Tuple[bool, List[str]]:
         """
         Validar que la respuesta del subagente sigue el formato Return Envelope.
@@ -810,6 +811,28 @@ class ATLASDispatcher:
             * whitespace_intentional: {documented: bool=True}
         - Anti-teatro: rationale/explained con < 20 chars REJECT.
         - Anti-monotypo: display == body REJECT.
+
+        Stability Repair 06 — task_id (opt-in, solo mode="qa_strict"):
+        - task_id=None (default): comportamiento identico a antes de este
+          repair, en TODOS los modos. Zero cambio para cualquier caller
+          existente que no pase este parametro.
+        - task_id="<proyecto>/tarea-<N>" + mode="qa_strict": tras terminar
+          de validar el envelope, esta MISMA llamada -- la que el
+          orquestador ya hace obligatoriamente para saber si el envelope
+          de evidence-collector es valido -- ademas registra el intento
+          de QA automaticamente (envelope invalido -> infra_error,
+          status=PASS -> pass, status=FAIL -> fail), usando la misma
+          `record_qa_attempt()` de siempre. Resultado adjuntado en
+          `response["_dispatcher_qa_retry"]` (mismo patron que
+          `_dispatcher_warnings`/`_dispatcher_enforcement`). Cierra el
+          hallazgo P2 de `docs/P1-CLOSURE-AUDIT-V1.md`: antes, nada
+          forzaba la llamada a `record_qa_attempt` -- ahora es un efecto
+          secundario inevitable de la validacion de envelope que el
+          orquestador ya no puede saltear sin dejar de validar el
+          envelope en absoluto. No aplica a otros modos (dev_strict,
+          design_strict, standard) -- gateado explicitamente por
+          `mode == "qa_strict"`, para no mezclar retry-accounting en un
+          validador generico usado por otros agentes/flows.
         """
         # Bloque F1.1: coercion / shape-validation transparente
         # IMPORTANTE: NO reasignar response cuando ya es dict — preservamos
@@ -1075,6 +1098,28 @@ class ATLASDispatcher:
                     )
             # verdict == "auto_fixed" -> NO agrega error, envelope queda con detalle
             # verdict == "passed" / "skipped" -> sin cambios
+
+        # Stability Repair 06: automatic QA retry accounting (see the
+        # task_id docstring block above). Runs last, once `errores` is
+        # final, so `is_valid_final` reflects every check above.
+        if mode == "qa_strict" and task_id is not None:
+            is_valid_final = len(errores) == 0
+            if not is_valid_final:
+                qa_status = "infra_error"
+                qa_reason = ("envelope invalido: " + "; ".join(errores))[:500]
+            elif response.get("status") == "PASS":
+                qa_status = "pass"
+                qa_reason = ""
+            else:
+                # qa_strict's own STATUS check above only lets PASS/FAIL
+                # through when is_valid_final is True, so this is FAIL.
+                qa_status = "fail"
+                bloqueadores = response.get("bloqueadores") or []
+                qa_reason = "; ".join(str(b) for b in bloqueadores)[:500]
+            retry_result = self.record_qa_attempt(
+                task_id, qa_status, reason=qa_reason, agent=agent_name or ""
+            )
+            response["_dispatcher_qa_retry"] = retry_result
 
         return len(errores) == 0, errores
 

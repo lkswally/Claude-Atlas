@@ -110,7 +110,7 @@ None.
 
 ## Open P2
 
-- Dev↔QA invocation enforcement not code-enforced (see above).
+- ~~Dev↔QA invocation enforcement not code-enforced (see above).~~ **CLOSED (Stability Repair 06, 2026-09-24)** — `validate_return_envelope(mode="qa_strict")` now performs the retry accounting automatically as a side effect of the one call the orchestrator can't skip. See `docs/STABILITY-PHASE2-REMEDIATIONS.md`.
 
 ## Open P3
 
@@ -119,7 +119,7 @@ None.
 ## Accepted Limitations
 
 - Security Backstop string-literal ambiguity (over-detection only, deliberate, documented).
-- Dev↔QA invocation enforcement has no available mechanical fix under the current Claude Code architecture (no `PreToolUse`-style interception point for Agent/Task delegation exists); tracked as P2 rather than accepted outright, since a future architectural change could close it.
+- ~~Dev↔QA invocation enforcement has no available mechanical fix under the current Claude Code architecture...~~ **Superseded (Stability Repair 06)** — closed via the mandatory-boundary integration described above, without needing a `PreToolUse`-style interception point. A narrower residual risk remains (a stray legacy manual `record_qa_attempt` call could still double-count) — see `docs/STABILITY-PHASE2-REMEDIATIONS.md`.
 
 ## P1 Closure Verdict
 
