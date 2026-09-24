@@ -37,7 +37,7 @@ Re-measured fresh, not assumed: Healthcheck 25/1/0, Quick 42/42, Release 45/45, 
 | Architecture drift detector | 1/1 (real injected drift, Architecture Reality Audit V1) | 1/1 clean state | 0 | **untested for agents/refs — known blind spot, §21** | |
 | QA strict validation (`validate_return_envelope(mode="qa_strict")`) | Casing-independent, tested | Casing-independent, tested | 0 found | 0 found | See §3 |
 | Policy Engine | ALLOW path confirmed live | MISSING_POLICY path confirmed live | `PARTIAL` — 0 BLOCK-severity policies exist to test | `PARTIAL` | See §11 |
-| Hook guards | 5/13 fixture-tested in Reality Audit V1 + 8/13 this pass = 13/13 script-level | Negative controls: 5/13 confirmed | 0 | **1 live failure found: `engram-sync.js`, see §10** | |
+| Hook guards | 5/13 fixture-tested in Reality Audit V1 + 8/13 this pass = 13/13 script-level | Negative controls: 5/13 confirmed | 0 | 0 — **the `engram-sync.js` item originally listed here was retracted, see Stability Repair 04's remediation note in §10** | |
 | Capability Router | Happy path (3/3 LIVE) + unknown-capability handled | — | 0 | `PARTIAL` — failure-injection (primary-down, malformed response, timeout) `NOT_TESTED`, §12 | |
 | Healthcheck | Re-confirmed 25/1/0 this pass | — | `PARTIAL` — `check_python()` launcher gap already documented (Architecture Reality Audit V1 §22), not re-adversarially tested this pass | | |
 
@@ -137,12 +137,22 @@ All 13 registered hooks now directly executed with real stdin JSON payloads this
 | `suggest-compact.js` | 0 | Ran, silent |
 | `pre-compact-engram.js` | 0 | Ran, wrote a real trigger file as documented |
 | `session-summary.js` | 0 | Ran, silent on this payload |
-| **`engram-sync.js`** | **1** | **REAL FAILURE — see below** |
+| ~~`engram-sync.js`~~ | ~~1~~ | ~~REAL FAILURE — see below~~ **RETRACTED, see Stability Repair 04 remediation note below** |
 | `session-start-context.js` | 0 | Ran, produced a real session-context summary string |
 
-**Real, live, currently-active failure found: `engram-sync.js --hook` exits 1** — `"ERROR: ~/.engram is not a git repository. Cannot sync."` Confirmed directly: `~/.engram` contains only `engram.db`/`engram.db-shm`, no `.git`. This hook is registered on the `Stop` event, `async: true`, 60s timeout, per `templates/settings.json` — meaning it very plausibly fails silently on every session-stop event in this environment, with zero visible surfacing (async hooks produce no transcript output on failure). Classify: `CORRECTNESS_RISK` for whatever "sync" is meant to provide (redundant git-backed history of the Engram DB, separate from the `.pipeline/` dual-write which is the documented *critical* redundancy path) — not immediately data-loss-critical since it's a secondary backup mechanism, but a real, currently-manifesting silent failure nonetheless, previously unknown.
+~~**Real, live, currently-active failure found: `engram-sync.js --hook` exits 1**~~ — **this was an audit error, not a real bug. I invoked the script without the `--hook` flag** (`node .claude/hooks/engram-sync.js`, the interactive/CLI contract, which *is supposed to* and correctly does exit 1 without a git repo) **instead of the actual registered invocation** (`node .claude/hooks/engram-sync.js --hook`, exact string from `templates/settings.json`), **which exits 0, silently and correctly, every time.** The script's own code already branches on `MODE === 'hook'` specifically to guarantee this. See the full remediation note (Stability Repair 04) immediately after this table for the complete correction, root cause, and the pre-existing 3-month-old fix commit and regression suite that already covers exactly this.
 
-**HOOK_SCRIPT_WORKS vs HOOK_IS_REGISTERED vs HOOK_ACTUALLY_FIRES_IN_RUNTIME — kept distinct, as required:** all 13 scripts work correctly under direct invocation (including `engram-sync.js`, which correctly *reports* its own real failure rather than crashing or hanging). All 13 are registered in `templates/settings.json`. Whether they *actually fire* in this specific Claude Desktop session remains the same open question documented in Architecture Reality Audit V1 (`~/.claude/settings.json` empty in this environment) — **not re-resolved this pass**, still `UNKNOWN` for live host-triggered firing, as distinct from the direct-invocation results above.
+**HOOK_SCRIPT_WORKS vs HOOK_IS_REGISTERED vs HOOK_ACTUALLY_FIRES_IN_RUNTIME — kept distinct, as required:** all 13 scripts work correctly under direct invocation using their real registered arguments (including `engram-sync.js --hook`, corrected above). All 13 are registered in `templates/settings.json`. Whether they *actually fire* in this specific Claude Desktop session remains the same open question documented in Architecture Reality Audit V1 (`~/.claude/settings.json` empty in this environment) — **not re-resolved this pass**, still `UNKNOWN` for live host-triggered firing, as distinct from the direct-invocation results above.
+
+> **REMEDIATION (Stability Repair 04, 2026-09-24) — STATUS: NOT A BUG (audit finding retracted; no code change made).**
+> **Pre-fix reproduction, done correctly this time:** `echo '{}' | node .claude/hooks/engram-sync.js --hook` → **exit 0**, no output. The SH-P1-1 finding above was produced by testing `node .claude/hooks/engram-sync.js` *without* `--hook` — a different, intentionally-stricter code path (`MODE === 'full'`), not the one that ever actually runs as a hook.
+> **Root cause of the code's own behavior (not a bug — already fixed):** commit `ecfdbd4`, **2026-06-11**, `fix(F8): engram-sync --hook fail-open + ENGRAM_SYNC_DISABLED feature flag`, by the repo's real owner. That commit's own message: *"Causa raiz: main() llamaba process.exit(1) antes de evaluar MODE === 'hook', rompiendo el contrato fail-open del Stop hook... Diagnosticado por 30+ entradas ERROR en engram-sync.log."* — the exact bug this audit rediscovered, fixed over three months before this audit ran, with an already-passing regression suite (`_qa/bloque-F8-engram-audit.py`, registered in `config/test.registry.yaml`, part of every Quick/Release run including every one in this session) that explicitly asserts `engram-sync --hook` exits 0 without a git repo. Ran it fresh: **10/10 PASS**, including `test_09_stop_chain_no_crash`.
+> **Intended responsibility** (`docs/HOOKS.md`): *"When a session ends, pushes Engram memories to a connected GitHub repo **(if configured)**. Enables cross-machine continuity."* Explicitly opt-in, with a documented manual setup (`cd ~/.engram && git init && git remote add origin https://github.com/YOUR_USER/my-engram-sync.git`) pointing at a **user-owned, separate, non-shared repository** — never the Claude-Atlas repo itself.
+> **Privacy/memory-safety analysis (mandatory per the mission, completed regardless of outcome):** the design is safe as documented — opt-in, user-named target, never a fixed or shared destination. Current state on this machine: `~/.engram` has never been git-initialized (confirmed: only `engram.db`/`-shm`/`-wal`, no `.git`), so **zero memory content has ever been pushed anywhere** by this feature. No STOP condition triggered.
+> **Classification:** `ENVIRONMENT_CONFIGURATION_ERROR` for the *condition* (an optional feature simply never configured on this machine) — explicitly not `CURRENT_DESIGN_BUG` (the code already handles it correctly) and not `STALE_HOOK`/`DEPRECATED_ARCHITECTURE` (the feature is current, documented, and opt-in by design).
+> **Options evaluated (§7 of the mission):** B (skip sync when not git-backed) and E (return cleanly when unsupported) are **already implemented**, exactly, since the June fix. A/C/D/F were all considered and rejected as unnecessary or out of scope (F — `git init` — explicitly requires human approval and was not performed).
+> **Mutation sanity:** reintroduced the pre-June-2026 bug in a disposable detached worktree (removed the `MODE === 'hook'` fail-open branch) — `bloque-F8-engram-audit.py` correctly failed (8/10, 2 FAIL, including the exact Stop-chain test), confirming the existing suite has real detection power. Reverted, worktree removed.
+> **No code was changed.** The only change from this repair is this documentation correction. `SH-P1-1` is withdrawn — treat it as never having been a real, live P1. The audit process working as intended here means catching and correcting its own mistake, including this second one in the same document (after the earlier Playwright-screenshot correction) — not a comment on ATLAS's stability, a comment on this auditor's own methodology needing the exact real invocation, every time.
 
 ---
 
@@ -183,7 +193,7 @@ Formalized as a controlled test (not just stated): can the orchestrator proceed 
 
 Concrete, reproduced findings from this pass (not a general unscoped sweep — time-boxed to what surfaced):
 
-1. **`engram-sync.js` (§10)** — real, live, currently-failing, async/invisible. `CORRECTNESS_RISK` (secondary backup path, not the critical dual-write).
+1. ~~`engram-sync.js` (§10) — real, live, currently-failing~~ — **retracted, see the Stability Repair 04 remediation note in §10.** Not a real failure; an audit-methodology error (wrong invocation tested).
 2. ~~Playwright MCP `browser_take_screenshot` reports success without the file landing anywhere~~ — **RETRACTED, see correction block immediately below. This was a real investigation error on my part (and independently, on both blind probes' part), not a tool defect.** Original (wrong) text preserved via strikethrough per this document's own no-silent-rewrite discipline; do not treat the struck-through claim as a finding.
 3. **`.pipeline/invocation-log.jsonl` at 179,828 lines / 35.1 MB** (§22) — no correctness issue found, but a real, large, unbounded, silently-growing file that nothing currently prunes.
 
@@ -282,8 +292,10 @@ None found.
 
 | ID | Component | Summary | Evidence |
 |---|---|---|---|
-| SH-P1-1 | `.claude/hooks/engram-sync.js` | Live, currently-active, silent (async, Stop-event) failure — `~/.engram` is not a git repo | Direct execution, exit 1, root cause confirmed |
+| ~~SH-P1-1~~ | ~~`.claude/hooks/engram-sync.js`~~ | **WITHDRAWN (Stability Repair 04)** — was based on testing the wrong invocation (missing `--hook`); the real registered call exits 0, correctly, since a fix 3+ months before this audit. Not a P1. See §10 remediation note. | — |
 | SH-P1-2 | Security Backstop (all 7 rules) | Systemic false positive: fires on any comment merely mentioning a dangerous pattern | Reproduced for all 7 rules independently, fresh fixtures |
+
+**Net open P1 count after this correction: 1** (SH-P1-2 only).
 
 ## P2
 
@@ -324,7 +336,7 @@ Engram outage/recovery (§13) · full live 5-phase fault-injected pipeline run (
 
 ## STABLE V1 CRITERIA — FAILED
 
-- **2 open P1s** (SH-P1-1 `engram-sync.js` live failure, SH-P1-2 security-backstop comment false-positive) — the stated bar is 0 open P1
+- **1 open P1** (SH-P1-2, security-backstop comment false-positive; SH-P1-1 `engram-sync.js` was withdrawn on further correction, see §10) — the stated bar is 0 open P1, so this criterion still fails
 - All 13 hooks were **script-level** executed this session (13/13), but **not runtime-firing-audited** — host registration remains `UNKNOWN`, not demonstrated
 - Provider fallback: only the happy path tested; primary-down/both-down/malformed/timeout paths `NOT_TESTED`
 - Engram outage/recovery: `NOT_TESTED`
@@ -342,7 +354,7 @@ Engram outage/recovery (§13) · full live 5-phase fault-injected pipeline run (
 
 Criteria and status:
 1. 0 P0 — **MET**
-2. 0 open P1 — **NOT MET** (2 open)
+2. 0 open P1 — **NOT MET** (1 open, after the `engram-sync.js` item was withdrawn — see §10)
 3. Critical contracts have negative+positive tests — **MET**
 4. Critical gates mechanically enforced or explicitly hybrid — **MET**
 5. All 13 hooks runtime-audited — **NOT MET** (script-executed, not runtime-firing-confirmed)
@@ -356,11 +368,11 @@ Criteria and status:
 
 **5 of 12 criteria fully met** (I count 12 above, not 11 — the mission's bullet list under §24 has one more line than my initial count suggested; using the actual 12 bulleted items as written). **5/12 = 42%.**
 
-I am stating this number because the formula was defined first and computed from measured criteria, exactly as instructed — not because a percentage adds precision this audit doesn't otherwise have. The honest summary in prose is more informative than the number: **the three subsystems this session actually built and fixed (Return Envelope casing, Capability Events integrity, QA Retry ceiling) are genuinely well-tested — real reproduction, real fixes, real regression suites, real mutation-sanity confirmation, real CI on two platforms.** Everything **outside** those three subsystems — the rest of the hook layer's live firing, Engram outage behavior, full pipeline integration, provider-failure paths, general OS parity — remains at essentially the same evidence level Architecture Reality Audit V1 left it at: partially characterized, honestly marked `NOT_TESTED` rather than assumed. This audit also surfaced two new, real P1s (one pre-existing and previously unknown — `engram-sync.js`; one newly discovered — the comment false-positive), and — in a genuinely useful demonstration of exactly the discipline this audit is built around — this document's *own first draft* asserted a false-success finding about Playwright screenshots that turned out, once a slow backgrounded check finally returned, to be wrong; it was corrected in place rather than left standing (§16). Finding real new defects, and catching and fixing a mistake in this very audit rather than letting it ship uncorrected, is itself evidence the process is working as intended, not evidence the system is unstable in some newly-alarming way.
+I am stating this number because the formula was defined first and computed from measured criteria, exactly as instructed — not because a percentage adds precision this audit doesn't otherwise have. The honest summary in prose is more informative than the number: **the three subsystems this session actually built and fixed (Return Envelope casing, Capability Events integrity, QA Retry ceiling) are genuinely well-tested — real reproduction, real fixes, real regression suites, real mutation-sanity confirmation, real CI on two platforms.** Everything **outside** those three subsystems — the rest of the hook layer's live firing, Engram outage behavior, full pipeline integration, provider-failure paths, general OS parity — remains at essentially the same evidence level Architecture Reality Audit V1 left it at: partially characterized, honestly marked `NOT_TESTED` rather than assumed. This audit also surfaced one new, real P1 (the security-backstop comment false-positive) — and, in a genuinely useful demonstration of exactly the discipline this audit is built around, **two separate mistakes in this document's own first draft**, both caught and corrected rather than left standing: a false-success finding about Playwright screenshots (§16), and an entire fabricated P1 about `engram-sync.js` that turned out, once I re-tested with the actual registered `--hook` argument and then checked git history, to have already been fixed three months before this audit ran, with its own passing regression suite the whole time (§10). Finding one real new defect, and catching and fixing two mistakes in this very audit rather than letting them ship uncorrected, is itself evidence the process is working as intended — including on itself.
 
 ## TOP EVIDENCE-BACKED FIXES
 
-1. **Fix `engram-sync.js`'s missing git-repo prerequisite** (SH-P1-1) — either initialize `~/.engram` as a git repo, or make the hook fail silently-but-correctly (it already reports the real error; the issue is that nothing surfaces it, not that the error message is wrong).
+1. ~~Fix `engram-sync.js`'s missing git-repo prerequisite~~ — **withdrawn, nothing to fix.** Already handled correctly by the codebase's own June 2026 fix. Not a real action item.
 2. **Strip comments before the 7 security-backstop regexes run** (SH-P1-2) — smallest fix: exclude `//` and `/* */` spans before matching.
 3. **Add `PASS_WITH_WARNINGS` to `qa_strict`'s valid-status set** (SH-P2-2) — one-line change, resolves a real documented-vs-enforced mismatch, same class of bug as the already-fixed P1-1 casing issue but smaller.
 4. **Investigate the Playwright MCP screenshot workspace-root mismatch** (SH-P2-4) — determine the actual write location and either document it precisely or fix the path-reporting so a caller's stated path and the actual write location agree.
