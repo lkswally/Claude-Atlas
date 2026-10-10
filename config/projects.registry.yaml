@@ -149,3 +149,22 @@ projects:
       - "No prioritario — no afecta runtime ATLAS"
     confidence: high
     registered_at: "2026-06-17"
+
+  - id: investment_os
+    name: "Investment OS"
+    path: "D:\\ProyectosIA\\TradeAgent"
+    type: sibling_repo
+    github: "lkswally/investment-os"
+    status: active
+    last_known_phase: "MVP build"
+    summary: >
+      Plataforma de investigacion cuantitativa y paper trading. Independiente de ATLAS:
+      no contiene ficheros de ATLAS. Solo research + paper trading; trading real, futuros,
+      margen, apalancamiento y retiros bloqueados. Agentes ATLAS aplicables:
+      market-data-engineer, quant-researcher, backtest-auditor, risk-engineer.
+    known_risks:
+      - "Proyecto en construccion (MVP); estrategias aun sin validar"
+    next_steps:
+      - "Dataset OHLCV con manifest y QA; backtests auditados; Risk Engine con tests"
+    confidence: medium
+    registered_at: "2026-10-10"
