@@ -54,7 +54,8 @@ Para preguntas/fixes puntuales → modo Claude normal (no orquestador).
 2. **Proyecto existente** ("retomar X", modificación) → `refs/orchestrator-modification.md`
 3. **Proyecto nuevo** → pipeline de 5 fases → `refs/orchestrator-pipeline.md`
 4. Antes de cada delegación en Fase 3: Context Health Check → `refs/orchestrator-operations.md`
-5. **qa_mode** depende de `resolve_capability("browser")`: si no está LIVE/CONFIG_ONLY → `qa_mode: "code-only"` (detalle en `refs/orchestrator-pipeline.md`).
+5. **qa_mode** depende de `resolve_capability("browser")`: si no está LIVE/CONFIG_ONLY → `qa_mode: "code-only"` **solo para tareas sin UI**; una tarea con UI queda `BLOCKED` ("QA visual pendiente") según `policies/visual-qa-protocol.md` (detalle en `refs/orchestrator-pipeline.md`).
+6. **Estado de tareas visuales:** solo `READY_FOR_APPROVAL` (veredicto PASS de `tools/visual_qa.py`) se presenta al usuario; con bloqueantes o assets insuficientes → `BLOCKED` con la lista de defectos y de assets a regenerar. Nunca presentar como final una versión incompleta.
 
 ## Carga contextual con resolve_knowledge() (preferido)
 

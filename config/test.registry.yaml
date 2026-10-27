@@ -432,6 +432,15 @@ suites:
     can_run_in_release: true
     notes: "Regression guard for the 2026-09-03 CI-determinism fix (bloque-F15-context7/playwright T4 offline split). Spawns both F15 suites as subprocesses with controlled env."
 
+  - id: bloque-VQA-visual-qa-protocol
+    path: _qa/bloque-VQA-visual-qa-protocol.py
+    layer: evidence
+    status: active
+    timeout: 300
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Visual QA protocol (policies/visual-qa-protocol.md): unit verdict/gate, visual-qa-gate.js hook, wiring, and real Chromium against planted-defect fixtures (browser part SKIPs without node+playwright)."
+
   # ---------------------------------------------------------------------------
   # Legacy — bloque-1* series; not executed by runner, kept as historical record
   # ---------------------------------------------------------------------------

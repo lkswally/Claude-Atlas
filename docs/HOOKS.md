@@ -29,7 +29,7 @@ Each hook receives input via stdin as JSON:
 
 | Type | When it runs | ATLAS hooks |
 |------|-------------|-------------|
-| `PreToolUse` | Before a tool executes | block-no-verify, pipeline-rules, config-protection |
+| `PreToolUse` | Before a tool executes | block-no-verify, pipeline-rules, visual-qa-gate, config-protection |
 | `PostToolUse` | After a tool executes | quality-gate, console-log-warning, delegation-tracker, qa-auto-audit, cost-tracker, suggest-compact |
 | `PreCompact` | Before context compaction | pre-compact-engram |
 | `Stop` | When session ends | session-summary, engram-sync |
@@ -80,6 +80,16 @@ Enforces hard rules from `config/hard-rules.json`:
 - **BLOCKS:** merging a PR that requires pilots without pilot evidence
 - **WARNS:** cross-repo commits (unexpected)
 - **WARNS:** using capabilities without consulting skills registry
+
+---
+
+### visual-qa-gate.js
+**Type:** PreToolUse | **Matcher:** Bash | **Action:** BLOCK
+
+Enforces `policies/visual-qa-protocol.md` in projects with a visual UI (package.json with a UI framework, or root `index.html`):
+- **BLOCKS:** `gh pr merge`, `vercel deploy`/`--prod`, `netlify deploy`, `git push ... main|master` unless `qa/visual/latest.json` (written by `tools/visual_qa.py`) is `PASS` for the current `HEAD`.
+- Non-visual projects: no-op. Bypass only with explicit user authorization: `ATLAS_VISUAL_QA_BYPASS=1`.
+- Fail-open only on internal hook errors; a missing or non-PASS report blocks.
 
 ---
 

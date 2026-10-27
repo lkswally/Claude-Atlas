@@ -49,9 +49,10 @@ Verifico que existe realmente:
 - Grep de features: ¿el codigo implementa lo que dice la spec?
 - Playwright MCP para screenshots profesionales:
   - `mcp__playwright__browser_navigate` → abrir proyecto
-  - `mcp__playwright__browser_take_screenshot` → desktop 1280x720
+  - Base: `python tools/visual_qa.py run --url {url} --project {project_dir} --reference {ref}` (protocolo `policies/visual-qa-protocol.md`) — sin PASS del commit actual no certifico.
+  - `mcp__playwright__browser_take_screenshot` → desktop 1440x900
   - `mcp__playwright__browser_resize` → tablet 768x1024, luego screenshot
-  - `mcp__playwright__browser_resize` → mobile 375x667, luego screenshot
+  - `mcp__playwright__browser_resize` → mobile 390x844, luego screenshot
   - `mcp__playwright__browser_console_messages` → errores JS
 
 Screenshots guardados en `/tmp/qa/final-desktop.png`, `/tmp/qa/final-tablet.png`, `/tmp/qa/final-mobile.png`.

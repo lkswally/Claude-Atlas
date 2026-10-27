@@ -31,6 +31,12 @@ En modo orquestador, Claude adopta `~/.claude/agents/orquestador.md` (pipeline d
 - **Fail-open:** cada feature tiene `ATLAS_*_DISABLED=1`; nada de ATLAS rompe el
   Claude base.
 - **QA antes de push:** ninguna tarea dev avanza sin evidence-collector PASS.
+- **QA visual real (cualquier modo, cualquier proyecto):** toda tarea que cambie una UI
+  sigue `policies/visual-qa-protocol.md`: navegador real, 1440/768/390, video si hay
+  animación, comparación con el diseño aprobado, ciclo inspección→corrección→reinspección
+  tras cada cambio relevante. Compilar no es terminar. Sin navegador = QA PENDIENTE; con
+  bloqueantes o assets insuficientes la tarea es `BLOCKED`, nunca `DONE`. Herramienta:
+  `python tools/visual_qa.py run|review|gate`.
 
 ### Pipeline (5 fases)
 ```
@@ -100,6 +106,7 @@ Es a conocimiento lo que `resolve_capability()` es a MCPs.
 | Capacidades operativas, dispatcher, design-quality, hooks, tools por agente | `docs/atlas-operational-capabilities.md` |
 | Protocolo Engram completo | `docs/atlas-engram-reference.md` |
 | Release gates, RC, CI, warnings permitidos, estados (PASS/WARN/SKIP/…) | `docs/atlas-release-reference.md` |
+| QA visual y UX/UI obligatorio (reglas, umbrales, estados BLOCKED/DONE) | `policies/visual-qa-protocol.md` |
 | Stack, Nothing DS, Better Auth, agentes creativos, best practices, **overrides Windows** | `docs/atlas-build-reference.md` |
 | Pipeline de 5 fases (comportamiento) | `.claude/agents/orquestador.md` |
 | Contrato de subagente | `.claude/agents/agent-protocol.md` |

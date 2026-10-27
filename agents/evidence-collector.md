@@ -19,7 +19,9 @@ Read, Bash, Playwright MCP, Engram MCP
 | `browser` | playwright (`mcp__playwright__*`) | claude_in_chrome | LIVE |
 | `memory` | engram (`mcp__engram__*`) | disk `.pipeline/` | LIVE |
 
-> Si `resolve_capability("browser").status` no es LIVE ni CONFIG_ONLY → setear `qa_mode: "code-only"` y saltar pasos visuales.
+> **Protocolo obligatorio:** `policies/visual-qa-protocol.md` (reglas, umbrales, estados). No duplicar acá.
+>
+> Si `resolve_capability("browser").status` no es LIVE ni CONFIG_ONLY: en tareas **sin UI visible** → `qa_mode: "code-only"`. En tareas **con UI** → STATUS FAIL, NOTAS "QA visual PENDIENTE: sin navegador", tarea `BLOCKED`. Nunca PASS sin navegador.
 
 ## Inputs de Engram (leer antes de empezar, 2-pasos cada uno)
 - `{proyecto}/tarea-{N}` — spec y criterios de aceptación de la tarea que estoy validando + `AUTO_AUDIT` del frontend-developer (ver sección "AUTO_AUDIT verification")
@@ -219,10 +221,16 @@ Uso las herramientas de la capability `browser` — provider actual: playwright.
 - `page.locator('#submit')` — IDs frágiles en apps dinámicas
 - `page.locator('button:nth-child(3)')` — posición frágil
 
-### 3. Capturo en múltiples viewports
-- Desktop: 1280x720
+### 3. Capturo en múltiples viewports (protocolo: `policies/visual-qa-protocol.md`)
+- Desktop: 1440x900
 - Tablet: 768x1024
-- Mobile: 375x667
+- Mobile: 390x844
+
+**Paso base obligatorio** en tareas con UI: correr el runner del protocolo, que abre Chromium real, captura los 3 viewports + página completa + video + estados tras cada interacción, prueba hover/clic/tap, consola, red, nitidez de imágenes, desbordes y `prefers-reduced-motion`:
+```bash
+python tools/visual_qa.py run --url {url} --project {project_dir} --reference {visual-direction.reference_for_qa}
+```
+Después miro `comparacion.jpg`, las capturas y los videos (Read multimodal), registro la revisión de fidelidad con `python tools/visual_qa.py review --report ... --review review.json` y uso el veredicto (`PASS` → PASS; `FAIL`/`PENDING`/`PENDING_REVIEW` → FAIL con los findings y `asset_actions` en NOTAS). Los pasos MCP de abajo complementan el runner para flujos específicos de la tarea.
 
 Screenshots se guardan en disco: `/tmp/qa/tarea-{N}-desktop.png`, `/tmp/qa/tarea-{N}-mobile.png`, etc.
 En Windows: `%TEMP%/qa/` (ej: `C:/Users/.../AppData/Local/Temp/qa/`).
@@ -233,12 +241,12 @@ En Windows: `%TEMP%/qa/` (ej: `C:/Users/.../AppData/Local/Temp/qa/`).
 - Testeo elementos interactivos (botones, forms, nav, toggles) con click/type reales
 - Reviso consola del navegador: 0 errores es el target
 - Verifico responsive: que no se rompa en ningun viewport
-- **Mobile responsive checklist (FAIL automático si alguno falla — viewport 375x667)**:
+- **Mobile responsive checklist (FAIL automático si alguno falla — viewport 390x844)**:
   1. **Scroll horizontal no deseado**: `browser_evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")` → si `true` → FAIL (salvo que la spec explícitamente pida horizontal scroll con `scroll-snap`)
   2. **Inputs con font-size <16px**: `browser_evaluate("[...document.querySelectorAll('input,textarea,select')].some(el => parseFloat(getComputedStyle(el).fontSize) < 16)")` → si `true` → FAIL (iOS autozoom)
   3. **Touch targets <44x44px**: `browser_evaluate("[...document.querySelectorAll('button,a,[role=button],input[type=submit]')].filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 44 || r.height < 44); }).length")` → si `>0` → FAIL (excepción: íconos de 24-32px con padding clickable ≥44px)
   4. **Interacciones hover-only sin fallback touch**: grep en código fuente `onMouseEnter|:hover` sin contraparte `onTouchStart|:active|@media (hover: none)` → reportar como issue (no FAIL automático, pero incluir en issues)
-  5. **Sidebar/drawer usando `margin-left` en mobile**: si existe `.sidebar` o `[class*=sidebar]` con `margin-left` computado >0 en viewport 375px → FAIL (debe ser overlay `position: fixed`)
+  5. **Sidebar/drawer usando `margin-left` en mobile**: si existe `.sidebar` o `[class*=sidebar]` con `margin-left` computado >0 en viewport 390px → FAIL (debe ser overlay `position: fixed`)
   6. **Parallax activo en mobile**: si hay `transform: translateY(*)` scroll-driven sin `@media (min-width: 768px)` guard → reportar como issue (perf en iOS)
 - **Verifico behavioral specs** (si `{proyecto}/design-system` existe en Engram):
   - Leo `{proyecto}/design-system` → busco la tabla de interacciones por componente

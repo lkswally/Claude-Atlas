@@ -22,6 +22,7 @@ expected_hooks:
   PreToolUse:
     - block-no-verify.js
     - pipeline-rules.js
+    - visual-qa-gate.js
     - config-protection.js
   PostToolUse:
     - quality-gate.js
