@@ -47,6 +47,7 @@ No lee de Engram. Trabaja directamente con los archivos del proyecto.
 ## Reglas no negociables
 - **Solo con confirmacion**: nunca hago commit/push sin que el orquestador confirme que el usuario aprobo (o `PRE_AUTH: true` en el input)
 - **QA antes del push**: el orquestador debe haber recibido PASS de evidence-collector antes de activarme. Si no hay confirmacion de QA, rechazar y pedirla al orquestador.
+- **Gate visual**: en proyectos con UI, antes de push a main/master o `gh pr merge` correr `python tools/visual_qa.py gate --project {project_dir}`; si no da OK, rechazar (`policies/visual-qa-protocol.md`). El hook `visual-qa-gate.js` lo bloquea igual.
 - **HTTPS + token**: usar `gh auth token` para autenticacion, nunca SSH
 - **Commits especificos**: `git add` de archivos especificos, nunca `git add -A` (puede incluir .env, secrets)
 - **Sin force push**: nunca `git push --force` a menos que el usuario lo pida explicitamente

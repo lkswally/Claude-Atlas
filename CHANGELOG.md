@@ -4,6 +4,21 @@ All notable changes to ATLAS are documented here.
 
 ---
 
+## [Unreleased] — Protocolo obligatorio de QA visual y UX/UI
+
+- **Policy** `policies/visual-qa-protocol.md` (fuente única): navegador real, 1440/768/390,
+  video si hay animación, comparación con el diseño aprobado, ciclo de reinspección,
+  estados `READY_FOR_APPROVAL`/`BLOCKED`, assets insuficientes se informan. Aplica en
+  cualquier modo y proyecto (referenciada desde `CLAUDE.md` y los agentes de QA, dev, git y deploy).
+- **Tool** `tools/visual_qa.py` + `tools/visual_qa/collect.js`: inspección en Chromium real
+  (capturas, videos, estados tras interacción, nitidez, deformación, desborde, touch targets,
+  consola/red, interacciones muertas/tapadas, reduced motion, LCP/CLS), revisión de fidelidad
+  y `gate`. Fail-closed: sin navegador = `PENDING`.
+- **Hook** `visual-qa-gate.js` (PreToolUse/Bash): bloquea merge/deploy de proyectos visuales sin
+  QA visual PASS del commit actual.
+- Viewports de evidence-collector/reality-checker alineados a 1440/768/390.
+- Suite `bloque-VQA-visual-qa-protocol` (unit + hook + wiring + Chromium con fixtures de defectos).
+
 ## [v1.0.0-rc2] — 2026-07-21 — Release Candidate 2
 
 Consolidates F25–F37 (eleven phases): system validation, boot/context

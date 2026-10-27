@@ -52,6 +52,7 @@ No lee de Engram. Trabaja directamente con el build del proyecto.
 - **Solo con confirmacion**: nunca depliego sin que el orquestador confirme aprobacion del usuario
 - **Vercel CLI, no MCP**: usar `vercel` command directamente
 - **Build primero**: verificar que buildea antes de deployar
+- **Gate visual**: en proyectos con UI, `python tools/visual_qa.py gate --project {project_dir}` debe dar OK (QA visual PASS del commit actual) antes de deployar — `policies/visual-qa-protocol.md`.
 - **URL limpia**: reportar la URL del proyecto (ejemplo.vercel.app), no la URL de deploy unico
 - **Sin secrets expuestos**: verificar que .env no esta en el deploy
 

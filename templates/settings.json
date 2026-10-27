@@ -5,9 +5,10 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "node __CLAUDE_HOME__/hooks/block-no-verify.js", "timeout": 10 },
-          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/pipeline-rules.js", "timeout": 5 }
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/pipeline-rules.js", "timeout": 5 },
+          { "type": "command", "command": "node __CLAUDE_HOME__/hooks/visual-qa-gate.js", "timeout": 5 }
         ],
-        "description": "Blocks git --no-verify and enforces hard rules on Bash commands"
+        "description": "Blocks git --no-verify, enforces hard rules and the visual QA gate on Bash commands"
       },
       {
         "matcher": "Write|Edit",
