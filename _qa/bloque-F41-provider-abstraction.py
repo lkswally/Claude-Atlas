@@ -285,7 +285,10 @@ def test_boundaries():
     import ast
     import re
     imported, calls = set(), []
-    for n in ("base.py", "anthropic_host.py", "registry.py", "__init__.py"):
+    # Every provider file is held to the strict no-process/no-network rule EXCEPT codex_cli.py, the one adapter
+    # that must spawn a process; F42 (#47-49) holds it to its own, narrower allow-list.
+    strict = sorted(p.name for p in (PROJECT_ROOT / "core" / "providers").glob("*.py") if p.name != "codex_cli.py")
+    for n in strict:
         text = (PROJECT_ROOT / "core" / "providers" / n).read_text(encoding="utf-8")
         tree = ast.parse(text)
         for node in ast.walk(tree):                       # real imports and calls only -- never prose in docstrings

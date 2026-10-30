@@ -1,10 +1,12 @@
 # ATLAS Model Router V1 (F38) — canonical configuration. See docs/MODEL-ROUTER-V1.md.
 #
-# Only the two models verified live in this repo (docs/MODEL-ROUTER-
-# ARCHITECTURE-V1.md) are listed. Codex/Gemini/Groq/OpenHands are
-# deliberately NOT represented here — they are not verified providers
-# inside ATLAS. If ever added, they must carry enabled: false until a real
-# integration exists, never silently LIVE.
+# Only models with a VERIFIED path are listed: the two Claude Code host models
+# (docs/MODEL-ROUTER-ARCHITECTURE-V1.md) and, since roadmap P5, the Codex CLI
+# (verified live: installed, `codex login status` = logged in, real round trip).
+# Gemini/Groq/OpenHands are deliberately NOT represented — no verified path.
+# Anything added later must carry enabled: false until a real integration
+# exists, never silently LIVE. Listing a model here does not make it routable:
+# eligibility still needs a healthy provider (see assume_available_if_unknown).
 #
 # This file is DATA. The router never executes anything from it; unknown
 # keys are ignored, and it cannot add commands, credentials, or change
@@ -32,6 +34,9 @@ providers:
   anthropic:
     enabled: true
     health_source: host_session  # no polling API; see model-level flag below
+  openai:
+    enabled: true
+    health_source: probe         # core/providers/codex_cli.py: a real round trip; "logged in" is not "available"
 
 models:
   anthropic/sonnet:
@@ -57,6 +62,20 @@ models:
     cost_tier: configured_free
     eligible_risks: [low, medium, high, critical]
     assume_available_if_unknown: true
+
+  # Codex CLI as run by core/providers/codex_cli.py: read-only, ephemeral, tool-less FOR ATLAS (its own sandboxed
+  # agent loop is not ATLAS's tool surface), whatever default model the logged-in ChatGPT account gets.
+  openai/codex-cli:
+    provider: openai
+    enabled: true
+    strengths: [coding, analysis]     # ATLAS policy choice, not a vendor-verified claim
+    supports_tools: false             # ATLAS tools are not available to it => tool-requiring tasks are excluded
+    supports_multimodal: UNKNOWN
+    context_tier: UNKNOWN
+    latency_tier: UNKNOWN
+    cost_tier: configured_free        # the owner's existing ChatGPT plan allowance, no per-token spend; the quota IS finite
+    eligible_risks: [low, medium]     # conservative until reviewer-independence evidence exists (P7)
+    assume_available_if_unknown: false  # unlike the host models there IS a real signal; nothing is assumed
 
 # Task-class policy expresses REQUIREMENTS/PREFERENCES only — it never
 # names a provider directly. The registry above resolves preferences to

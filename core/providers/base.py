@@ -38,7 +38,7 @@ HEALTH_STATES: Tuple[str, ...] = (
 # Outcome class of one execution. NONE only when ok=True.
 ERROR_CLASSES: Tuple[str, ...] = (
     "NONE", "TIMEOUT", "RATE_LIMITED", "QUOTA_EXHAUSTED", "AUTH_FAILED", "MODEL_UNAVAILABLE",
-    "INVALID_RESPONSE", "NOT_EXECUTABLE", "PROVIDER_ERROR", "CANCELLED",
+    "INVALID_RESPONSE", "NOT_EXECUTABLE", "POLICY_BLOCKED", "PROVIDER_ERROR", "CANCELLED",
 )
 
 TIERS = ("small", "medium", "large")

@@ -33,9 +33,23 @@ The models are run by the Claude Code host through the `Agent` tool; ATLAS's dis
 
 Observable routing behavior is unchanged: the only router edit is adding `TIMEOUT` to the shared vocabulary (previously such a value failed closed as an invalid state; it still excludes the model).
 
+## Second provider: Codex CLI (`core/providers/codex_cli.py`, roadmap P5)
+
+**Why this one.** Audited by presence only (no secret read): the `codex` CLI is installed (0.147.0) and `codex login status` reports *Logged in using ChatGPT*. Gemini has a config directory but no CLI; Groq, Mistral, OpenRouter, Ollama and LM Studio have no CLI, no credential variable and no listening runtime. So: no new credential, no per-token spend (the owner's existing ChatGPT plan allowance, whose quota is finite), minimal work.
+
+**It is the first provider ATLAS can actually invoke** (`executable_from_atlas = True`). Observed formats (real runs, not assumed): success is exit 0 + `turn.completed` (stderr may carry unrelated ERROR lines, so stderr is not a failure signal); an unknown model gives `turn.failed` with `code: model_not_found`; no login gives about 18 s of internal "Reconnecting… 401" before failing.
+
+**Containment (it runs an agent binary):** argv list, never a shell; prompt on **stdin**; `--sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --json`; a private empty working directory that is removed afterwards; environment scrubbed of anything named key/token/secret/password/credential; prompts that contain obvious credentials (private-key headers, AWS/GitHub/Slack/Google/`sk-` keys) are refused before anything is spawned (a heuristic, not a guarantee); timeouts kill the **whole process tree** (the npm wrapper spawns the native binary). Prompts go to OpenAI: callers must not put credentials or regulated data in them.
+
+**Health is a real signal or UNKNOWN.** `codex login status` (fast, local, cached 60 s) can say AUTH_FAILED or MODEL_UNAVAILABLE (CLI missing). *Logged in* alone is **UNKNOWN**, never AVAILABLE. AVAILABLE needs a recent successful round trip (`probe()` or any successful `execute()`, valid 10 min); a recent failure is reported as its mapped state for 2 min.
+
+**Registered, not routable by accident.** `openai/codex-cli` is in `config/model-router.yaml` with `assume_available_if_unknown: false`, `supports_tools: false` (ATLAS tools are not available to it), `eligible_risks: [low, medium]`. With no health signal the router excludes it, so routing for every existing request is unchanged; given an AVAILABLE signal it becomes eligible. The router still rejects any non-`claude_code` execution environment globally, so making Codex actually selectable is a P6 decision.
+
+**Proof.** F42: 51 offline checks replaying the real captures (mutation sanity 16/16), plus `--live` (5 checks against the real binary, all passing 2026-10-30): health, a PONG round trip → AVAILABLE, a nonexistent model → MODEL_UNAVAILABLE, an unauthenticated run (empty `CODEX_HOME`) → AUTH_FAILED, and a 1.5 s timeout → TIMEOUT with the process tree gone. **Not reproducible safely, so the wording is synthetic and labelled as such in the tests:** quota exhaustion and rate limiting.
+
 ## Not done on purpose
 
-No second provider (P5), no retry/fallback policy (P6), no provider health wired into `route()` (there is no real signal to wire yet), no runtime/role binding type (P8 will define it when it is used).
+No retry/fallback policy and no provider health wired into `route()` (P6), no runtime/role binding type (P8 defines it when it is used), no use of Codex by any ATLAS flow yet.
 
 ## Known limit
 

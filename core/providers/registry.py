@@ -12,10 +12,12 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .anthropic_host import AnthropicHostProvider
 from .base import ModelProvider
+from .codex_cli import CodexCliProvider
 
-# provider id -> adapter class. Adding a provider means adding a verified adapter here (roadmap P5).
+# provider id -> adapter class. Adding a provider means adding a verified adapter here.
 _ADAPTERS = {
-    "anthropic": AnthropicHostProvider,
+    "anthropic": AnthropicHostProvider,   # host-managed (P4): described and routed, not invocable from ATLAS
+    "openai": CodexCliProvider,           # Codex CLI (P5): invocable, health from real round trips
 }
 
 
