@@ -316,11 +316,15 @@ def test_19_session_summary_appends_to_log():
     home = Path(_os.path.expanduser("~"))
     session_log = home / ".claude" / "snapshots" / "session-log.jsonl"
 
+    import time as _time
+    from datetime import datetime as _dt
+
     lines_before = 0
     if session_log.exists():
         lines_before = len([l for l in session_log.read_text(encoding="utf-8").splitlines() if l.strip()])
 
     # Stop hook con stdin vacío (evento de stop de sesión)
+    t0_ms = _time.time() * 1000
     code, _, err = run_hook("session-summary.js", None)
     print(f"  exit={code}")
     assert code == 0
@@ -328,12 +332,18 @@ def test_19_session_summary_appends_to_log():
     assert session_log.exists(), f"session-log.jsonl no fue creado en {session_log}"
     lines_after = len([l for l in session_log.read_text(encoding="utf-8").splitlines() if l.strip()])
     print(f"  líneas antes={lines_before}, después={lines_after}")
-    assert lines_after > lines_before
 
+    # El hook trunca el log a las últimas 50 líneas cuando supera 100, y el log es estado
+    # compartido de ~/.claude: el conteo NO crece de forma monótona. La evidencia del append
+    # es una entrada final "stop" escrita después de t0 (una entrada vieja no pasa).
     last_line = [l for l in session_log.read_text(encoding="utf-8").splitlines() if l.strip()][-1]
     entry = json.loads(last_line)
     assert entry.get("event") == "stop"
     assert "timestamp" in entry
+    entry_ms = _dt.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp() * 1000
+    assert entry_ms >= t0_ms - 1, (
+        f"última entrada del log es anterior a esta ejecución (ts={entry['timestamp']}): el hook no hizo append"
+    )
     print(f"  Última entrada: event={entry['event']}, ts={entry['timestamp'][:19]}")
     print("[OK]")
 

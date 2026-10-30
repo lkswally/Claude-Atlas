@@ -511,6 +511,10 @@ def test_26_invocation_logging_correct_through_integration():
     d = ATLASDispatcher(project_root=str(PROJECT_ROOT))
     task_id = "_test_repair06/integrated-invocation-log"
     try:
+        # audit_invocations lee TODO .pipeline/invocation-log.jsonl (append-only, sin rotacion). En un
+        # disco frio la primera lectura puede superar los 30s de la ventana y ocultar una entrada que
+        # SI se registro. Se calienta la lectura antes de la seccion cronometrada.
+        d.audit_invocations(["record_qa_attempt"], since_seconds=1)
         env = _qa_envelope("FAIL")
         d.validate_return_envelope(env, mode="qa_strict", task_id=task_id)
         audit = d.audit_invocations(["record_qa_attempt", "validate_return_envelope"], since_seconds=30)

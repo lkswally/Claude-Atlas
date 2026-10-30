@@ -25,6 +25,7 @@ NO modifica ningun test existente. NO depende de Engram MCP.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -39,9 +40,35 @@ if str(_TOOLS) not in sys.path:
 #  Helpers
 # =====================================================================
 
+_GIT_WARMED = False
+
+
+def _warm_git():
+    """
+    Precondicion de los tests de parity: git debe responder rapido.
+
+    El check de archivos declarados (dev_strict) corre git con timeout=5 y hace soft-fail
+    al vencer. En un disco frio (HDD) la PRIMERA llamada puede tardar >5s: el path A
+    (contracts activos, siempre el primero) omite el check y el path B (ya con git tibio)
+    lo ejecuta, y los errores dejan de ser identicos aunque el contrato no cambie nada.
+    Calentar el cache con los mismos comandos hace que A y B comparen lo mismo.
+    """
+    global _GIT_WARMED
+    if _GIT_WARMED:
+        return
+    _GIT_WARMED = True
+    for cmd in (["git", "diff", "--name-only", "HEAD"],
+                ["git", "ls-files", "--others", "--exclude-standard"]):
+        try:
+            subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, timeout=120)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+
 def _build_dispatcher():
     """Construye dispatcher sin Engram MCP para tests rapidos."""
     from atlas_dispatcher import ATLASDispatcher
+    _warm_git()
     return ATLASDispatcher(project_root=Path.cwd(), auto_enable_mcp=False)
 
 
