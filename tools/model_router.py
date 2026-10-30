@@ -50,9 +50,11 @@ _DECISION_LOG_MAX_LINES = 500  # same bounded-retention convention as cost-track
 TASK_CLASSES = ("FAST", "CODE", "ANALYSIS", "CONTEXT", "REVIEW", "HIGH_RISK", "RESEARCH", "MULTIMODAL")
 COMPLEXITY_TIERS = ("LOW", "MEDIUM", "HIGH", "VERY_HIGH")
 RISK_TIERS = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+# Same vocabulary as core/providers/base.py (F41 asserts they never drift). TIMEOUT = the last attempt
+# timed out: not servable now; whether to retry or fall back is decided later, not by eligibility.
 HEALTH_STATES = ("AVAILABLE", "DEGRADED", "RATE_LIMITED", "QUOTA_EXHAUSTED",
-                 "AUTH_FAILED", "MODEL_UNAVAILABLE", "UNKNOWN")
-_UNSERVABLE_HEALTH = ("RATE_LIMITED", "QUOTA_EXHAUSTED", "AUTH_FAILED", "MODEL_UNAVAILABLE")
+                 "AUTH_FAILED", "MODEL_UNAVAILABLE", "TIMEOUT", "UNKNOWN")
+_UNSERVABLE_HEALTH = ("RATE_LIMITED", "QUOTA_EXHAUSTED", "AUTH_FAILED", "MODEL_UNAVAILABLE", "TIMEOUT")
 _CONTEXT_RANK = {"small": 0, "medium": 1, "large": 2}
 COST_POLICIES = ("CONFIGURED_ONLY", "FREE_ONLY", "ALLOW_PAID_WITH_APPROVAL", "BUDGET_LIMITED")
 

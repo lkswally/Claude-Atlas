@@ -22,7 +22,7 @@ Two real candidates only: `anthropic/sonnet` and `anthropic/opus` (the only mode
 
 ## Provider health
 
-States: `AVAILABLE, DEGRADED, RATE_LIMITED, QUOTA_EXHAUSTED, AUTH_FAILED, MODEL_UNAVAILABLE, UNKNOWN`. Claude Code exposes no health/quota API to ATLAS, so no probe was built. Callers (or a future real signal) pass `health_overrides`. Without one, a model is `AVAILABLE` only through its explicit, config-visible `assume_available_if_unknown: true`, justified because the router only runs inside an already-active Claude Code session. This is a documented policy, not a silent conversion.
+States: `AVAILABLE, DEGRADED, RATE_LIMITED, QUOTA_EXHAUSTED, AUTH_FAILED, MODEL_UNAVAILABLE, TIMEOUT, UNKNOWN` (the same vocabulary as `core/providers/base.py`; `TIMEOUT` is unservable like the other failure states). Claude Code exposes no health/quota API to ATLAS, so no probe was built. Callers (or a future real signal) pass `health_overrides`. Without one, a model is `AVAILABLE` only through its explicit, config-visible `assume_available_if_unknown: true`, justified because the router only runs inside an already-active Claude Code session. This is a documented policy, not a silent conversion.
 
 ## Dry-run CLI
 
