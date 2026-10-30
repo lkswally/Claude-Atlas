@@ -30,12 +30,18 @@ file_hash_cache.py's own docstring):
 - This module provides correct, deterministic COUNTING and LIMIT-CHECK
   logic once invoked. It does not, and cannot from this layer, force the
   orchestrator LLM to invoke it at the right moment in a live Claude Code
-  session -- there is no PreToolUse-style interception point for Task/
-  Agent delegation calls in this architecture. Invocation is contractual
-  (the agent contracts are updated to call this instead of self-counting
-  from free text); the counting and the 3-attempt ceiling itself, once
-  called, are mechanically correct and cannot be miscounted by an LLM
-  losing track of a number in a long conversation.
+  session. (Correction 2026-10-29: this originally said no PreToolUse-
+  style interception point exists. Claude Code's documented hook protocol
+  does allow a PreToolUse hook on the `Agent` tool to deny the call or
+  rewrite its input via hookSpecificOutput.updatedInput; ATLAS simply has
+  no such hook registered and none has been tested. See
+  docs/MODEL-ROUTER-V1.md, "Runtime enforcement boundary".) Invocation is
+  contractual (the agent contracts are updated to call this instead of
+  self-counting from free text; Stability Repair 06 additionally folds the
+  accounting into the mandatory qa_strict envelope validation); the
+  counting and the 3-attempt ceiling itself, once called, are mechanically
+  correct and cannot be miscounted by an LLM losing track of a number in a
+  long conversation.
 - This is a DIFFERENT mechanism from FileHashCache (.pipeline/qa-cache.json,
   Bloque 1F.1) -- that one caches PASS results to skip redundant QA runs.
   This one counts FAIL attempts toward an escalation ceiling. They share
