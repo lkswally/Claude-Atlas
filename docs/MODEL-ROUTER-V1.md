@@ -70,3 +70,20 @@ Today an agent role *is* its model (static, 1:1, frontmatter). V1 makes the inte
 ## Verification summary
 
 54/54 checks pass, including 9 negative controls in which a synthetic candidate engineered to be the highest-scoring option is rejected by a single hard constraint. Mutation sanity in a disposable worktree: disabling eligibility (23 failures), inverting a scoring preference (4), ignoring provider health (6), and treating `UNKNOWN` as supported (2) were all caught; the clean copy returned to 54/54. Performance: pure decision ≈ 0.02–0.05 ms/route; default call path (registry parse cached by mtime) ≈ 0.25 ms/route over 1,000 routes; CLI end-to-end ≈ 0.5–0.7 s, dominated by interpreter and YAML import.
+
+## Reviewer independence (roadmap P7, `tools/review_independence.py`)
+
+Independence is a **verified property of a review**, not a label. Levels, weakest first: `ROLE_ONLY` (a different role, the same model, or anything unknown) < `CONTEXT_INDEPENDENT` (same model, *fresh* context) < `MODEL_INDEPENDENT` (a different model, fresh context) < `PROVIDER_INDEPENDENT` (a different provider, fresh context). A reused context caps the level at `ROLE_ONLY` whatever the model: a different model that was handed the implementer's reasoning is not an independent check.
+
+| Risk | Required level | Also |
+|---|---|---|
+| LOW | `ROLE_ONLY` (normal QA role) | – |
+| MEDIUM | `CONTEXT_INDEPENDENT` | fresh context |
+| HIGH | `MODEL_INDEPENDENT` (a different model preferred) | fresh context |
+| CRITICAL | `PROVIDER_INDEPENDENT` where available | security review + human gate |
+
+`plan_review(req, implementation_model, ...)` picks, among models that are **eligible and healthy for a REVIEW task at this risk**, the reviewer that reaches the highest level, and reports `achieved_level`, `degraded` and a plain-language reason. It never silently accepts less: when the requirement cannot be met the plan says so, and at HIGH/CRITICAL a review that would be a silent self-review (no reviewer at all) sets `human_gate_required`. `verify_review_record(record, risk)` re-derives the level from the facts with the provider taken from the **registry** (a record cannot invent a more independent provider) and flags over-claims. The record is concise: `implementation_model, implementation_provider, review_model, review_provider, context_reused, independence_level`.
+
+What this means for today's fleet: a CRITICAL review always **degrades** (only `anthropic/opus` is eligible at CRITICAL, so the best reachable level is `CONTEXT_INDEPENDENT`) and therefore always needs the human gate; HIGH reaches `MODEL_INDEPENDENT` through the two Claude models; and with Codex reported AVAILABLE a LOW/MEDIUM review of Claude's work can be `PROVIDER_INDEPENDENT`. These are properties of the configured fleet, not of the code.
+
+Limits, stated plainly: `context_reused` is an **attestation** (ATLAS cannot observe whether a reviewer saw the implementer's reasoning), so a dishonest caller could lie about it; the plan names who should review but does not run or enforce the review (advisory, like the router); no dispatcher or agent flow consumes it yet. F44: 36 checks, mutation sanity 16/16.
