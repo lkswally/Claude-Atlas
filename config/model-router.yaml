@@ -1,0 +1,124 @@
+# ATLAS Model Router V1 (F38) — canonical configuration. See docs/MODEL-ROUTER-V1.md.
+#
+# Only the two models verified live in this repo (docs/MODEL-ROUTER-
+# ARCHITECTURE-V1.md) are listed. Codex/Gemini/Groq/OpenHands are
+# deliberately NOT represented here — they are not verified providers
+# inside ATLAS. If ever added, they must carry enabled: false until a real
+# integration exists, never silently LIVE.
+#
+# This file is DATA. The router never executes anything from it; unknown
+# keys are ignored, and it cannot add commands, credentials, or change
+# approval/autonomy policy. The router only SELECTS among the models listed.
+#
+# Unknown model characteristics are spelled "UNKNOWN", not guessed. A hard
+# requirement on an UNKNOWN characteristic (e.g. context_tier for a large-
+# context task, supports_multimodal for a multimodal task) FAILS eligibility:
+# unverified != supported. An operator who has vendor-verified data may set
+# the value here; that is a visible, reviewable policy decision.
+#
+# assume_available_if_unknown: there is no runtime health/quota API for
+# Claude Code's host-managed models (core/capabilities/router.py's LIVE
+# check only covers MCP tools, a different axis). This flag is an
+# EXPLICIT, visible policy choice — not a silent UNKNOWN->AVAILABLE
+# conversion — justified because this router only ever runs inside an
+# already-active Claude Code session, which is itself evidence that at
+# least one Claude model is reachable. Any future real health signal
+# should override this via health_overrides passed into route(), not by
+# editing this flag per call.
+
+version: 1
+
+providers:
+  anthropic:
+    enabled: true
+    health_source: host_session  # no polling API; see model-level flag below
+
+models:
+  anthropic/sonnet:
+    provider: anthropic
+    enabled: true
+    strengths: [coding, analysis, tool_use]
+    supports_tools: true
+    supports_multimodal: UNKNOWN
+    context_tier: UNKNOWN
+    latency_tier: UNKNOWN
+    cost_tier: configured_free
+    eligible_risks: [low, medium, high]
+    assume_available_if_unknown: true
+
+  anthropic/opus:
+    provider: anthropic
+    enabled: true
+    strengths: [reasoning, analysis, coding]
+    supports_tools: true
+    supports_multimodal: UNKNOWN
+    context_tier: UNKNOWN
+    latency_tier: UNKNOWN
+    cost_tier: configured_free
+    eligible_risks: [low, medium, high, critical]
+    assume_available_if_unknown: true
+
+# Task-class policy expresses REQUIREMENTS/PREFERENCES only — it never
+# names a provider directly. The registry above resolves preferences to
+# actual models. This is deliberate (mission section 11): adding a model
+# later must never require editing every task class.
+task_classes:
+  FAST:
+    prefer_strengths: []
+    prefer_latency: low
+    min_strengths: []
+  CODE:
+    prefer_strengths: [coding]
+    min_strengths: [coding]
+  ANALYSIS:
+    prefer_strengths: [reasoning]
+    min_strengths: [analysis]
+  CONTEXT:
+    prefer_strengths: []
+    min_strengths: []
+    requires_context_tier: large
+  REVIEW:
+    prefer_strengths: [reasoning]
+    min_strengths: []
+    independent_review_preferred: true
+  HIGH_RISK:
+    prefer_strengths: [reasoning, coding]
+    min_strengths: [analysis]
+    independent_review_required: true
+  RESEARCH:
+    prefer_strengths: [reasoning]
+    min_strengths: [analysis]
+  MULTIMODAL:
+    prefer_strengths: []
+    min_strengths: []
+    requires_multimodal: true
+
+routing_weights:
+  task_fit: 3
+  complexity_fit: 2
+  risk_fit: 2
+  latency_fit: 1
+  quality_fit: 2
+  context_fit: 1
+  historical: 0   # neutral for V1 -- no real per-model metrics exist yet
+  degraded_penalty: 2   # subtracted when a model's health is DEGRADED (still eligible, ranked lower)
+
+fallback_policy:
+  max_chain_length: 3
+
+risk_policy:
+  critical_requires_human_approval: true
+  # A model's own eligible_risks list is the hard constraint; this is an
+  # additional, separate approval gate on top of eligibility.
+
+cost_policy:
+  default: CONFIGURED_ONLY
+  # CONFIGURED_ONLY preserves current behavior: only already-configured,
+  # already-free-tier models may be selected. No paid provider is
+  # enabled by this file.
+
+review_policy:
+  LOW:      { independent_required: false }
+  MEDIUM:   { independent_required: false, note: "different role acceptable; same model ok" }
+  HIGH:     { independent_required: true,  dimension: model }
+  CRITICAL: { independent_required: true,  dimension: model_and_provider, human_approval: true }
