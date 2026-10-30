@@ -11,7 +11,9 @@ Two facts about this architecture shape the design:
   * When the HOST reports that a Claude model failed (usage limit ...), ATLAS can re-route with that knowledge
     (`known_failures`) and, if an invocable provider satisfies the task, execute it there.
 
-Hard rule: after EVERY failure the router is run again from scratch with what was learned. Risk, tool,
+Hard rule: after EVERY failure that is not a same-model retry the router is run again from scratch with what was
+learned (a retry re-runs the model the router just selected for the same task, so its constraints are unchanged
+and the provider's memory of the failure that caused the retry cannot veto it). Risk, tool,
 context, cost and environment constraints are therefore re-applied to every fallback candidate; a fallback can
 never bypass them, and if nothing satisfies them the answer is NO_ELIGIBLE_PROVIDER / WAITING_PROVIDER -- never
 "the next best incompatible model".
@@ -152,15 +154,22 @@ def execute_routed(req: TaskRequirements, prompt: str, providers: Mapping[str, A
     # Hard bound on router passes, independent of any other function: every pass either executes (bounded by
     # max_attempts) or learns about one more model (bounded by the registry), plus slack.
     passes = int(pol["max_attempts"]) + len(registry.get("models") or {}) + 2
+    pending_retry: Optional[str] = None
     for _ in range(passes):
         if executions >= int(pol["max_attempts"]):
             break
-        health, notes = collect_health(providers, registry, probe_unknown=probe_unknown,
-                                       require_executable=require_executable, learned=learned)
-        decision = router(req, registry, health_overrides=health, log_decision=False)
-        model = decision.get("selected")
-        if model is None:
-            break
+        if pending_retry is not None:
+            # A same-model retry is the policy's own probe of whether the failure was transient. Its constraints are
+            # unchanged (the same model was just selected for the same task), so it does not go back through the health
+            # filter: the provider's memory of the failure that CAUSED the retry would otherwise cancel the retry.
+            model, pending_retry = pending_retry, None
+        else:
+            health, notes = collect_health(providers, registry, probe_unknown=probe_unknown,
+                                           require_executable=require_executable, learned=learned)
+            decision = router(req, registry, health_overrides=health, log_decision=False)
+            model = decision.get("selected")
+            if model is None:
+                break
         if first_selected is None:
             first_selected = model
         prov = providers.get(provider_id_of(registry, model) or "")
@@ -195,6 +204,7 @@ def execute_routed(req: TaskRequirements, prompt: str, providers: Mapping[str, A
                            selected=first_selected, provider=decision.get("provider"), provider_health=health, attempts=attempts)
         if action == "RETRY":
             retries_used[model] = retries_used.get(model, 0) + 1
+            pending_retry = model
             continue
         learned[model] = _STATE_FOR_CLASS.get(r.error_class, "MODEL_UNAVAILABLE")
         cause[model] = r.error_class

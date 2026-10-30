@@ -16,8 +16,8 @@ Rules that make the levels mean something:
   * the level is computed from FACTS (models, registry-derived providers, context flag); a claimed
     `independence_level` is only compared against it, never trusted; the provider is taken from the registry,
     not from what the record says
-  * if the required level cannot be reached the plan says DEGRADED and why; at HIGH/CRITICAL risk a review that
-    ends up ROLE_ONLY (a silent self-review) additionally requires a human gate
+  * if the required level cannot be reached the plan says DEGRADED and why; at HIGH/CRITICAL risk a degraded review
+    (including a silent self-review, ROLE_ONLY) additionally requires a human gate
 
 Required level by risk (extends config/model-router.yaml `review_policy`):
     LOW       ROLE_ONLY             normal QA role
@@ -122,7 +122,9 @@ def plan_review(req: TaskRequirements, implementation_model: str, registry: Opti
     else:
         reason = f"{achieved} reached by {reviewer}"
     self_review = achieved in (None, "ROLE_ONLY")
-    human_gate = bool(pol["human_gate"] or (risk in ("HIGH", "CRITICAL") and self_review))
+    # HIGH/CRITICAL work whose required independence cannot be reached must not proceed on a weaker review the plan
+    # itself downgraded: a human decides (P16 FI-09; before this, only a silent self-review needed the gate).
+    human_gate = bool(pol["human_gate"] or (risk in ("HIGH", "CRITICAL") and (self_review or degraded)))
     return {
         "risk": risk, "required_level": required, "achieved_level": achieved, "degraded": degraded, "reason": reason,
         "reviewer_model": reviewer, "reviewer_provider": provider_id_of(registry, reviewer) if reviewer else None,
