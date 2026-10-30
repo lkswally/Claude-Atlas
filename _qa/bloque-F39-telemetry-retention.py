@@ -559,11 +559,35 @@ def test_adopters():
               sr._usage_store(p).segment_path.exists() and total_bytes(sr._usage_store(p)) <= 2 * 2500 + 300
               and 0 < stats["total_invocations"] <= 80 and stats["by_event"].get("get_skill") == stats["total_invocations"],
               f"{stats['total_invocations']} retained of 80")
+        # Regression found by Linux CI on the first push: the pre-retention skills writer never created
+        # directories, so an override into a missing dir must fail open and create NOTHING. (The old test
+        # used "non?existent", an illegal name on Windows, which hid this until it ran on Linux.)
+        base = tmp()
+        missing = base / "missing_dir" / "sub" / "usage.jsonl"            # valid name on every OS
+        os.environ["ATLAS_SKILLS_USAGE_LOG_PATH"] = str(missing)
+        try:
+            sr._log_usage("get_skill", {"skill_id": "x"})
+            no_dirs = not (base / "missing_dir").exists()
+        except Exception:  # noqa: BLE001
+            no_dirs = False
+        check("50b skills usage override into a missing directory fails open and creates no directories (cross-OS)", no_dirs)
     finally:
         if old_env is None:
             os.environ.pop("ATLAS_SKILLS_USAGE_LOG_PATH", None)
         else:
             os.environ["ATLAS_SKILLS_USAGE_LOG_PATH"] = old_env
+
+    nb = tmp()
+    strict = BoundedJsonl(nb / "nope" / "t.jsonl", create_parent=False)
+    r = strict.append({"seq": 1})
+    check("50c create_parent=False: append fails open with an error and creates nothing",
+          r.ok is False and r.error and not (nb / "nope").exists())
+    lenient = BoundedJsonl(nb / "made" / "t.jsonl")
+    check("50d default create_parent=True creates the directory (the invocation tracker's contract)",
+          lenient.append({"seq": 1}).ok and (nb / "made" / "t.jsonl").exists())
+    t3 = InvocationTracker(project_root=tmp() / "fresh_root")                # .pipeline does not exist yet
+    check("50e invocation tracker still creates its .pipeline directory on first record",
+          t3.record("validate_return_envelope", {})["ok"] is True and t3.log_path.exists())
 
 
 # --------------------------------------------------------------------------- I. source guards

@@ -105,7 +105,10 @@ def _usage_store(path: Path) -> BoundedJsonl:
     key = str(path)
     store = _USAGE_STORES.get(key)
     if store is None:
-        store = _USAGE_STORES[key] = BoundedJsonl(path)
+        # create_parent=False: the pre-retention writer never created directories (an env
+        # override into a missing dir must fail open, not create it); default locations
+        # are created by _resolve_usage_log_path().
+        store = _USAGE_STORES[key] = BoundedJsonl(path, create_parent=False)
     return store
 
 

@@ -193,8 +193,11 @@ class AppendResult:
 
 
 class BoundedJsonl:
-    def __init__(self, path, max_bytes: int = DEFAULT_MAX_BYTES):
+    def __init__(self, path, max_bytes: int = DEFAULT_MAX_BYTES, create_parent: bool = True):
+        """create_parent=False keeps a writer that never created directories (e.g. an
+        env-override log path) from creating them now: append() then fails open instead."""
         self.path = Path(path)
+        self.create_parent = create_parent
         self.max_bytes = max(1, int(max_bytes))
         self.segment_path = self.path.with_name(f"{self.path.stem}.1{self.path.suffix}")
         self.lock_path = self.path.with_name(f"{self.path.stem}.lock")
@@ -227,7 +230,8 @@ class BoundedJsonl:
         except (TypeError, ValueError) as e:
             return AppendResult(False, error=f"{type(e).__name__}: {e}")
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+            if self.create_parent:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
             with self._exclusive(LOCK_TIMEOUT_SECONDS):
                 with open(self.path, "ab") as f:
                     f.write(payload)
