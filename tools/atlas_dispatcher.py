@@ -279,8 +279,10 @@ class ATLASDispatcher:
                     del self.phase_gate_retries[cajon]
                 continue
 
-            elif engram_response["status"] == "timeout":
-                # Engram error — intenta fallback disco
+            elif engram_response["status"] != "not_found":
+                # Engram error: "timeout", but ALSO "ambiguous_project" and any status this gate does not know.
+                # Only found / not_found are answers about the cajon; anything else is an unverified cajon and must
+                # never fall through as a pass (P16 FI-10). Intenta fallback disco.
                 disk_exists = self._check_disk_cajon(proyecto, cajon)
                 if disk_exists:
                     # Fallback exitoso
@@ -288,8 +290,10 @@ class ATLASDispatcher:
                         del self.phase_gate_retries[cajon]
                     continue
                 else:
-                    # Engram timeout AND disco falta — PENDING
-                    engram_errors.append(f"Engram timeout para {cajon} (disco también falta)")
+                    # Engram error/estado no verificable AND disco falta — PENDING
+                    status = engram_response["status"]
+                    label = "timeout" if status == "timeout" else f"estado no verificable {status!r}"
+                    engram_errors.append(f"Engram {label} para {cajon} (disco también falta)")
 
             elif engram_response["status"] == "not_found":
                 # Cajon no existe en Engram ni disco
@@ -2385,20 +2389,23 @@ class ATLASDispatcher:
         la ventana de tiempo especificada.
 
         Retorna dict con verdict ("complete" | "incomplete") + missing list.
-        Fail-open: si tracker no importable, retorna verdict=complete con note.
+        Fail-CLOSED (P16 FI-13): si el tracker no se puede importar o falla, NO se puede probar que los helpers se
+        invocaron, asi que el verdict es "incomplete" con todos los requeridos como missing y `audit_error` visible.
+        Un fallo de telemetria nunca se convierte en evidencia de ejecucion exitosa.
         """
         try:
             from invocation_tracker import InvocationTracker
         except ImportError as e:
             return {
-                "verdict": "complete",
+                "verdict": "incomplete",
                 "required": sorted(required_helpers),
                 "invoked": [],
-                "missing": [],
+                "missing": sorted(required_helpers),
                 "extra": [],
                 "total_invocations": 0,
                 "window_seconds": since_seconds,
-                "note": f"invocation_tracker no importable: {e}. Audit skipped.",
+                "audit_error": f"ImportError: {e}",
+                "note": f"invocation_tracker no importable: {e}. Audit could not run: cannot prove the helpers were invoked.",
             }
         try:
             tracker = InvocationTracker(self.project_root)
@@ -2409,14 +2416,15 @@ class ATLASDispatcher:
             )
         except Exception as e:
             return {
-                "verdict": "complete",
+                "verdict": "incomplete",
                 "required": sorted(required_helpers),
                 "invoked": [],
-                "missing": [],
+                "missing": sorted(required_helpers),
                 "extra": [],
                 "total_invocations": 0,
                 "window_seconds": since_seconds,
-                "note": f"Audit error (fail-open): {type(e).__name__}: {e}",
+                "audit_error": f"{type(e).__name__}: {e}",
+                "note": f"Audit error (fail-closed): {type(e).__name__}: {e}. Cannot prove the helpers were invoked.",
             }
 
     # ============================================================

@@ -315,6 +315,12 @@ class EngramMCPBridge:
                         )
                 except json.JSONDecodeError:
                     raise EngramBridgeError("Respuesta MCP malformada (segundo intento)")
+            else:
+                # Sin respuesta posterior: la unica linea recibida NO responde a este request. Aceptarla seria tratar la
+                # respuesta de otro request (o ruido) como la respuesta de este (P16 FI-10).
+                raise EngramBridgeError(
+                    f"Response id mismatch: esperado {req_id}, recibido {response.get('id')} y sin respuesta posterior"
+                )
 
         return response
 
@@ -657,6 +663,8 @@ class EngramMCPBridge:
         except (json.JSONDecodeError, ValueError):
             pass  # raw_text no es JSON, usar tal cual
 
+        if not isinstance(result_text, str):
+            result_text = str(result_text)
         result_text_lower = result_text.lower()
 
         if "no memories found" in result_text_lower or "no observations" in result_text_lower:
@@ -669,7 +677,10 @@ class EngramMCPBridge:
         # Found: extraer observation_id del preview
         obs_id = EngramMCPBridge._extract_observation_id_from_text(result_text)
 
-        if "found" in result_text_lower or obs_id is not None:
+        # La palabra "found" sola NO es evidencia ("Memory not found" la contiene). Una respuesta real trae un id de
+        # resultado ("[1] #27 (decision) ...") o empieza con "Found N memories" (formato Engram v1.15.10).
+        announced = re.match(r"\s*found\s+\d+\s+memor", result_text_lower) is not None
+        if announced or obs_id is not None:
             return {
                 "status": "found",
                 "source": "engram_mcp_real",
@@ -678,12 +689,14 @@ class EngramMCPBridge:
                 "raw_text_preview": result_text[:200],
             }
 
-        # Conservador: si no podemos parsear, asumir not_found pero anotar
+        # Si no podemos clasificar la respuesta NO es un not_found (eso dispararia re-delegacion): es un error de
+        # protocolo, igual que un timeout, y asi lo ven el fallback a disco y el gate (P16 FI-10).
         return {
-            "status": "not_found",
+            "status": "timeout",
             "source": "engram_mcp_real",
             "topic_key": topic_key,
-            "note": "Respuesta MCP no clasificable, asumido not_found",
+            "error": "Respuesta MCP no clasificable (ni resultado ni 'No memories found')",
+            "note": "unclassifiable response: tratado como error, no como ausencia",
         }
 
     # --------------------------------------------------------
