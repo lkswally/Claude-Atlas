@@ -94,7 +94,7 @@ suites:
     timeout: 30
     can_run_in_quick: true
     can_run_in_release: true
-    notes: "Architecture Repair 01: validate_return_envelope() normalizes UPPERCASE contract keys; conflicting duplicates -> AMBIGUOUS_ENVELOPE_KEY. Details: docs/STABILITY-PHASE2-REMEDIATIONS.md."
+    notes: "Architecture Repair 01: envelope key normalization. See docs/STABILITY-PHASE2-REMEDIATIONS.md."
 
   - id: bloque-capability-events-integrity
     path: _qa/bloque-capability-events-integrity.py
@@ -103,7 +103,7 @@ suites:
     timeout: 60
     can_run_in_quick: true
     can_run_in_release: true
-    notes: "Architecture Repair 02: capability events.emit() cross-process file lock (msvcrt/fcntl); spawns up to 50 writer processes, ~30-60s. Details: docs/STABILITY-PHASE2-REMEDIATIONS.md."
+    notes: "Architecture Repair 02: capability events cross-process lock; ~30-60s. See docs/STABILITY-PHASE2-REMEDIATIONS.md."
 
   - id: bloque-qa-retry-ceiling
     path: _qa/bloque-qa-retry-ceiling.py
@@ -112,7 +112,7 @@ suites:
     timeout: 60
     can_run_in_quick: true
     can_run_in_release: true
-    notes: "Architecture Repair 03: qa_retry_state.py makes the 3-attempt dev<->QA ceiling enforceable and disk-persisted; fail-closed on I/O error; spawns subprocesses. Details: docs/STABILITY-PHASE2-REMEDIATIONS.md."
+    notes: "Architecture Repair 03: qa_retry_state.py 3-attempt ceiling, fail-closed; spawns subprocesses. See docs/STABILITY-PHASE2-REMEDIATIONS.md."
 
   - id: bloque-F16-capability-router
     path: _qa/bloque-F16-capability-router.py
@@ -275,6 +275,15 @@ suites:
     can_run_in_quick: true
     can_run_in_release: true
     notes: "Reviewer independence (P7): levels, policy per risk, record verification."
+
+  - id: bloque-F45-failure-injection
+    path: _qa/bloque-F45-failure-injection.py
+    layer: system
+    status: active
+    timeout: 180
+    can_run_in_quick: true
+    can_run_in_release: true
+    notes: "Failure injection (P16): real fake-process faults, 8-rule judge; --live opt-in."
 
   - id: bloque-F11-skills-registry-runtime
     path: _qa/bloque-F11-skills-registry-runtime.py
