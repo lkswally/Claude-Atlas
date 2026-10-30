@@ -47,9 +47,25 @@ Observable routing behavior is unchanged: the only router edit is adding `TIMEOU
 
 **Proof.** F42: 51 offline checks replaying the real captures (mutation sanity 16/16), plus `--live` (5 checks against the real binary, all passing 2026-10-30): health, a PONG round trip → AVAILABLE, a nonexistent model → MODEL_UNAVAILABLE, an unauthenticated run (empty `CODEX_HOME`) → AUTH_FAILED, and a 1.5 s timeout → TIMEOUT with the process tree gone. **Not reproducible safely, so the wording is synthetic and labelled as such in the tests:** quota exhaustion and rate limiting.
 
+## Fallback across providers (`tools/provider_fallback.py`, roadmap P6)
+
+`execute_routed(req, prompt, providers, ...)` is the loop: **route → provider health → execute → classify the failure → retry the same model | fall back | stop**. Two facts about this architecture shape it. Only some providers are invocable by ATLAS (Codex); the Claude models are host-managed, so the primary may end as a `HANDOFF` for the host to run. And when the *host* reports that a Claude model failed, passing it as `known_failures` makes ATLAS re-route and execute the task on an invocable provider.
+
+**Hard constraints are re-applied to every fallback candidate.** After each failure the router is run again from scratch with what was learned, so risk, tool, context, cost and environment rules govern every candidate. A tempting fallback is never taken when they forbid it: with Claude out of quota, a HIGH-risk task does *not* fall back to Codex (outside its `eligible_risks`) and a task that needs tools does not either.
+
+| Failure | Action |
+|---|---|
+| TIMEOUT, malformed answer (INVALID_RESPONSE), PROVIDER_ERROR | one same-model retry, then fall back (a TIMEOUT is never retried when the request is not idempotent) |
+| RATE_LIMITED, QUOTA_EXHAUSTED, MODEL_UNAVAILABLE, AUTH_FAILED | fall back immediately; **AUTH_FAILED is never retried** |
+| POLICY_BLOCKED, CANCELLED | **stop**: falling back would send a blocked prompt to another vendor |
+
+Terminal states: `SUCCEEDED`, `HANDOFF`, `NO_ELIGIBLE_PROVIDER` (the constraints cannot be met by anyone, or only by persistently unavailable providers), `WAITING_PROVIDER` (someone can meet them but is transiently limited), `POLICY_BLOCKED`, `CANCELLED`, `FAILED` (attempt budget exhausted). Nothing sleeps or polls; executions are bounded by `max_attempts` and router passes by a separate hard bound (a mutation test found the first version could spin if the router kept returning a model with no adapter). The result reports `selected`, `executed_model`, `fallback_used`, `reason`, `provider_health`, `alternatives` and every attempt.
+
+Proof: F43, 36 offline checks over fake providers (mutation sanity 16/16) plus `--live` (2 checks, passing 2026-10-30): Claude reported out of quota → the task ran on the real Codex and returned PONG with `fallback_used`; the same outage on a HIGH-risk task correctly returned `WAITING_PROVIDER` without touching Codex. Quota and rate-limit failures are injected, not reproduced against a real provider.
+
 ## Not done on purpose
 
-No retry/fallback policy and no provider health wired into `route()` (P6), no runtime/role binding type (P8 defines it when it is used), no use of Codex by any ATLAS flow yet.
+No provider health plumbing inside `route()` itself (the executor passes it in), no persistent fallback metrics (the metrics event contract is still design only), no runtime/role binding type (P8 defines it when it is used), and no ATLAS flow calls the executor yet.
 
 ## Known limit
 
