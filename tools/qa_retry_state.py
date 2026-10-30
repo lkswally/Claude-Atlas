@@ -103,6 +103,32 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_MAX_ATTEMPT_IDS = 50      # remembered per task, to make a repeated record_qa_attempt(attempt_id=...) idempotent
+
+
+def _validate_state(state: Any) -> None:
+    """Raise ValueError unless `state` is a readable QA retry state.
+
+    A file that parses as JSON but is not a state (a list, a different version, counts that are not non-negative
+    integers) used to be silently replaced by the defaults, which RESET every attempt counter and let the next write
+    overwrite the evidence. That is the unlimited-retries outcome this module exists to prevent, so it fails closed
+    exactly like malformed JSON does (P16 FI-15): callers get retry_limit_reached=True with state_error, and the file is
+    left untouched for a human to repair."""
+    if not isinstance(state, dict):
+        raise ValueError(f"state file holds a {type(state).__name__}, not an object")
+    if state.get("version") != STATE_VERSION:
+        raise ValueError(f"unsupported state version {state.get('version')!r} (this build reads {STATE_VERSION})")
+    tasks = state.get("tasks", {})
+    if not isinstance(tasks, dict):
+        raise ValueError("'tasks' is not an object")
+    for tid, entry in tasks.items():
+        if not isinstance(entry, dict):
+            raise ValueError(f"task {tid!r}: entry is not an object")
+        n = entry.get("attempt_count", 0)
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"task {tid!r}: attempt_count {n!r} is not a non-negative integer")
+
+
 # ---------------------------------------------------------------------------
 # Cross-process lock (self-contained -- deliberately not shared with
 # core/capabilities/events.py to keep this repair's diff isolated to only
@@ -179,12 +205,9 @@ class QARetryState:
         if not content.strip():
             return copy.deepcopy(DEFAULT_STATE)
         state = json.loads(content)
-        if not isinstance(state, dict) or state.get("version") != STATE_VERSION:
-            return copy.deepcopy(DEFAULT_STATE)
+        _validate_state(state)
         merged = copy.deepcopy(DEFAULT_STATE)
         merged.update(state)
-        if "tasks" not in state or not isinstance(state["tasks"], dict):
-            merged["tasks"] = {}
         return merged
 
     @contextlib.contextmanager
@@ -227,9 +250,14 @@ class QARetryState:
         status: str,
         reason: str = "",
         agent: str = "",
+        attempt_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Record the outcome of one dev<->QA cycle for task_id.
+
+        attempt_id (optional): an idempotency key for ONE QA outcome. A "fail" recorded again with an id already seen
+        for this task is not counted again (the result carries duplicate=True). Without an id every "fail" counts,
+        which can only make the ceiling arrive EARLIER, never later (P16 FI-16).
 
         status:
           "fail"        -> genuine functional QA failure. Increments the
@@ -267,6 +295,23 @@ class QARetryState:
                         "updated_at": _now_iso(),
                         "cleared": True,
                     }
+                if status == "fail" and attempt_id:
+                    seen = entry.setdefault("attempt_ids", [])
+                    if attempt_id in seen:
+                        count = int(entry.get("attempt_count", 0))
+                        return {
+                            "task_id": task_id,
+                            "attempt_count": count,
+                            "max_attempts": self.max_attempts,
+                            "retry_limit_reached": count >= self.max_attempts,
+                            "last_failure_reason": entry.get("last_failure_reason"),
+                            "last_agent": entry.get("last_agent"),
+                            "updated_at": entry.get("updated_at"),
+                            "cleared": False,
+                            "duplicate": True,
+                        }
+                    seen.append(attempt_id)
+                    del seen[:-_MAX_ATTEMPT_IDS]
                 if status == "fail":
                     entry["attempt_count"] = int(entry.get("attempt_count", 0)) + 1
                     entry["last_failure_reason"] = reason or None
