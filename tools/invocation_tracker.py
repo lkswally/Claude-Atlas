@@ -10,6 +10,14 @@ obligatorios que documenta el agent-protocol (1G.1).
 PATRON:
 - Cada helper obligatorio del dispatcher registra su invocacion automaticamente
 - El log es append-only en .pipeline/invocation-log.jsonl
+- RETENCION (roadmap P2): acotado a un segmento actual + un archivo
+  (invocation-log.1.jsonl), ~2 MB cada uno, via tools/bounded_jsonl.py. Los
+  eventos mas viejos que el archivo se descartan por diseno. Appends con lock
+  cross-process (el log sin lock tenia 165 lineas truncadas). Las lecturas
+  (get_recent / _read_log) van del final hacia atras y no deserializan todo el
+  historial. Un log legacy gigante se migra una vez: sus ultimos 2 MB quedan
+  como archivo y el original se renombra a invocation-log.legacy-*.jsonl
+  (nunca se borra ni se lee por codigo).
 - Audit query lee el log y compara contra una lista de helpers esperados
 
 DIFERENCIA CON 1G.1:
@@ -33,6 +41,11 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
+try:  # tools/ is on sys.path for the dispatcher and the suites
+    from bounded_jsonl import BoundedJsonl
+except ImportError:  # package-style import
+    from tools.bounded_jsonl import BoundedJsonl
 
 
 # ============================================================
@@ -76,6 +89,9 @@ class InvocationTracker:
         self.project_root = Path(project_root)
         self.log_dir = self.project_root / ".pipeline"
         self.log_path = self.log_dir / "invocation-log.jsonl"
+        # Retention (roadmap P2): current segment stays at log_path; one archive
+        # (invocation-log.1.jsonl). Appends are cross-process locked.
+        self._store = BoundedJsonl(self.log_path)
 
     def record(
         self,
@@ -103,33 +119,23 @@ class InvocationTracker:
                 "context": context or {},
                 "outcome": outcome,
             }
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                f.flush()
-            return {"ok": True, "entry": entry}
+            res = self._store.append(entry)
+            if not res.ok:
+                return {"ok": False, "error": res.error}
+            out = {"ok": True, "entry": entry}
+            if res.rotation_error:
+                out["rotation_error"] = res.rotation_error
+            return out
         except (OSError, IOError) as e:
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
     def _read_log(self, max_lines: int = 10000) -> List[Dict[str, Any]]:
-        """Lee el log con cap de seguridad. Saltea entries malformadas."""
-        if not self.log_path.exists():
-            return []
-        entries: List[Dict[str, Any]] = []
+        """Ultimas `max_lines` lineas (oldest -> newest) leidas desde el final del log,
+        sin deserializar el historial completo. Saltea entries malformadas."""
         try:
-            with open(self.log_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            for line in lines[-max_lines:]:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except (json.JSONDecodeError, ValueError):
-                    continue
+            return self._store.tail_entries(max_lines)
         except (OSError, IOError):
             return []
-        return entries
 
     def get_recent(
         self,
@@ -143,25 +149,16 @@ class InvocationTracker:
             since_seconds: ventana de tiempo desde ahora
             helper_filter: si se especifica, solo retorna esos helpers
         """
-        entries = self._read_log()
+        # Cutoff is fixed BEFORE any I/O: a slow (cold) read must not shift the window.
         cutoff = datetime.now(timezone.utc) - timedelta(seconds=since_seconds)
         filter_set = set(helper_filter) if helper_filter else None
-
-        recent: List[Dict[str, Any]] = []
-        for e in entries:
-            ts_str = e.get("timestamp")
-            if not ts_str:
-                continue
-            try:
-                ts = datetime.fromisoformat(ts_str)
-            except (ValueError, TypeError):
-                continue
-            if ts < cutoff:
-                continue
-            if filter_set and e.get("helper") not in filter_set:
-                continue
-            recent.append(e)
-        return recent
+        try:
+            window = self._store.recent_entries(cutoff, ts_key="timestamp")
+        except (OSError, IOError):
+            return []
+        if filter_set:
+            return [e for e in window if e.get("helper") in filter_set]
+        return window
 
     def audit_invocations(
         self,
@@ -243,17 +240,15 @@ class InvocationTracker:
             if h:
                 helpers_count[h] = helpers_count.get(h, 0) + 1
         return {
+            # Counts cover the RETAINED window only (current + one archive segment).
             "total_entries": len(entries),
             "unique_helpers": len(helpers_count),
             "invocations_by_helper": helpers_count,
             "log_path": str(self.log_path),
-            "exists": self.log_path.exists(),
+            "exists": self._store.exists(),
+            "retention": self._store.status(),
         }
 
     def clear(self) -> None:
-        """Elimina el log (uso para tests o reset explicito)."""
-        try:
-            if self.log_path.exists():
-                self.log_path.unlink()
-        except OSError:
-            pass
+        """Elimina el log y su segmento de archivo (uso para tests o reset explicito)."""
+        self._store.clear()

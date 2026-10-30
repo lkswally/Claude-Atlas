@@ -27,9 +27,15 @@ USO TIPICO:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+try:  # tools/ is on sys.path for the suites and the CLI
+    from bounded_jsonl import BoundedJsonl
+except ImportError:  # package-style import
+    from tools.bounded_jsonl import BoundedJsonl
 
 
 REGISTRY_FILENAME = "skills.registry.yaml"
@@ -91,9 +97,24 @@ def _resolve_usage_log_path() -> Optional[Path]:
     return None
 
 
+_USAGE_STORES: Dict[str, BoundedJsonl] = {}
+
+
+def _usage_store(path: Path) -> BoundedJsonl:
+    """One BoundedJsonl per path so rotation back-off state survives across calls."""
+    key = str(path)
+    store = _USAGE_STORES.get(key)
+    if store is None:
+        store = _USAGE_STORES[key] = BoundedJsonl(path)
+    return store
+
+
 def _log_usage(event_type: str, context: Dict[str, Any]) -> None:
     """
     Bloque F2.1.b: registra una invocacion en JSONL append-only.
+
+    Retencion acotada (roadmap P2): segmento actual + un archivo (~2 MB c/u) y
+    appends con lock cross-process (el log sin lock tenia 472 lineas truncadas).
 
     Fail-open absoluto: cualquier error (path missing, disco lleno,
     permisos) -> silencioso. JAMAS interfere con la API publica.
@@ -114,8 +135,7 @@ def _log_usage(event_type: str, context: Dict[str, Any]) -> None:
             "event": event_type,
             **context,
         }
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+        _usage_store(path).append(entry)   # AppendResult is ignored: logging is fail-open
     except (OSError, TypeError, ValueError):
         # Fail-open: nunca propagar errores del logging.
         pass
@@ -357,7 +377,7 @@ def usage_stats(
         "since_days": since_days,
         "entries_skipped_malformed": 0,
     }
-    if resolved is None or not resolved.exists():
+    if resolved is None or not BoundedJsonl(resolved).exists():
         return base
 
     cutoff = None
@@ -372,7 +392,8 @@ def usage_stats(
     skipped = 0
 
     try:
-        with open(resolved, "r", encoding="utf-8") as f:
+        # Reads the retained window (current segment + one archive), archive first.
+        with contextlib.closing(BoundedJsonl(resolved).iter_lines_forward()) as f:
             for raw_line in f:
                 line = raw_line.strip()
                 if not line:
