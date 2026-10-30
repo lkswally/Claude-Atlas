@@ -19,9 +19,9 @@ Agents must request capabilities by name, not MCP IDs:
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 ResolutionStatus = Literal[
     "LIVE",           # provider active, tools visible in session
@@ -39,6 +39,26 @@ _ACTION: dict[str, str] = {
     "DEFERRED_PAID": "acquire_license",
     "UNAVAILABLE":   "register_provider",
 }
+_ACTION_HOST_DOWN = "reconnect_provider"   # the host reported the provider's MCP server failed (P16 FI-11)
+
+# Connection states the HOST can report for an MCP provider (e.g. "context7 CONNECT_TIMEOUT"). The registry's statuses
+# are DECLARED, not observed: only the host knows a server failed to connect. An observation fails CLOSED: anything
+# that is not a recognised "up" or "unknown" string counts as down.
+_OBSERVED_UP = ("OK", "CONNECTED", "LIVE")
+_OBSERVED_UNKNOWN = ("", "UNKNOWN")
+
+
+def _observed_class(value: Any) -> str:
+    """'up' | 'unknown' | 'down' for one host-reported value."""
+    if value is None:
+        return "unknown"
+    if isinstance(value, str):
+        v = value.strip().upper()
+        if v in _OBSERVED_UP:
+            return "up"
+        if v in _OBSERVED_UNKNOWN:
+            return "unknown"
+    return "down"
 
 # Critical capabilities: the router WARNs if these have no LIVE provider
 CRITICAL_CAPABILITIES = {"memory", "browser", "documentation"}
@@ -54,6 +74,10 @@ class Resolution:
     fallback: "Resolution | None"  # next-best provider, or None
     action: str                  # hint: what to do to activate this resolution
     notes: str = ""              # extra info from provider entry
+    # "declared": status comes from the static registry (NOT verified). "host_reported": the host told us something
+    # that decided this resolution (a provider reported down, or confirmed up).
+    evidence: str = "declared"
+    observed_down: list = field(default_factory=list)   # providers the host reported down (excluded from selection)
 
     @property
     def is_usable(self) -> bool:
@@ -69,6 +93,8 @@ class Resolution:
             "fallback": self.fallback.as_dict() if self.fallback else None,
             "action": self.action,
             "notes": self.notes,
+            "evidence": self.evidence,
+            "observed_down": list(self.observed_down),
         }
 
 
@@ -102,7 +128,8 @@ def _emit_event(
             fallback_used=fallback_used,
             action=resolution.action,
             requested_by=requested_by,
-            metadata={"tool_prefix": resolution.tool_prefix, "notes": resolution.notes},
+            metadata={"tool_prefix": resolution.tool_prefix, "notes": resolution.notes,
+                      "evidence": resolution.evidence, "observed_down": list(resolution.observed_down)},
             events_file=events_file,
         )
     except Exception:
@@ -114,6 +141,7 @@ def resolve_capability(
     requested_by: str = "unknown",
     emit: bool = True,
     _events_file: "Path | None" = None,
+    observed: "Mapping[str, Any] | None" = None,
 ) -> Resolution:
     """
     Resolve a capability name to its best available provider.
@@ -128,6 +156,10 @@ def resolve_capability(
         requested_by: Caller hint for observability (agent name or module)
         emit:         Whether to emit a CapabilityEvent to the JSONL log
         _events_file: Override log path (for testing)
+        observed:     Host-reported connection state per provider mcp_id (e.g. {"context7": "CONNECT_TIMEOUT"}).
+                      A provider reported down is never selected; if none is left the result is UNAVAILABLE with
+                      evidence="host_reported". Without it the answer rests on DECLARED registry status only
+                      (evidence="declared"): a declared LIVE is not proof the server connected.
 
     Never raises — returns UNAVAILABLE resolution on unknown capability.
     """
@@ -146,6 +178,21 @@ def resolve_capability(
     providers = cap.providers
     if not providers:
         return _make_unavailable(name)
+
+    obs = observed if isinstance(observed, Mapping) else {}
+    down = sorted({p.mcp_id for p in providers if _observed_class(obs.get(p.mcp_id)) == "down"})
+    up = {p.mcp_id for p in providers if _observed_class(obs.get(p.mcp_id)) == "up"}
+    if down:
+        providers = [p for p in providers if p.mcp_id not in down]
+        if not providers:
+            gone = Resolution(
+                capability=name, provider=None, status="UNAVAILABLE", tool_prefix=None, fallback=None,
+                action=_ACTION_HOST_DOWN, notes=f"reported down by the host: {', '.join(down)}",
+                evidence="host_reported", observed_down=down,
+            )
+            if emit:
+                _emit_event(gone, requested_by=requested_by, events_file=_events_file)
+            return gone
 
     # Priority order matches base.py active_provider
     _PRIORITY = ("LIVE", "CONFIG_ONLY", "CLI_ONLY", "PENDING_TOKEN", "DEFERRED_PAID", "NOT_RECOMMENDED")
@@ -180,6 +227,9 @@ def resolve_capability(
         return _make_unavailable(name)
 
     primary = ordered[0]
+    primary.observed_down = down
+    if primary.provider in up:
+        primary.evidence = "host_reported"
     # Fallback: next provider with different mcp_id
     fallback = next(
         (r for r in ordered[1:] if r.provider != primary.provider),
@@ -245,6 +295,7 @@ class CapabilityRouter:
         policy_file: "Path | None" = None,
         emit_event: bool = True,
         _events_file: "Path | None" = None,
+        observed: "Mapping[str, Any] | None" = None,
     ) -> "tuple[Resolution, Any]":
         """
         Resolve a capability and evaluate it against its declared policy.
@@ -252,8 +303,13 @@ class CapabilityRouter:
         Returns (Resolution, PolicyDecision).
         Does not change default resolve() behavior — opt-in only.
         Imports policy lazily to avoid circular dependency.
+        `observed` (host-reported provider states) bypasses the per-instance cache: an observation is a point in time.
         """
-        resolution = self.resolve(capability)
+        if observed:
+            resolution = resolve_capability(capability, requested_by=self._requested_by, emit=self._emit,
+                                            _events_file=self._events_file, observed=observed)
+        else:
+            resolution = self.resolve(capability)
         try:
             from .policy import evaluate_capability
             decision = evaluate_capability(
@@ -261,6 +317,7 @@ class CapabilityRouter:
                 policy_file=policy_file,
                 _emit=emit_event,
                 _events_file=_events_file,
+                observed=observed,
             )
         except Exception as e:
             # Return a safe MISSING_POLICY decision on any error
@@ -286,6 +343,7 @@ def resolve_with_policy(
     policy_file: "Path | None" = None,
     emit_event: bool = True,
     _events_file: "Path | None" = None,
+    observed: "Mapping[str, Any] | None" = None,
 ) -> "tuple[Resolution, Any]":
     """
     Module-level convenience: resolve_capability + policy evaluation in one call.
@@ -296,6 +354,7 @@ def resolve_with_policy(
         policy_file=policy_file,
         emit_event=emit_event,
         _events_file=_events_file,
+        observed=observed,
     )
 
 

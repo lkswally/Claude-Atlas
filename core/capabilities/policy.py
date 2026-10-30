@@ -236,6 +236,7 @@ def evaluate_capability(
     policy_file: Path | None = None,
     _emit: bool = True,
     _events_file: Path | None = None,
+    observed: Any = None,
 ) -> PolicyDecision:
     """
     Evaluate a capability against its policy.
@@ -248,6 +249,8 @@ def evaluate_capability(
         policy_file:  Override policy YAML path (for testing)
         _emit:        Whether to emit event to capability-events.jsonl
         _events_file: Override events file path (for testing)
+        observed:     Host-reported provider states (see router.resolve_capability). A provider the host reported
+                      down is never served; a surviving different provider is DEGRADED only if the policy allows it.
     """
     if os.environ.get("ATLAS_CAPABILITY_POLICY_DISABLED") == "1":
         return PolicyDecision(
@@ -279,7 +282,7 @@ def evaluate_capability(
     # Get router resolution
     try:
         from .router import resolve_capability
-        resolution = resolve_capability(name, requested_by="policy-engine", emit=False)
+        resolution = resolve_capability(name, requested_by="policy-engine", emit=False, observed=observed)
     except Exception as e:
         return PolicyDecision(
             capability=name,
@@ -326,13 +329,26 @@ def _apply_policy(
     fallback_used = False
     notes = ""
 
+    down = list(getattr(resolution, "observed_down", None) or [])
+    host_note = f" (reported down by the host: {', '.join(down)})" if down else ""
+
     # UNAVAILABLE
     if status == "UNAVAILABLE" or provider is None:
         if policy.block_if_unavailable:
-            return "BLOCK", False, f"No provider available and block_if_unavailable=true"
+            return "BLOCK", False, f"No provider available and block_if_unavailable=true{host_note}"
         if policy.critical:
-            return "WARN", False, f"Critical capability '{policy.capability}' has no provider"
-        return "WARN", False, f"No provider available for '{policy.capability}'"
+            return "WARN", False, f"Critical capability '{policy.capability}' has no provider{host_note}"
+        return "WARN", False, f"No provider available for '{policy.capability}'{host_note}"
+
+    # A provider was reported down by the host and a DIFFERENT declared provider is left (P16 FI-11)
+    if down:
+        allowed = policy.fallback_allowed and (not policy.allowed_fallbacks or provider in policy.allowed_fallbacks)
+        if allowed:
+            return "DEGRADED", True, (f"{', '.join(down)} reported down by the host; serving '{provider}' "
+                                      f"(declared status, not verified)")
+        if policy.block_if_unavailable:
+            return "BLOCK", False, f"{', '.join(down)} reported down by the host and fallback is not allowed"
+        return "WARN", False, f"{', '.join(down)} reported down by the host; fallback to '{provider}' is not allowed"
 
     # Check if status meets required_status
     actual_rank = _STATUS_RANK.get(status, 0)
