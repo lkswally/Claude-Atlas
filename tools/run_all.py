@@ -18,6 +18,11 @@ Usage:
     python tools/run_all.py --out run_all.json  # save JSON to file
     python tools/run_all.py --list              # list suites without running
     python tools/run_all.py --timeout 120       # per-suite timeout override
+    python tools/run_all.py --no-isolation      # run against the REAL tree and HOME (suites may write real state)
+
+Isolation (default ON, P21): suites run in a disposable copy of the working tree with a disposable HOME
+(tools/test_sandbox.py), so they cannot write to the real .pipeline, .claude/logs, ~/.claude or ~/.engram.
+The run FAILS if the real repo state changes anyway. ATLAS_TEST_ISOLATION=0 is the same as --no-isolation.
 
 Exit codes:
     0  all selected suites passed
@@ -56,6 +61,15 @@ try:
     _REGISTRY = _TestRegistry()
 except Exception:
     _REGISTRY = None  # type: ignore[assignment]
+
+# Test isolation (P21): suites run in a disposable copy of the working tree with a disposable HOME (tools/test_sandbox.py).
+try:
+    from tools.test_sandbox import Sandbox, changed as _state_changed, isolation_enabled, protected_snapshot
+    _SANDBOX_ERROR = None
+except Exception as _e:  # noqa: BLE001
+    Sandbox = None  # type: ignore[assignment]
+    _SANDBOX_ERROR = f"{type(_e).__name__}: {_e}"
+_SANDBOX = None            # the active Sandbox for this run, or None when isolation is off
 
 # ---------------------------------------------------------------------------
 # Suite classification
@@ -149,14 +163,18 @@ def run_suite(path: Path, timeout: int = 60) -> dict:
     start = time.monotonic()
 
     suite_env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    script, cwd = str(path), str(PROJECT_ROOT)
+    if _SANDBOX is not None:
+        script, cwd = str(_SANDBOX.path_for(path)), str(_SANDBOX.repo)
+        suite_env = _SANDBOX.env(suite_env)
 
     try:
         result = subprocess.run(
-            [sys.executable, str(path)],
+            [sys.executable, script],
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=str(PROJECT_ROOT),
+            cwd=cwd,
             env=suite_env,
             encoding="utf-8",
             errors="replace",
@@ -218,6 +236,9 @@ def run_suite(path: Path, timeout: int = 60) -> dict:
 
 def run_healthcheck(strict: bool = False) -> dict:
     hc_path = PROJECT_ROOT / "tools" / "atlas_healthcheck.py"
+    cwd, hc_env = str(PROJECT_ROOT), None
+    if _SANDBOX is not None:
+        hc_path, cwd, hc_env = _SANDBOX.path_for(hc_path), str(_SANDBOX.repo), _SANDBOX.env()
     start = time.monotonic()
     cmd = [sys.executable, str(hc_path)]
     if strict:
@@ -228,7 +249,8 @@ def run_healthcheck(strict: bool = False) -> dict:
             capture_output=True,
             text=True,
             timeout=45,
-            cwd=str(PROJECT_ROOT),
+            cwd=cwd,
+            env=hc_env,
             encoding="utf-8",
             errors="replace",
         )
@@ -564,6 +586,9 @@ def main() -> int:
                         help="List suites without running")
     parser.add_argument("--timeout", type=int, default=120,
                         help="Per-suite timeout in seconds (default: 120)")
+    parser.add_argument("--no-isolation", action="store_true",
+                        help="Run suites against the REAL working tree and HOME (they may write to real state); "
+                             "same as ATLAS_TEST_ISOLATION=0")
     args = parser.parse_args()
 
     if args.out:
@@ -598,9 +623,29 @@ def main() -> int:
 
     mode = "release" if args.release else ("full" if args.full else "quick")
 
+    global _SANDBOX
+    isolation = "off"
+    real_before = None
+    if Sandbox is None:
+        isolation = f"UNAVAILABLE ({_SANDBOX_ERROR}) - suites run against the REAL tree and HOME"
+    elif isolation_enabled(False if args.no_isolation else None):
+        real_before = protected_snapshot(PROJECT_ROOT)
+        _SANDBOX = Sandbox(PROJECT_ROOT)
+        isolation = f"on ({_SANDBOX.copied} files copied)"
+
     if not args.json_output:
         print(f"\n{_c(BOLD, 'ATLAS QA Runner')} — mode: {mode}")
-        print(f"Running {len(selected)} suites ({len(skipped)} skipped)\n")
+        print(f"Running {len(selected)} suites ({len(skipped)} skipped); isolation: {isolation}\n")
+
+    try:
+        return _run(args, selected, skipped, mode, run_start, results, hc_result, isolation, real_before)
+    finally:
+        if _SANDBOX is not None:
+            _SANDBOX.cleanup()
+            _SANDBOX = None
+
+
+def _run(args, selected, skipped, mode, run_start, results, hc_result, isolation, real_before) -> int:
 
     # Healthcheck always runs in --release mode with expected-strict (--strict):
     # enforces the STABLE committed config; runtime settings.json stays WARN
@@ -630,6 +675,15 @@ def main() -> int:
 
     run_end = time.monotonic()
 
+    # Leak guard: with isolation on, nothing a suite does may change the REAL repo state. (The real HOME is not guarded
+    # here: the host's own hooks write there while a run is in progress. F46 proves the HOME property deterministically.)
+    leaks = []
+    if real_before is not None:
+        root = str(PROJECT_ROOT)
+        leaks = [k for k in _state_changed(real_before, protected_snapshot(PROJECT_ROOT)) if k.startswith(root)]
+        if leaks and not args.json_output:
+            print(_c(RED, f"ISOLATION LEAK: {len(leaks)} real state file(s) changed during the run: {leaks[:5]}"))
+
     # --- summary ---
     total = len(results)
     passed = sum(1 for r in results if r["passed"])
@@ -644,8 +698,15 @@ def main() -> int:
 
     git_meta = get_git_metadata() if args.release else {}
 
+    if leaks:
+        failed += 1
+        total += 1
+        passed = total - failed
+
     output = {
         "mode": mode,
+        "isolation": isolation,
+        "isolation_leaks": leaks,
         "total": total,
         "passed": passed,
         "failed": failed,
